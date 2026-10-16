@@ -126,7 +126,7 @@ def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: st
         add_evidence(evidence, search_fn(sq), project_id)
     log.append({"step": "research", "passages": len(evidence)})
     if not evidence:
-        return finalize(question, ask.Answer(claims=[], gaps="No sources found for this question: no indexed papers matched and no web results came back."), [], [], log)
+        return finalize(question, ask.Answer(claims=[], gaps="No sources found for this question."), [], [], log)
 
     rejected: list[dict] = []  # cumulative, so a claim rejected in round 1 isn't silently retried in round 3
     best = None  # last (answer, verdicts) that had claims; an empty retry must not discard it

@@ -151,7 +151,10 @@ function promptInline(label) {
 }
 
 async function loadDocuments() {
-  state.documents = await api("GET", `/api/v1/projects/${state.projectId}/documents`);
+  const projectId = state.projectId;
+  const docs = await api("GET", `/api/v1/projects/${projectId}/documents`);
+  if (projectId !== state.projectId) return;  // the user switched projects meanwhile; that project's load wins
+  state.documents = docs;
   renderDocuments();
   clearTimeout(loadDocuments.timer);
   if (state.documents.some((d) => d.status === "queued" || d.status === "processing")) {
@@ -351,7 +354,7 @@ function fillTurn(turn) {
   if (run.status === "queued" || run.status === "running") {
     parts.push(h("div", { class: "card" },
       h("div", { class: "progress" }, h("span", { class: "spinner" }),
-        run.status === "queued" ? "Queued…" : `Reading your papers${run.web_search ? " and the web" : ""}, then verifying each claim…`),
+        run.status === "queued" ? "Queued…" : `${!run.web_search ? "Reading your papers" : hasReadyPapers() ? "Reading your papers and the web" : "Searching the web"}, then verifying each claim…`),
       h("div", { class: "skeleton", style: "width:92%" }), h("div", { class: "skeleton", style: "width:76%" }),
       h("div", { class: "skeleton", style: "width:84%" })));
   } else if (run.status === "failed") {
@@ -389,7 +392,7 @@ function answerCards(turn) {
   const verified = res.status === "verified";
   const meta = h("div", { class: "meta" },
     h("span", { class: `badge ${verified ? "ok" : "review"}` }, verified ? "✓ Verified" : "Needs review"),
-    run.web_search ? h("span", { class: "badge web" }, evidence && !evidence.some((e) => e.source_type !== "web") ? "Web only" : "Web + papers")
+    run.web_search ? h("span", { class: "badge web" }, evidence?.length && !evidence.some((e) => e.source_type !== "web") ? "Web only" : "Web + papers")
       : h("span", { class: "badge neutral" }, "Papers only"),
     h("span", { class: "muted small" }, `${res.claims.length} finding${res.claims.length === 1 ? "" : "s"} · ${order.length} source${order.length === 1 ? "" : "s"}`));
 
@@ -478,7 +481,9 @@ async function openProject() {
   newView();
   state.conversationId = null;
   state.turns = [];
+  state.documents = [];  // never judge the new project by the old one's papers
   renderThread();
+  renderDocuments();
   await Promise.all([loadDocuments(), loadConversations()]);
 }
 
