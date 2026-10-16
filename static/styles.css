@@ -232,3 +232,11 @@ a { color: var(--accent); }
   .card { padding: 14px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.table-wrap { overflow-x: auto; margin-top: 8px; }
+.metric-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.metric-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.metric-table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.metric-table td.value { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.metric-table tr.best td { background: var(--accent-soft); }
+.best-badge { margin-left: 6px; font-size: 11px; }

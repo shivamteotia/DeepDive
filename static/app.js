@@ -370,6 +370,37 @@ function sourceKey(e) {
   return e.url || `${e.source_filename}|${(e.page_numbers || []).join(",")}`;
 }
 
+function citeChips(c, byEid, numOf, order, cid) {
+  return [...new Set(c.evidence_ids.map((eid) => numOf.get(byEid.get(eid) ? sourceKey(byEid.get(eid)) : eid)))].map((n) => {
+    const isWeb = order[n - 1]?.e?.source_type === "web";
+    return h("button", { class: `cite${isWeb ? " web" : ""}`, type: "button", title: "Show source",
+      onclick: () => flashSource(cid(n)) }, n);
+  });
+}
+
+// Metric-question rows render as a table; other claims (e.g. the authors' best-model designation) stay a list above it.
+function findingsBlocks(claims, chips) {
+  const plain = claims.filter((c) => !c.row);
+  const rows = claims.filter((c) => c.row);
+  const thin = (c) => (c.verdict === "THINLY_SUPPORTED" ? h("span", { class: "thin-note" }, "(thinly supported)") : null);
+  const out = [];
+  if (plain.length) {
+    out.push(h("ol", { class: "findings" }, plain.map((c, i) => h("li", {},
+      h("span", { class: "n" }, `${i + 1}.`), h("div", {}, c.text, thin(c), chips(c))))));
+  }
+  if (rows.length) {
+    out.push(h("div", { class: "table-wrap" }, h("table", { class: "metric-table" },
+      h("thead", {}, h("tr", {}, ["Paper", "Model", "Condition", rows[0].row.metric || "Value", "Sources"].map((t) => h("th", {}, t)))),
+      h("tbody", {}, rows.map((c) => h("tr", { class: c.row.best ? "best" : "" },
+        h("td", {}, c.row.paper),
+        h("td", {}, c.row.model, c.row.best ? h("span", { class: "badge ok best-badge" }, "★ Authors' best model") : null),
+        h("td", {}, c.row.condition),
+        h("td", { class: "value" }, c.row.value, thin(c)),
+        h("td", {}, chips(c))))))));
+  }
+  return out;
+}
+
 function answerCards(turn) {
   const { run, evidence } = turn;
   const res = run.result;
@@ -406,15 +437,7 @@ function answerCards(turn) {
       h("div", { class: "meter-legend" }, h("span", {}, `● ${nOk} supported by the cited text`),
         nThin ? h("span", {}, `● ${nThin} thinly supported`) : null),
       h("h3", { style: "margin-top:16px" }, "Key findings"),
-      h("ol", { class: "findings" }, res.claims.map((c, i) => h("li", {},
-        h("span", { class: "n" }, `${i + 1}.`),
-        h("div", {}, c.text,
-          c.verdict === "THINLY_SUPPORTED" ? h("span", { class: "thin-note" }, "(thinly supported)") : null,
-          [...new Set(c.evidence_ids.map((eid) => numOf.get(byEid.get(eid) ? sourceKey(byEid.get(eid)) : eid)))].map((n) => {
-            const isWeb = order[n - 1]?.e?.source_type === "web";
-            return h("button", { class: `cite${isWeb ? " web" : ""}`, type: "button", title: "Show source",
-              onclick: () => flashSource(cid(n)) }, n);
-          }))))));
+      ...findingsBlocks(res.claims, (c) => citeChips(c, byEid, numOf, order, cid)));
   } else {
     summary.append(h("p", { class: "muted", style: "margin:0" }, "No claim in the sources answers this question."));
   }
