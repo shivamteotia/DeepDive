@@ -4,6 +4,7 @@ import pytest
 from qdrant_client import QdrantClient, models
 
 import ask
+import ingest
 
 COLL = "unit"
 
@@ -163,3 +164,65 @@ def test_empty_sha256_in_returns_nothing(q):
 def test_dropped_uncited_text_is_kept_off_the_answer_for_audit():
     out = ask.check_citations(ask.Answer(claims=[ask.Claim(text="made up", evidence_ids=["E7"])], gaps=""), {"E1"})
     assert out.dropped == ["made up"] and "dropped" not in ask.Answer.model_json_schema()["properties"]
+
+
+QUESTION = "How were missing values handled?"
+
+
+@pytest.fixture
+def hq():
+    """Dense ranking is deliberately wrong: the question embeds to [1,0,0], the answer chunk (3) points elsewhere."""
+    q = QdrantClient(":memory:")
+    ingest.ensure_collection(q, COLL, 3)
+
+    def pt(i, project, dense, text):
+        return models.PointStruct(id=i, payload=payload(project, f"{project}.pdf", [i], text),
+                                  vector={"": dense, ingest.SPARSE_VECTOR: ingest.sparse_vector(text)})
+
+    q.upsert(COLL, [
+        pt(1, "projA", [1, 0, 0], "background on pneumonia cohorts"),
+        pt(2, "projA", [1, 0.1, 0], "baseline characteristics of patients"),
+        pt(3, "projA", [0, 1, 0], "variables with missing values greater than 20% were excluded"),
+        pt(4, "projB", [1, 0, 0], "secret: missing values handled by imputation"),
+    ])
+    return q
+
+
+def hsearch(q, project, k=2, question=QUESTION, **kw):
+    return ask.search(q, FakeOpenAI(), collection=COLL, embed_model="m", project_id=project, question=question, k=k, **kw)
+
+
+def ids(hits):
+    return [h["point_id"] for h in hits]
+
+
+def test_hybrid_finds_exact_term_chunk_that_dense_ranks_below_k(hq):
+    assert "3" not in ids(hsearch(hq, "projA"))
+    assert "3" in ids(hsearch(hq, "projA", hybrid=True))
+
+
+def test_hybrid_never_crosses_projects(hq):
+    hits = hsearch(hq, "projA", k=8, hybrid=True)
+    assert {h["project_id"] for h in hits} == {"projA"} and "4" not in ids(hits)
+    assert ids(hsearch(hq, "projB", k=8, hybrid=True)) == ["4"]
+
+
+def test_hybrid_question_without_keywords_falls_back_to_dense(hq):
+    assert set(ids(hsearch(hq, "projA", question="?", hybrid=True))) == {"1", "2"}
+
+
+def test_hybrid_on_unmigrated_collection_names_the_migration(q):
+    with pytest.raises(ValueError, match="--migrate-to"):
+        hsearch(q, "projA", hybrid=True)
+
+
+def test_hybrid_candidates_are_reranked_to_k(hq, monkeypatch):
+    seen = {}
+
+    def fake_scores(model, query, texts, **kw):
+        seen["n"] = len(texts)
+        return [float("variables" in t) for t in texts]
+
+    monkeypatch.setattr(ask, "rerank_scores", fake_scores)
+    assert ids(hsearch(hq, "projA", k=1, hybrid=True, rerank_model="fake")) == ["3"]
+    assert seen["n"] == 3  # all of projA's fused candidates, none of projB's

@@ -10,6 +10,7 @@ from functools import lru_cache
 from pydantic import BaseModel, PrivateAttr, ValidationError
 from qdrant_client import QdrantClient, models
 
+import ingest
 from ingest import embed
 
 INSTRUCTIONS = """You answer research questions using ONLY the evidence passages provided.
@@ -54,14 +55,17 @@ class Answer(BaseModel):
 
 
 RERANK_CANDIDATES = 20
+HYBRID_CANDIDATES = 20
 
 
 def search(qdrant: QdrantClient, openai_client, *, collection: str, embed_model: str, project_id: str,
            question: str, k: int = 8, rerank_model: str = "", rerank_api_key: str = "",
-           sha256_in: list[str] | None = None) -> list[dict]:
+           sha256_in: list[str] | None = None, hybrid: bool = False) -> list[dict]:
     """Top-k chunks for the question, restricted to project_id. Returns [{"eid", "score", **payload}].
     With rerank_model, fetches RERANK_CANDIDATES by vector similarity, then keeps the k best by reranker score.
-    With sha256_in, only chunks of those documents are searched (the API passes its ready documents)."""
+    With sha256_in, only chunks of those documents are searched (the API passes its ready documents).
+    With hybrid, fuses dense and bm25 keyword candidates by RRF (both filtered by project); a question with no keyword
+    tokens falls back to dense."""
     if not project_id.strip():
         raise ValueError("project_id is required")
     if k < 1:
@@ -72,10 +76,24 @@ def search(qdrant: QdrantClient, openai_client, *, collection: str, embed_model:
     if sha256_in is not None:
         must.append(models.FieldCondition(key="document_sha256", match=models.MatchAny(any=sha256_in)))
     vector = embed(openai_client, embed_model, [question])[0]
-    hits = qdrant.query_points(
-        collection, query=vector, limit=max(k, RERANK_CANDIDATES) if rerank_model else k, with_payload=True,
-        query_filter=models.Filter(must=must),
-    ).points
+    flt = models.Filter(must=must)
+    limit = max(k, RERANK_CANDIDATES) if rerank_model else k
+    sparse = ingest.sparse_vector(question, query=True) if hybrid else None
+    if sparse is not None and sparse.indices:
+        candidates = max(limit, HYBRID_CANDIDATES)
+        try:
+            hits = qdrant.query_points(
+                collection, limit=limit, with_payload=True, query_filter=flt,
+                prefetch=[models.Prefetch(query=vector, filter=flt, limit=candidates),
+                          models.Prefetch(query=sparse, using=ingest.SPARSE_VECTOR, filter=flt, limit=candidates)],
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
+            ).points
+        except Exception as e:
+            if not ingest.has_sparse(qdrant, collection):
+                raise ValueError(f"HYBRID_SEARCH is on but {collection!r} has no keyword vector; {ingest.MIGRATE_HINT}") from e
+            raise
+    else:
+        hits = qdrant.query_points(collection, query=vector, limit=limit, with_payload=True, query_filter=flt).points
     out = [{"point_id": str(h.id), "score": h.score, **h.payload} for h in hits]
     if rerank_model and out:
         scores = rerank_scores(rerank_model, question, [h["text"] for h in out], api_key=rerank_api_key)
