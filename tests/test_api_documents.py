@@ -27,6 +27,7 @@ def test_upload_indexes_and_reports_ready(api, signup, runner):
     assert r.status_code == 202 and r.json()["status"] == "queued"
     doc = get_doc(api, h, pid, r.json()["id"])
     assert doc["status"] == "ready" and doc["chunk_count"] == 3 and doc["filename"] == "paper.pdf"
+    assert doc["doc_type"] == "research_article"
     (args,) = runner.calls
     assert args[0] == pid and args[2] == "paper.pdf" and args[3] == "unit"
     assert Path(args[1]).read_bytes() == PDF and Path(args[1]).name == f"{doc['sha256']}.pdf"
@@ -54,11 +55,11 @@ def test_failed_ingest_is_recorded_redacted_and_retryable(api, signup, runner):
     first = upload(api, h, pid).json()
     doc = get_doc(api, h, pid, first["id"])
     assert doc["status"] == "failed" and "boom" in doc["error"] and "sk-test-secret" not in doc["error"]
-    runner.result = 5
+    runner.result = {"chunk_count": 5, "doc_type": "generic"}
     retry = upload(api, h, pid)
     assert retry.status_code == 202 and retry.json()["id"] == first["id"]
     doc = get_doc(api, h, pid, first["id"])
-    assert doc["status"] == "ready" and doc["chunk_count"] == 5 and doc["error"] is None
+    assert doc["status"] == "ready" and doc["chunk_count"] == 5 and doc["error"] is None and doc["doc_type"] == "generic"
 
 
 def test_restart_mid_processing_then_reupload_recovers(api, signup, runner):

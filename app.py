@@ -132,6 +132,7 @@ class DocumentOut(BaseModel):
     sha256: str
     status: str
     chunk_count: int | None
+    doc_type: str | None = None
     error: str | None
     created_at: datetime
     updated_at: datetime

@@ -41,6 +41,7 @@ class Document(Base):
     sha256: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(20), default="queued")
     chunk_count: Mapped[int | None] = mapped_column(Integer)
+    doc_type: Mapped[str | None] = mapped_column(String(20))
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -80,6 +81,7 @@ ADDED_COLUMNS = [
     "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS web_search BOOLEAN NOT NULL DEFAULT FALSE",
     "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS standalone_question TEXT",
     "CREATE INDEX IF NOT EXISTS ix_research_runs_conversation_id ON research_runs (conversation_id)",
+    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_type VARCHAR(20)",
 ]
 
 

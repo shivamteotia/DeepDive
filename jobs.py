@@ -38,7 +38,7 @@ class State:
     research_pool: object = None
 
 
-def ingest_in_child(project_id: str, pdf_path: str, filename: str, collection: str) -> int:
+def ingest_in_child(project_id: str, pdf_path: str, filename: str, collection: str) -> dict:
     """Runs inside the worker process with its own clients. Returns the document's chunk count in Qdrant."""
     from openai import OpenAI
     from qdrant_client import QdrantClient
@@ -49,8 +49,12 @@ def ingest_in_child(project_id: str, pdf_path: str, filename: str, collection: s
     qdrant = QdrantClient(url=s.qdrant_cluster_endpoint, api_key=s.qdrant_api_key)
     path = Path(pdf_path)
     ingest.ingest(project_id, path, qdrant=qdrant, openai_client=OpenAI(api_key=s.openai_api_key), collection=collection,
-                  embed_model=s.openai_embed_model, source_filename=filename)
-    return qdrant.count(collection, count_filter=ingest.doc_filter(project_id, ingest.sha256_file(path)), exact=True).count
+                  embed_model=s.openai_embed_model, source_filename=filename,
+                  context_model=s.openai_context_model or s.openai_fast_model, contextual=s.contextual_chunks)
+    f = ingest.doc_filter(project_id, ingest.sha256_file(path))
+    first, _ = qdrant.scroll(collection, scroll_filter=f, limit=1, with_payload=["doc_type"])
+    return {"chunk_count": qdrant.count(collection, count_filter=f, exact=True).count,
+            "doc_type": first[0].payload.get("doc_type") if first else None}
 
 
 class IngestFailed(RuntimeError):
@@ -148,7 +152,8 @@ def ingest_document(state: State, document_id: uuid.UUID) -> None:
         args = (str(doc.project_id), str(state.upload_dir / str(doc.project_id) / f"{doc.sha256}.pdf"), doc.filename,
                 state.settings.qdrant_collection)
     try:
-        values = {"status": "ready", "chunk_count": state.runner.run(*args), "error": None}
+        out = state.runner.run(*args)
+        values = {"status": "ready", "chunk_count": out["chunk_count"], "doc_type": out.get("doc_type"), "error": None}
     except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the document
         values = {"status": "failed", "error": short_error(exc, state.settings)}
     with state.sessions() as s:

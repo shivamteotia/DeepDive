@@ -22,7 +22,7 @@ class FakeRunner:
 
     def __init__(self):
         self.calls = []
-        self.result = 3
+        self.result = {"chunk_count": 3, "doc_type": "research_article"}
 
     def run(self, *args):
         self.calls.append(args)

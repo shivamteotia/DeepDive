@@ -78,7 +78,7 @@ def test_ingest_document_records_success_and_failure(tmp_path):
     runner.result = RuntimeError("boom")
     with state.sessions() as s:
         doc = s.scalar(select(db.Document).where(db.Document.id == ok_id))
-        assert doc.status == "ready" and doc.chunk_count == 3
+        assert doc.status == "ready" and doc.chunk_count == 3 and doc.doc_type == "research_article"
         doc.status = "queued"  # re-queue the same document for the failure case
         s.commit()
     jobs.ingest_document(state, ok_id)

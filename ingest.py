@@ -11,11 +11,14 @@ import uuid
 import zlib
 from collections import Counter
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
+from typing import NamedTuple
 
 from qdrant_client import QdrantClient, models
 
-CHUNK_MAX_TOKENS = 512
+import chunking
+
 EMBED_BATCH = 100
 UPSERT_BATCH = 64
 MIGRATE_BATCH = UPSERT_BATCH  # ~1 MB per Cloud upsert at 1536 dims; 256 risked the 5 s client timeout
@@ -51,36 +54,74 @@ def already_indexed(qdrant: QdrantClient, collection: str, project_id: str, sha:
     if not points:
         return False
     expected = points[0].payload["chunk_count"]
-    return qdrant.count(collection, count_filter=doc_filter(project_id, sha), exact=True).count == expected
+    current = models.Filter(must=[*doc_filter(project_id, sha).must, models.FieldCondition(
+        key="chunker_version", match=models.MatchValue(value=chunking.CHUNKER_VERSION))])
+    return qdrant.count(collection, count_filter=current, exact=True).count == expected
 
 
-def chunk_pdf(path: Path, embed_model: str) -> list[dict]:
+class ParsedDoc(NamedTuple):
+    pieces: list[chunking.Piece]
+    title: str
+    page_count: int
+
+
+def _plain_encoding(embed_model: str):
     import tiktoken
-    from docling.chunking import HybridChunker
-    from docling.document_converter import DocumentConverter
-    from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 
     try:
         base = tiktoken.encoding_for_model(embed_model)
     except KeyError:
         base = tiktoken.get_encoding("cl100k_base")
     # Same encoding minus special tokens, so PDF text containing "<|endoftext|>" can't crash token counting.
-    enc = tiktoken.Encoding(name=f"{base.name}_plain", pat_str=base._pat_str, mergeable_ranks=base._mergeable_ranks, special_tokens={})
+    return tiktoken.Encoding(name=f"{base.name}_plain", pat_str=base._pat_str, mergeable_ranks=base._mergeable_ranks,
+                             special_tokens={})
+
+
+def token_counter(embed_model: str) -> chunking.CountTokens:
+    enc = _plain_encoding(embed_model)
+    return lambda s: len(enc.encode(s))
+
+
+def _pdf_meta_title(path: Path) -> str:
+    try:
+        import pypdfium2 as pdfium
+
+        return (pdfium.PdfDocument(str(path)).get_metadata_dict().get("Title") or "").strip()
+    except Exception:  # noqa: BLE001 — metadata is a best-effort title fallback
+        return ""
+
+
+def piece_from_chunk(c) -> chunking.Piece:
+    """A Docling chunk as a Piece: its own text (headings kept apart), pages and whether it holds a table."""
+    items = c.meta.doc_items
+    return chunking.Piece(text=c.text, headings=c.meta.headings or [],
+                          page_numbers=sorted({p.page_no for it in items for p in it.prov}),
+                          content_type="table" if any(it.label.value == "table" for it in items) else "text")
+
+
+def parse_pdf(path: Path, filename: str, embed_model: str) -> ParsedDoc:
+    """Docling parse + HybridChunker pieces (text without headings), the title and the page count."""
+    from docling.chunking import HybridChunker
+    from docling.document_converter import DocumentConverter
+    from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
+
     doc = DocumentConverter().convert(path).document
-    chunker = HybridChunker(tokenizer=OpenAITokenizer(tokenizer=enc, max_tokens=CHUNK_MAX_TOKENS))
+    chunker = HybridChunker(tokenizer=OpenAITokenizer(tokenizer=_plain_encoding(embed_model),
+                                                      max_tokens=chunking.CHUNK_MAX_TOKENS))
+    pieces = [piece_from_chunk(c) for c in chunker.chunk(doc)]
+    docling_title = next((t.text for t in doc.texts if t.label.value == "title"), "")
+    return ParsedDoc(pieces, chunking.resolve_title(docling_title, _pdf_meta_title(path), filename), doc.num_pages())
 
-    # contextualize = headings + text: what gets embedded and shown as evidence
-    return [chunk_record(chunker.contextualize(chunk), chunk.meta) for chunk in chunker.chunk(doc)]
+
+def llm_parser(openai_client, model: str) -> chunking.Parse:
+    from ask import parse_llm  # lazy: ask imports ingest
+
+    return partial(parse_llm, openai_client, model)
 
 
-def chunk_record(text: str, meta) -> dict:
-    items = meta.doc_items
-    return {
-        "text": text,
-        "page_numbers": sorted({p.page_no for it in items for p in it.prov}),
-        "section_headings": meta.headings or [],
-        "content_type": "table" if any(it.label.value == "table" for it in items) else "text",
-    }
+def embed_text(chunk: dict) -> str:
+    """What gets embedded and keyword-indexed: the evidence text plus the search-only context."""
+    return chunk["text"] + ("\n" + chunk["context"] if chunk["context"] else "")
 
 
 def embed(openai_client, model: str, texts: list[str]) -> list[list[float]]:
@@ -118,10 +159,12 @@ def ensure_collection(qdrant: QdrantClient, collection: str, dim: int) -> None:
         raise ValueError(f"collection {collection!r} has no {SPARSE_VECTOR!r} keyword vector; {MIGRATE_HINT}")
     for field in ("project_id", "document_sha256"):
         qdrant.create_payload_index(collection, field, models.PayloadSchemaType.KEYWORD)
+    # Qdrant Cloud may refuse filters on unindexed fields; already_indexed filters on the chunker version.
+    qdrant.create_payload_index(collection, "chunker_version", models.PayloadSchemaType.INTEGER)
 
 
 def ingest(project_id: str, path: Path, *, qdrant: QdrantClient, openai_client, collection: str, embed_model: str,
-           source_filename: str | None = None) -> int:
+           source_filename: str | None = None, context_model: str = "", contextual: bool = True) -> int:
     """Returns number of points written; 0 means the document was already fully indexed."""
     if not project_id.strip():
         raise ValueError("project_id is required")
@@ -134,35 +177,49 @@ def ingest(project_id: str, path: Path, *, qdrant: QdrantClient, openai_client, 
     if already_indexed(qdrant, collection, project_id, sha):
         return 0
 
-    chunks = chunk_pdf(path, embed_model)
+    name = source_filename or path.name
+    prepared = prepare_document(path, source_filename=name, openai_client=openai_client, embed_model=embed_model,
+                                context_model=context_model, contextual=contextual)
+    return write_document(qdrant, collection, project_id=project_id, sha=sha, source_filename=name,
+                          embed_model=embed_model, prepared=prepared)
+
+
+class Prepared(NamedTuple):
+    doc_type: str
+    chunks: list[dict]
+    vectors: list[list[float]]
+
+
+def prepare_document(path: Path, *, source_filename: str, openai_client, embed_model: str, context_model: str = "",
+                     contextual: bool = True) -> Prepared:
+    parsed = parse_pdf(path, source_filename, embed_model)
+    parse = llm_parser(openai_client, context_model) if context_model else None
+    doc_type, chunks = chunking.build_chunks(parsed.pieces, page_count=parsed.page_count, title=parsed.title,
+                                             count_tokens=token_counter(embed_model), parse=parse, contextual=contextual)
     if not chunks:
         raise ValueError(f"no text extracted from {path.name}")
-    vectors = embed(openai_client, embed_model, [c["text"] for c in chunks])
-    ensure_collection(qdrant, collection, len(vectors[0]))
+    return Prepared(doc_type, chunks, embed(openai_client, embed_model, [embed_text(c) for c in chunks]))
 
+
+def write_document(qdrant: QdrantClient, collection: str, *, project_id: str, sha: str, source_filename: str,
+                   embed_model: str, prepared: Prepared) -> int:
+    ensure_collection(qdrant, collection, len(prepared.vectors[0]))
     indexed_at = datetime.now(UTC).isoformat()
+    n = len(prepared.chunks)
     points = [
         models.PointStruct(
             id=point_id(project_id, sha, i),
-            vector={"": vec, SPARSE_VECTOR: sparse_vector(c["text"])},
-            payload={
-                **c,
-                "project_id": project_id,
-                "document_sha256": sha,
-                "source_filename": source_filename or path.name,
-                "chunk_index": i,
-                "chunk_count": len(chunks),
-                "embedding_model": embed_model,
-                "indexed_at": indexed_at,
-            },
+            vector={"": vec, SPARSE_VECTOR: sparse_vector(embed_text(c))},
+            payload={**c, "project_id": project_id, "document_sha256": sha, "source_filename": source_filename,
+                     "chunk_index": i, "chunk_count": n, "embedding_model": embed_model, "indexed_at": indexed_at},
         )
-        for i, (c, vec) in enumerate(zip(chunks, vectors, strict=True))
+        for i, (c, vec) in enumerate(zip(prepared.chunks, prepared.vectors, strict=True))
     ]
     # Drop any leftovers (half-finished run, or an older version that produced more chunks).
     qdrant.delete(collection, points_selector=models.FilterSelector(filter=doc_filter(project_id, sha)), wait=True)
     for i in range(0, len(points), UPSERT_BATCH):
         qdrant.upsert(collection, points[i:i + UPSERT_BATCH], wait=True)
-    return len(points)
+    return n
 
 
 def migrate(qdrant: QdrantClient, src: str, dst: str) -> int:
@@ -217,6 +274,8 @@ def main() -> None:
         openai_client=OpenAI(api_key=s.openai_api_key),
         collection=s.qdrant_collection,
         embed_model=s.openai_embed_model,
+        context_model=s.openai_context_model or s.openai_fast_model,
+        contextual=s.contextual_chunks,
     )
     print(f"{args.pdf.name}: " + (f"indexed {n} chunks" if n else "already indexed, skipped"))
 

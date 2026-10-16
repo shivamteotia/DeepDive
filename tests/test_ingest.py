@@ -5,33 +5,46 @@ from types import SimpleNamespace
 import pytest
 from qdrant_client import QdrantClient
 
+import chunking
 import ingest
 
 COLL = "unit"
-FAKE_CHUNKS = [
-    {"text": f"chunk {i}", "page_numbers": [i + 1], "section_headings": ["Results"], "content_type": "text"}
-    for i in range(3)
-]
+FAKE_PIECES = [chunking.Piece(text=f"chunk {i} " + "word " * 60, headings=[h], page_numbers=[i + 1])
+               for i, h in enumerate(["Methods", "Results", "Discussion"])]
+
+
+def fake_parse_pdf(pieces):
+    return lambda path, filename, model: ingest.ParsedDoc(pieces=pieces, title="Fake paper", page_count=5)
 
 
 class FakeOpenAI:
     def __init__(self):
         self.calls = 0
+        self.embedded = []
         self.embeddings = self
+        self.responses = SimpleNamespace(parse=self._parse)
 
     def create(self, model, input):
         self.calls += 1
+        self.embedded += input
         return SimpleNamespace(data=[SimpleNamespace(embedding=[float(len(t)), 1.0, 0.5]) for t in input])
+
+    def _parse(self, *, model, instructions, input, text_format):
+        if text_format is chunking.ChunkContext:
+            return SimpleNamespace(output_parsed=chunking.ChunkContext(context="CTXWORD situates this chunk"))
+        return SimpleNamespace(output_parsed=chunking.DocTypeGuess(doc_type="research_article", reason="r"))
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    monkeypatch.setattr(ingest, "chunk_pdf", lambda path, model: FAKE_CHUNKS)
+    monkeypatch.setattr(ingest, "parse_pdf", fake_parse_pdf(FAKE_PIECES))
+    monkeypatch.setattr(ingest, "token_counter", lambda model: lambda s: len(s.split()))
     pdf = tmp_path / "paper.pdf"
     pdf.write_bytes(b"%PDF-1.4 fake")
     q = QdrantClient(":memory:")
     oa = FakeOpenAI()
-    run = lambda project, path=pdf: ingest.ingest(project, path, qdrant=q, openai_client=oa, collection=COLL, embed_model="m")
+    run = lambda project, path=pdf, **kw: ingest.ingest(project, path, qdrant=q, openai_client=oa, collection=COLL,
+                                                         embed_model="m", **kw)
     return SimpleNamespace(q=q, oa=oa, pdf=pdf, run=run)
 
 
@@ -111,19 +124,20 @@ def test_live_ingest_twice_no_duplicates():
 
 def test_stale_extra_chunks_are_removed(env, monkeypatch):
     env.run("projA")
-    monkeypatch.setattr(ingest, "chunk_pdf", lambda path, model: FAKE_CHUNKS[:2])
+    monkeypatch.setattr(ingest, "parse_pdf", fake_parse_pdf(FAKE_PIECES[:2]))
     sha = ingest.sha256_file(env.pdf)
     env.q.delete(COLL, points_selector=[ingest.point_id("projA", sha, 0)])  # force a re-ingest
     assert env.run("projA") == 2
     assert count(env.q) == 2
 
 
-def test_chunk_record_maps_docling_meta():
+def test_piece_from_chunk_maps_docling_meta():
     item = lambda label, *pages: SimpleNamespace(label=SimpleNamespace(value=label), prov=[SimpleNamespace(page_no=p) for p in pages])
-    rec = ingest.chunk_record("t", SimpleNamespace(doc_items=[item("text", 4), item("table", 5, 4)], headings=None))
-    assert rec == {"text": "t", "page_numbers": [4, 5], "section_headings": [], "content_type": "table"}
-    rec = ingest.chunk_record("t", SimpleNamespace(doc_items=[item("text")], headings=["Methods"]))
-    assert rec["content_type"] == "text" and rec["page_numbers"] == [] and rec["section_headings"] == ["Methods"]
+    chunk = lambda items, headings: SimpleNamespace(text="t", meta=SimpleNamespace(doc_items=items, headings=headings))
+    p = ingest.piece_from_chunk(chunk([item("text", 4), item("table", 5, 4)], None))
+    assert p == chunking.Piece(text="t", headings=[], page_numbers=[4, 5], content_type="table")
+    p = ingest.piece_from_chunk(chunk([item("text")], ["Methods"]))
+    assert p.content_type == "text" and p.page_numbers == [] and p.headings == ["Methods"]
 
 
 def test_plain_encoding_tolerates_special_tokens():
@@ -238,3 +252,32 @@ def test_migrate_rerun_adds_nothing_and_tolerates_newer_points():
 def test_migrate_refuses_same_collection():
     with pytest.raises(ValueError, match="differ"):
         ingest.migrate(QdrantClient(":memory:"), "c", "c")
+
+
+def test_points_carry_type_title_label_and_version(env):
+    env.run("projA")
+    p = env.q.scroll(COLL, limit=1, with_payload=True)[0][0].payload
+    assert p["doc_type"] == "generic" and p["paper_title"] == "Fake paper"  # Methods/Results only: ambiguous, no model
+    assert p["chunker_version"] == chunking.CHUNKER_VERSION
+    assert p["text"].startswith("Document: Fake paper\nSection: ") and p["context"] == ""
+
+
+def test_context_feeds_search_but_never_the_evidence_text(env):
+    env.run("projA", context_model="ctx-model")
+    assert any("CTXWORD" in t for t in env.oa.embedded)
+    for p in env.q.scroll(COLL, limit=10, with_payload=True, with_vectors=True)[0]:
+        assert "CTXWORD" not in p.payload["text"] and p.payload["context"].startswith("CTXWORD")
+        assert zlib.crc32(b"ctxword") in weights(p.vector[ingest.SPARSE_VECTOR])
+        assert p.payload["doc_type"] == "research_article"  # ambiguous -> fake LLM tie-break
+
+
+def test_blank_context_leaves_no_trailing_newline():
+    assert ingest.embed_text({"text": "t", "context": ""}) == "t"
+    assert ingest.embed_text({"text": "t", "context": "c"}) == "t\nc"
+
+
+def test_points_from_an_older_chunker_are_rechunked(env):
+    assert env.run("projA") == 3
+    env.q.set_payload(COLL, {"chunker_version": 1}, points=ingest.doc_filter("projA", ingest.sha256_file(env.pdf)))
+    assert not ingest.already_indexed(env.q, COLL, "projA", ingest.sha256_file(env.pdf))
+    assert env.run("projA") == 3
