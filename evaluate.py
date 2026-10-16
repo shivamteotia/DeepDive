@@ -105,11 +105,12 @@ def run_live(gold_path: Path, k: int, rerank_model: str | None = None) -> dict:
     oa = OpenAI(api_key=s.openai_api_key)
     qdrant = QdrantClient(url=s.qdrant_cluster_endpoint, api_key=s.qdrant_api_key)
     search = partial(ask.search, qdrant, oa, collection=s.qdrant_collection, embed_model=s.openai_embed_model,
-                     project_id=gold["project_id"], k=k, rerank_model=rerank_model, rerank_api_key=s.jena_ai_api_key)
+                     project_id=gold["project_id"], k=k, rerank_model=rerank_model, rerank_api_key=s.jena_ai_api_key,
+                     hybrid=s.hybrid_search)
     result = evaluate(gold, search_fn=lambda q: search(question=q),
                       verify_fn=lambda c, ev: research.verify(oa, s.openai_guard_model, [c], ev)[0])
     result["config"] = {"gold": gold_path.name, "gold_version": gold.get("version"), "k": k,
-                        "rerank_model": rerank_model or None,
+                        "rerank_model": rerank_model or None, "hybrid": s.hybrid_search,
                         "embed_model": s.openai_embed_model, "guard_model": s.openai_guard_model,
                         "collection": s.qdrant_collection, "run_at": datetime.now(UTC).isoformat()}
     out = ROOT / "data" / "evals"

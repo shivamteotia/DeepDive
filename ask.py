@@ -224,7 +224,7 @@ def main() -> None:
     oa = OpenAI(api_key=s.openai_api_key)
     evidence = search(qdrant, oa, collection=s.qdrant_collection, embed_model=s.openai_embed_model,
                       project_id=args.project_id, question=args.question, k=args.k, rerank_model=s.reranker_model,
-                      rerank_api_key=s.jena_ai_api_key)
+                      rerank_api_key=s.jena_ai_api_key, hybrid=s.hybrid_search)
     if not evidence:
         print(f"No indexed documents found for project '{args.project_id}'.")
         return

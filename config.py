@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     qdrant_cluster_endpoint: str
     qdrant_api_key: str
     qdrant_collection: str
+    hybrid_search: bool = False  # dense + bm25 keyword search fused by RRF; needs a migrated collection (ingest.py --migrate-to)
     reranker_model: str = ""  # "" = off; "jina:<model>" = hosted Jina; otherwise a local Hugging Face cross-encoder id
     jena_ai_api_key: str = ""  # env var is spelled Jena_AI_API_KEY (Jina AI); matching is case-insensitive
     database_url: str

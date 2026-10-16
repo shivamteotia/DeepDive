@@ -1,9 +1,14 @@
 import uuid
 
 import pytest
-from qdrant_client import models
+from conftest import FakeOpenAI, InlinePool, make_settings
+from fastapi.testclient import TestClient
+from qdrant_client import QdrantClient, models
 
+import ask
+import ingest
 import jobs
+from app import create_app
 
 PDF_A = b"%PDF-1.4 A\n%%EOF\n"
 PDF_B = b"%PDF-1.4 B\n%%EOF\n"
@@ -107,3 +112,31 @@ def test_runs_are_private(api, signup, fake_research):
         assert api.get(f"/api/v1/research-runs/{rid}{suffix}", headers=bob).status_code == 404
     assert api.get(f"/api/v1/research-runs/{uuid.uuid4()}", headers=alice).status_code == 404
     assert api.post(f"/api/v1/projects/{pid}/research-runs", headers=bob, json={"question": "risks?"}).status_code == 404
+
+
+def test_api_research_uses_hybrid_search_when_enabled(tmp_path, runner, monkeypatch, fake_research):
+    q = QdrantClient(":memory:")
+    app = create_app(make_settings(hybrid_search=True), qdrant=q, openai_client=FakeOpenAI(), runner=runner,
+                     upload_dir=tmp_path / "uploads", ingest_pool=InlinePool(), research_pool=InlinePool())
+    calls = []
+    real = ask.search
+    monkeypatch.setattr(ask, "search", lambda *a, **kw: calls.append(kw) or real(*a, **kw))
+    with TestClient(app) as api:
+        api.maxrim = app.state.maxrim
+        api.post("/auth/register", json={"email": "h@example.com", "password": "correct horse battery"})
+        token = api.post("/auth/login", json={"email": "h@example.com", "password": "correct horse battery"}).json()["access_token"]
+        h = {"Authorization": f"Bearer {token}"}
+        a, b = project(api, h, "A"), project(api, h, "B")
+        doc_a, doc_b = upload(api, h, a, PDF_A), upload(api, h, b, PDF_B)
+        ingest.ensure_collection(q, "unit", 3)
+        q.upsert("unit", [
+            models.PointStruct(id=str(uuid.uuid4()), payload={
+                "project_id": pid, "document_sha256": sha, "source_filename": name, "page_numbers": [1],
+                "section_headings": [], "text": "missing values were imputed"},
+                vector={"": [1, 0, 0], ingest.SPARSE_VECTOR: ingest.sparse_vector("missing values were imputed")})
+            for pid, sha, name in [(a, doc_a["sha256"], "a.pdf"), (b, doc_b["sha256"], "b.pdf")]
+        ])
+        r = api.post(f"/api/v1/projects/{a}/research-runs", headers=h, json={"question": "missing values?"})
+        assert api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()["status"] == "completed"
+    assert calls and all(kw["hybrid"] is True for kw in calls)
+    assert {x["source_filename"] for x in fake_research["hits"]} == {"a.pdf"}  # isolation holds with hybrid on

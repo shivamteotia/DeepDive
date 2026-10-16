@@ -171,7 +171,7 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
     def search_fn(q: str) -> list[dict]:  # project and ready-document filters are fixed here, server-side
         hits = ask.search(state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
                           project_id=project_id, question=q, k=RESEARCH_K, rerank_model=cfg.reranker_model,
-                          rerank_api_key=cfg.jena_ai_api_key, sha256_in=ready)
+                          rerank_api_key=cfg.jena_ai_api_key, sha256_in=ready, hybrid=cfg.hybrid_search)
         if use_web:  # opt-in per run; web text is untrusted and quoted exactly like PDF chunks
             hits += web.search(q, api_key=cfg.tavily_api_key, project_id=project_id,
                                timeout=cfg.web_search_timeout_seconds, max_results=WEB_RESULTS)
