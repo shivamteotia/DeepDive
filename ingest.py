@@ -1,6 +1,7 @@
 """Ingest one PDF into a project: Docling -> HybridChunker -> OpenAI embeddings -> Qdrant.
 
 Usage: uv run python ingest.py <project_id> <pdf>
+       uv run python ingest.py --migrate-to <new_collection>   # add keyword vectors to an existing collection
 """
 
 import argparse
@@ -17,6 +18,7 @@ from qdrant_client import QdrantClient, models
 CHUNK_MAX_TOKENS = 512
 EMBED_BATCH = 100
 UPSERT_BATCH = 64
+MIGRATE_BATCH = 256
 SPARSE_VECTOR = "bm25"
 BM25_K1 = 1.2
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./,][a-z0-9]+)*")
@@ -163,20 +165,55 @@ def ingest(project_id: str, path: Path, *, qdrant: QdrantClient, openai_client, 
     return len(points)
 
 
+def migrate(qdrant: QdrantClient, src: str, dst: str) -> int:
+    """Copy every point of src into dst with the same id, payload and dense vector, adding the bm25 keyword vector.
+    No Docling, no OpenAI; src is only read. Safe to re-run (same ids overwrite)."""
+    if src == dst:
+        raise ValueError("source and destination collections must differ")
+    ensure_collection(qdrant, dst, qdrant.get_collection(src).config.params.vectors.size)
+    copied, offset = 0, None
+    while True:
+        points, offset = qdrant.scroll(src, limit=MIGRATE_BATCH, offset=offset, with_payload=True, with_vectors=True)
+        if points:
+            qdrant.upsert(dst, [
+                models.PointStruct(id=p.id, payload=p.payload, vector={
+                    "": p.vector[""] if isinstance(p.vector, dict) else p.vector,
+                    SPARSE_VECTOR: sparse_vector(p.payload.get("text", "")),
+                })
+                for p in points
+            ], wait=True)
+            copied += len(points)
+        if offset is None:
+            break
+    src_n, dst_n = qdrant.count(src, exact=True).count, qdrant.count(dst, exact=True).count
+    if dst_n < src_n:
+        raise RuntimeError(f"migration incomplete: {dst} has {dst_n} points, {src} has {src_n}")
+    return copied
+
+
 def main() -> None:
     from openai import OpenAI
 
     from config import Settings
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("project_id")
-    ap.add_argument("pdf", type=Path)
+    ap.add_argument("project_id", nargs="?")
+    ap.add_argument("pdf", type=Path, nargs="?")
+    ap.add_argument("--migrate-to", metavar="COLLECTION",
+                    help="copy QDRANT_COLLECTION into COLLECTION with keyword vectors added, then exit")
     args = ap.parse_args()
 
     s = Settings()
+    qdrant = QdrantClient(url=s.qdrant_cluster_endpoint, api_key=s.qdrant_api_key)
+    if args.migrate_to:
+        n = migrate(qdrant, s.qdrant_collection, args.migrate_to)
+        print(f"copied {n} points {s.qdrant_collection} -> {args.migrate_to}; set QDRANT_COLLECTION={args.migrate_to} in .env")
+        return
+    if args.project_id is None or args.pdf is None:
+        ap.error("project_id and pdf are required unless --migrate-to is given")
     n = ingest(
         args.project_id, args.pdf,
-        qdrant=QdrantClient(url=s.qdrant_cluster_endpoint, api_key=s.qdrant_api_key),
+        qdrant=qdrant,
         openai_client=OpenAI(api_key=s.openai_api_key),
         collection=s.qdrant_collection,
         embed_model=s.openai_embed_model,

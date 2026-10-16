@@ -200,3 +200,41 @@ def test_unmigrated_collection_fails_even_for_an_already_indexed_document(env):
         "project_id": "projA", "document_sha256": sha, "chunk_count": 1, "text": "t"})])
     with pytest.raises(ValueError, match="--migrate-to"):  # not a silent "already indexed"
         env.run("projA")
+
+
+def old_collection(q, name="old", n=300):  # n > MIGRATE_BATCH exercises paging
+    q.create_collection(name, vectors_config=ingest.models.VectorParams(size=3, distance=ingest.models.Distance.COSINE))
+    q.upsert(name, [
+        ingest.models.PointStruct(id=ingest.point_id("projA", "sha", i), vector=[1.0, float(i), 0.0], payload={
+            "project_id": "projA", "document_sha256": "sha", "chunk_index": i, "text": f"missing values chunk {i}"})
+        for i in range(n)
+    ])
+
+
+def test_migrate_copies_points_and_adds_keyword_vector():
+    q = QdrantClient(":memory:")
+    old_collection(q)
+    assert ingest.migrate(q, "old", "new") == 300
+    assert q.count("new", exact=True).count == 300
+    src = {p.id: p for p in q.scroll("old", limit=500, with_vectors=True)[0]}
+    for p in q.scroll("new", limit=500, with_vectors=True)[0]:
+        assert p.payload == src[p.id].payload
+        assert p.vector[""] == pytest.approx(src[p.id].vector)
+        assert weights(p.vector[ingest.SPARSE_VECTOR]) == pytest.approx(weights(ingest.sparse_vector(p.payload["text"])))
+    assert not ingest.has_sparse(q, "old") and q.count("old", exact=True).count == 300  # source untouched
+
+
+def test_migrate_rerun_adds_nothing_and_tolerates_newer_points():
+    q = QdrantClient(":memory:")
+    old_collection(q)
+    ingest.migrate(q, "old", "new")
+    q.upsert("new", [ingest.models.PointStruct(  # a document ingested into the new collection after migrating
+        id=ingest.point_id("projA", "sha2", 0), payload={"project_id": "projA", "text": "new doc"},
+        vector={"": [0.0, 1.0, 0.0], ingest.SPARSE_VECTOR: ingest.sparse_vector("new doc")})])
+    assert ingest.migrate(q, "old", "new") == 300
+    assert q.count("new", exact=True).count == 301
+
+
+def test_migrate_refuses_same_collection():
+    with pytest.raises(ValueError, match="differ"):
+        ingest.migrate(QdrantClient(":memory:"), "c", "c")
