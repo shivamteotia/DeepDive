@@ -57,7 +57,8 @@ delete-then-upsert sequence, hash-skip, and "ready only after upsert" are unchan
 - Scrolls `src` in batches with `with_vectors=True, with_payload=True`; for each point upserts the same ID and
   payload into `dst` with `{"": dense, "bm25": sparse_vector(payload["text"])}`.
 - No Docling, no OpenAI. Idempotent (same IDs overwrite). Returns the number of points copied and fails if
-  `count(dst) != count(src)` afterwards.
+  `count(dst) < count(src)` afterwards (`dst` may legitimately hold more: documents ingested into it after an
+  earlier migration).
 - `src` is never modified. After migrating, the user sets `QDRANT_COLLECTION=<new>` in `.env`. Postgres
   document rows need no change (they don't store the collection name).
 - Refuses `src == dst`.
@@ -84,6 +85,8 @@ that already passes `rerank_model` (`ask.main`, `research.main`, `jobs.py`, `eva
   `HYBRID_CANDIDATES = 20`. `F` is the existing server-built `project_id` (+ optional `sha256_in`) filter, applied
   to both prefetches and the outer query.
 - If `sparse_vector(question, query=True)` is empty, fall back to the dense query.
+- If the hybrid query fails and the collection has no `bm25` vector (flag turned on before migrating), raise
+  `ValueError` naming the migration command instead of surfacing Qdrant's raw error.
 - Reranker, when set, reorders the fused candidates exactly as it reorders dense candidates today.
 - `score` is the RRF score when hybrid is on. Nothing thresholds on `score` (checked: only `web.py`, which scores
   Tavily results, reads a score).
