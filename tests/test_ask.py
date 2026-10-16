@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -226,3 +227,30 @@ def test_hybrid_candidates_are_reranked_to_k(hq, monkeypatch):
     monkeypatch.setattr(ask, "rerank_scores", fake_scores)
     assert ids(hsearch(hq, "projA", k=1, hybrid=True, rerank_model="fake")) == ["3"]
     assert seen["n"] == 3  # all of projA's fused candidates, none of projB's
+
+
+ROW = ask.MetricRow(paper="JPan2023.pdf", model="predictive model", condition="validation cohort", metric="AUC",
+                    value="0.893 (95% CI 0.809-0.949)", best=True)
+
+
+def test_check_citations_keeps_the_row_when_dropping_an_invented_id():
+    ans = ask.Answer(claims=[ask.Claim(text="AUC 0.893", evidence_ids=["E1", "E9"], row=ROW)], gaps="")
+    out = ask.check_citations(ans, {"E1"})
+    assert out.claims[0].row == ROW and out.claims[0].evidence_ids == ["E1"]
+
+
+def test_scope_rules_are_appended_only_for_metric_scopes():
+    oa = FakeOpenAI(parsed=ask.Answer(claims=[], gaps="g"))
+    calls = []
+    oa.responses = SimpleNamespace(parse=lambda **kw: calls.append(kw["instructions"]) or SimpleNamespace(
+        output_parsed=ask.Answer(claims=[], gaps="g")))
+    ev = [{"eid": "E1", "source_filename": "a.pdf", "page_numbers": [1], "text": "t"}]
+    ask.answer(oa, "m", "q", ev)
+    ask.answer(oa, "m", "q", ev, scope="best_model")
+    assert calls[0] == ask.INSTRUCTIONS and calls[1] == ask.INSTRUCTIONS + "\n" + ask.SCOPE_RULES["best_model"]
+    assert "designat" in ask.SCOPE_RULES["best_model"] and "highest" in ask.SCOPE_RULES["best_model"]
+
+
+def test_claim_schema_row_is_nullable_without_defaults():
+    from openai.lib._pydantic import to_strict_json_schema
+    assert '"default"' not in json.dumps(to_strict_json_schema(ask.Answer))
