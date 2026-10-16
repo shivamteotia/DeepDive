@@ -402,3 +402,19 @@ def test_metric_question_with_no_evidence_keeps_scope_and_coverage_lines():
     res = scoped_result("across_papers", [], verdicts(), hits={"s1": [], "s2": []})
     assert res["scope"] == "across_papers" and "Not reported in: JPan2023.pdf" in res["gaps"]
     assert "Not reported in: EA2022.pdf" in res["gaps"]
+
+
+def test_best_row_needs_a_designation_that_names_its_model():
+    context = ask.Claim(text="JPan2023 enrolled 523 patients with SCAP.", evidence_ids=["E1"])  # supported, designates nothing
+    best = ask.Claim(text="AUC 0.893", evidence_ids=["E1"], row=row(best=True))
+    res = scoped_result("best_model", [context, best], verdicts("SUPPORTED", "SUPPORTED"))
+    assert res["claims"][1]["row"]["best"] is False and res["status"] == "needs_review"
+
+
+def test_verifier_sees_row_fields():
+    oa = FakeOpenAI({r.Verification: [verdicts("SUPPORTED")]})
+    ev = [hit("p1", "AUC 0.893") | {"eid": "E1"}]
+    r.verify(oa, "g", [ask.Claim(text="AUC 0.893", evidence_ids=["E1"], row=row())], ev)
+    sent = oa.inputs[r.Verification][0]
+    assert '"row"' in sent and '"condition": "validation cohort"' in sent
+    assert "row" in r.VERIFIER
