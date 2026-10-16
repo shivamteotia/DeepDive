@@ -111,7 +111,7 @@ def test_runner_times_out_hung_parse_and_recovers():
     with pytest.raises(RuntimeError, match="timed out"):
         r.run()
     assert time.monotonic() - start < 30
-    r.fn = add
+    r.fn, r.timeout = add, 60  # recovery is the point; a cold child spawn alone can take >2 s on a loaded machine
     assert r.run(2, 3) == 5
 
 
