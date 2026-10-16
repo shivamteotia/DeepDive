@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MaxRIM — research assistant</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230b7a75%27/%3E%3Ctext x=%2716%27 y=%2722%27 font-size=%2718%27 font-family=%27Arial%27 font-weight=%27700%27 fill=%27white%27 text-anchor=%27middle%27%3EM%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Sign in -->
+  <section id="auth" class="auth" hidden>
+    <form id="auth-form" class="auth-card">
+      <div class="brand brand-lg"><span class="logo">M</span> MaxRIM</div>
+      <p class="muted">Cited, verified answers from your research papers.</p>
+      <label>Email <input id="auth-email" type="email" autocomplete="username" required></label>
+      <label>Password <input id="auth-password" type="password" autocomplete="current-password" minlength="12" required></label>
+      <p id="auth-error" class="error" hidden></p>
+      <button type="submit" class="btn primary" id="auth-submit">Sign in</button>
+      <button type="button" class="btn link" id="auth-toggle">New here? Create an account</button>
+    </form>
+  </section>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="side-head">
+        <div class="brand"><span class="logo">M</span> MaxRIM</div>
+        <button class="icon-btn only-mobile" id="close-side" aria-label="Close menu">✕</button>
+      </div>
+
+      <div class="side-block">
+        <div class="side-label">Project</div>
+        <div class="row">
+          <select id="project-select" aria-label="Project"></select>
+          <button class="icon-btn" id="new-project" title="New project" aria-label="New project">＋</button>
+        </div>
+      </div>
+
+      <button class="btn primary wide" id="new-chat">＋ New chat</button>
+
+      <div class="side-block grow">
+        <div class="side-label">Chats</div>
+        <ul id="conversation-list" class="list"></ul>
+      </div>
+
+      <div class="side-block">
+        <div class="side-label row between">
+          <span>Papers</span>
+          <label class="btn small" title="Upload PDFs">Upload<input id="upload" type="file" accept="application/pdf,.pdf" multiple hidden></label>
+        </div>
+        <ul id="document-list" class="list docs"></ul>
+      </div>
+
+      <div class="side-foot">
+        <span id="user-email" class="muted small"></span>
+        <button class="btn link small" id="logout">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar only-mobile">
+        <button class="icon-btn" id="open-side" aria-label="Open menu">☰</button>
+        <div class="brand"><span class="logo">M</span> MaxRIM</div>
+      </header>
+
+      <!-- Empty state: a search engine for your papers -->
+      <section id="hero" class="hero">
+        <h1>Ask your research papers</h1>
+        <p class="muted">Every answer cites the passage it comes from and is checked by a verifier before you see it.</p>
+        <div class="examples" id="examples"></div>
+      </section>
+
+      <section id="thread" class="thread" hidden aria-live="polite"></section>
+
+      <form id="composer" class="composer">
+        <div class="search">
+          <textarea id="question" rows="1" placeholder="Ask a question about your papers…" maxlength="2000" required></textarea>
+          <button type="submit" class="send" id="send" aria-label="Ask">➜</button>
+        </div>
+        <div class="composer-opts">
+          <label class="toggle" id="web-toggle-wrap" title="Also search the web. Your question and follow-up search queries (which can include text from your papers) are sent to the web search provider. Web results are cited and verified like papers.">
+            <input type="checkbox" id="web-toggle"> <span class="track"></span> Web search
+          </label>
+          <span class="muted small" id="composer-hint">Follow-ups remember this chat.</span>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

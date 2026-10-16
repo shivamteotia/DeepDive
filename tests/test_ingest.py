@@ -1,0 +1,142 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from qdrant_client import QdrantClient
+
+import ingest
+
+COLL = "unit"
+FAKE_CHUNKS = [
+    {"text": f"chunk {i}", "page_numbers": [i + 1], "section_headings": ["Results"], "content_type": "text"}
+    for i in range(3)
+]
+
+
+class FakeOpenAI:
+    def __init__(self):
+        self.calls = 0
+        self.embeddings = self
+
+    def create(self, model, input):
+        self.calls += 1
+        return SimpleNamespace(data=[SimpleNamespace(embedding=[float(len(t)), 1.0, 0.5]) for t in input])
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingest, "chunk_pdf", lambda path, model: FAKE_CHUNKS)
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fake")
+    q = QdrantClient(":memory:")
+    oa = FakeOpenAI()
+    run = lambda project, path=pdf: ingest.ingest(project, path, qdrant=q, openai_client=oa, collection=COLL, embed_model="m")
+    return SimpleNamespace(q=q, oa=oa, pdf=pdf, run=run)
+
+
+def count(q, project=None):
+    f = None
+    if project:
+        f = ingest.models.Filter(must=[ingest.models.FieldCondition(key="project_id", match=ingest.models.MatchValue(value=project))])
+    return q.count(COLL, count_filter=f, exact=True).count
+
+
+def test_point_id_is_deterministic():
+    assert ingest.point_id("a", "sha", 0) == ingest.point_id("a", "sha", 0)
+    assert ingest.point_id("a", "sha", 0) != ingest.point_id("b", "sha", 0)
+    assert ingest.point_id("a", "sha", 0) != ingest.point_id("a", "sha", 1)
+
+
+def test_reingest_same_file_adds_nothing(env):
+    assert env.run("projA") == 3
+    assert env.run("projA") == 0
+    assert count(env.q) == 3
+    assert env.oa.calls == 1  # second run skipped before embedding
+
+
+def test_partial_upsert_is_repaired(env):
+    env.run("projA")
+    env.q.delete(COLL, points_selector=[ingest.point_id("projA", ingest.sha256_file(env.pdf), 2)])
+    assert env.run("projA") == 3
+    assert count(env.q) == 3
+
+
+def test_same_file_in_other_project_is_isolated(env):
+    env.run("projA")
+    env.run("projB")
+    assert count(env.q, "projA") == 3
+    assert count(env.q, "projB") == 3
+
+
+def test_payload_has_provenance(env):
+    env.run("projA")
+    (p,), _ = env.q.scroll(COLL, limit=1, scroll_filter=ingest.doc_filter("projA", ingest.sha256_file(env.pdf)))
+    for key in ("project_id", "document_sha256", "source_filename", "page_numbers", "chunk_index", "chunk_count", "text"):
+        assert key in p.payload
+
+
+def test_rejects_bad_input(env, tmp_path):
+    with pytest.raises(ValueError):
+        env.run("  ")
+    txt = tmp_path / "notes.txt"
+    txt.write_text("x")
+    with pytest.raises(ValueError):
+        env.run("projA", txt)
+
+
+SAMPLES = sorted(Path("data").rglob("*.pdf"), key=lambda p: p.stat().st_size)  # smallest first: cheapest live run
+
+
+@pytest.mark.live
+@pytest.mark.skipif(not SAMPLES, reason="put a PDF under data/")
+def test_live_ingest_twice_no_duplicates():
+    from openai import OpenAI
+
+    from config import Settings
+
+    s = Settings()
+    coll = f"{s.qdrant_collection}_test"
+    q = QdrantClient(url=s.qdrant_cluster_endpoint, api_key=s.qdrant_api_key)
+    kw = {"qdrant": q, "openai_client": OpenAI(api_key=s.openai_api_key), "collection": coll, "embed_model": s.openai_embed_model}
+    try:
+        n = ingest.ingest("live-test", SAMPLES[0], **kw)
+        assert n > 0
+        assert ingest.ingest("live-test", SAMPLES[0], **kw) == 0
+        assert q.count(coll, exact=True).count == n
+    finally:
+        if q.collection_exists(coll):
+            q.delete_collection(coll)
+
+
+def test_stale_extra_chunks_are_removed(env, monkeypatch):
+    env.run("projA")
+    monkeypatch.setattr(ingest, "chunk_pdf", lambda path, model: FAKE_CHUNKS[:2])
+    sha = ingest.sha256_file(env.pdf)
+    env.q.delete(COLL, points_selector=[ingest.point_id("projA", sha, 0)])  # force a re-ingest
+    assert env.run("projA") == 2
+    assert count(env.q) == 2
+
+
+def test_chunk_record_maps_docling_meta():
+    item = lambda label, *pages: SimpleNamespace(label=SimpleNamespace(value=label), prov=[SimpleNamespace(page_no=p) for p in pages])
+    rec = ingest.chunk_record("t", SimpleNamespace(doc_items=[item("text", 4), item("table", 5, 4)], headings=None))
+    assert rec == {"text": "t", "page_numbers": [4, 5], "section_headings": [], "content_type": "table"}
+    rec = ingest.chunk_record("t", SimpleNamespace(doc_items=[item("text")], headings=["Methods"]))
+    assert rec["content_type"] == "text" and rec["page_numbers"] == [] and rec["section_headings"] == ["Methods"]
+
+
+def test_plain_encoding_tolerates_special_tokens():
+    import tiktoken
+    base = tiktoken.get_encoding("cl100k_base")
+    enc = tiktoken.Encoding(name="p", pat_str=base._pat_str, mergeable_ranks=base._mergeable_ranks, special_tokens={})
+    assert enc.encode("risk <|endoftext|> matrix")
+
+
+def test_source_filename_overrides_path_name(env):
+    env.run("projA")  # default: path name
+    sha = ingest.sha256_file(env.pdf)
+    ingest.ingest("projB", env.pdf, qdrant=env.q, openai_client=env.oa, collection=COLL, embed_model="m",
+                  source_filename="Original Name.pdf")
+    (a,), _ = env.q.scroll(COLL, limit=1, scroll_filter=ingest.doc_filter("projA", sha))
+    (b,), _ = env.q.scroll(COLL, limit=1, scroll_filter=ingest.doc_filter("projB", sha))
+    assert a.payload["source_filename"] == "paper.pdf" and b.payload["source_filename"] == "Original Name.pdf"

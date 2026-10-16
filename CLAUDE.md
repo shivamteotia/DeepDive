@@ -11,9 +11,19 @@ Full target design lives in `README.md`. This file is how we actually build it.
 4. **Eval** — ~20 gold questions in JSON + pytest (recall@k, false-claim catch rate).
 5. **API** — FastAPI + Postgres + auth wraps the functions from 1–4.
 
-Current step: **1**. Update this line when a step's exit check passes.
+Current step: **5 done**. Steps 1-5 built (Li2024.pdf skipped: Docling layout model crashes on its page 1; PyPdfiumDocumentBackend works if needed).
+API design/plan: `docs/superpowers/specs/2026-10-15-api-design.md`, `docs/superpowers/plans/2026-10-15-api.md`.
+API ingestion runs in a 1-worker child process (`jobs.IngestRunner`) so a native Docling crash fails one document, not the server.
+After step 5: web UI (`static/`, served at `/`), chat memory (conversations; follow-ups rewritten to a standalone question by
+the fast model) and opt-in per-run web search (Tavily, `WEB_SEARCH_ENABLED` + `TAVILY_API_KEY`). Spec:
+`docs/superpowers/specs/2026-10-15-frontend-chat-web-design.md`. E2E eval: `evals/` (results log `evals/baselines/RESULTS.md`).
+Eval baseline (eval/gold.json v1, DRAFT, k=6): recall@k 0.90, MRR 0.71, catch rate 0.90-1.00, true rejection 0.00.
+Run `evaluate.py` before and after any change to chunking, retrieval, prompts, or models; don't merge a regression.
+Reranker (`RERANKER_MODEL`, off by default) measured 2026-10-15: ms-marco-MiniLM-L-6-v2 recall 0.80 / MRR 0.78 (worse);
+bge-reranker-base recall 0.90 / MRR 0.77 but ~30 s per search on CPU; jina:jina-reranker-v2-base-multilingual
+(hosted, fast) recall 0.80 / MRR 0.78. None beat plain vector recall; r19 is missed by all. Next idea: hybrid keyword+vector.
 
-**Deferred until needed:** Celery/Redis (use FastAPI `BackgroundTasks`), S3 (local `data/`), MLflow (JSON results), web search, frontend.
+**Deferred until needed:** Celery/Redis (use FastAPI `BackgroundTasks`), S3 (local `data/`), MLflow (JSON results), Alembic (db.ADDED_COLUMNS for now).
 
 ## Stack
 
@@ -29,7 +39,12 @@ Current step: **1**. Update this line when a step's exit check passes.
 uv sync                      # install
 uv run ruff check . --fix    # lint
 uv run pytest -m "not live"  # unit tests (no network, no cost)
-uv run pytest -m live        # hits Qdrant Cloud + OpenAI (costs money)
+uv run pytest -m live        # hits Qdrant Cloud + OpenAI (costs money); plain `pytest` excludes these (pyproject addopts)
+docker compose up -d --wait               # local Postgres (127.0.0.1:5432)
+uv run uvicorn app:create_app --factory   # UI + API on http://127.0.0.1:8000 (UI at /, docs at /docs)
+uv run python evaluate.py    # retrieval + verifier metrics vs eval/gold.json -> data/evals/ (costs money)
+uv run python -m evals.run   # end-to-end eval via the running API (26 golden cases + DeepEval judge) -> evals/baselines/candidate.json
+uv run python -m evals.compare   # candidate vs baseline: PASS=0 FAIL=1 REVIEW=2 (results log: evals/baselines/RESULTS.md)
 ```
 
 ## Hard rules

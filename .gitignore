@@ -5,3 +5,6 @@ __pycache__/
 .ruff_cache/
 data/
 .claude
+CLAUD.md.deepeval/
+docker-compose.yml
+uv.lock

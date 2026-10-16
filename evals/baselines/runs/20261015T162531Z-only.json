@@ -1,0 +1,184 @@
+{
+ "cases": [
+  {
+   "id": "a09",
+   "kind": "answerable",
+   "project": "main",
+   "source": [
+    "JPan2023.pdf"
+   ],
+   "facts": [
+    "0.903"
+   ],
+   "question": "What was the C-index of the SCAP nomogram in external validation?",
+   "expected": "The C-index in the external validation cohort was 0.903 (95% CI 0.838-0.968).",
+   "status": "completed",
+   "error": null,
+   "claims": [
+    {
+     "text": "The C-index of the SCAP nomogram in external validation was 0.903 (95% CI 0.838-0.968).",
+     "evidence_ids": [
+      "E7"
+     ],
+     "verdict": "SUPPORTED",
+     "rationale": "The cited text states that the C index of the validation cohort was 0.903 (95% CI 0.838-0.968), which directly supports the claim about the C-index of the SCAP nomogram in external validation."
+    }
+   ],
+   "gaps": "",
+   "evidence": [
+    {
+     "eid": "E1",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      2
+     ],
+     "text": "Abstract\nMeasurements and Main Test Results.-The Criticality Index, based on physiology, therapy, and care intensity, was computed for each admission for each time period and calibrated to hospital mortality risk (Criticality Index - Mortality (CI-M)) at each of 29 time periods (initial assessment: 6 hours; last assessment: 180 hours). Performance metrics and clinical validity were determined from the held-out test sample (n = 3,453, 13%). Discrimination assessed with the area under the receiver operating characteristic curve was 0.852 (95% CI: 0.843, 0.861) overall and ≥ 0.80 for all individual time periods. Calibration assessed by the Hosmer-Lemeshow goodnessof-fit test showed good fit overall (p = 0.196) and was statistically not significant for 28 of the 29 time periods. Calibration plots for all models revealed the intercept ranged from -0.002 to 0.009, the slope ranged from 0.867 to 1.415, and the R 2 ranged from 0.862 to 0.989. Clinical validity assessed using population trajectories and changes in the risk status of admissions (clinical volatility) revealed clinical trajectories consistent with clinical expectations and greater clinical volatility in deaths than survivors (p < 0.001).\nConclusion and Relevance: Machine learning models incorporating physiology, therapy, and care intensity can track changes in hospital mortality risk during intensive care. The CI-M's framework and modeling method are potentially applicable to monitoring clinical improvement and deterioration in real-time."
+    },
+    {
+     "eid": "E2",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      11
+     ],
+     "text": "Figure 1.\nArea under the receiver operating characteristic curves (AUROC) for all Criticality Index - Mortality models and for all models combined.\na. Separate models were developed for 29 6-hour time periods from hour 6 to hour 180. The dots are AUROCs for the individual models and the shaded areas are the 95% confidence intervals\nb. Composite AUROC. All models have been combined."
+    },
+    {
+     "eid": "E3",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      6,
+      7
+     ],
+     "text": "Discussion\nThis study demonstrated the applicability of the CI-M for assessments of serial changes in mortality risk for individuals. The Criticality Index was initially calibrated to probability of ICU care and has been applied to determining future care needs for hospitalized children (7). This study expands its use by recalibrating it to mortality risk. We used individual machine leaning models for 6-hour time intervals from 6 hours to 180 hours of ICU care to maximize predictive performance. Overall, model performance metrics were very good. The composite AUROC was 0.852 and, perhaps more important for potential individual applications, calibration was excellent with 28 of 29 Hosmer-Lemeshow GOF tests p > .05, observed versus expected outcomes in 290 of 294 (98.6%) risk intervals of the individual models not statistically different, and calibration plot metrics were very good for the overall performance and the individual models. We evaluated in detail the two time periods with the worst calibration metrics and found that, while single metrics were notable, the assessment with multiple metrics indicated that the calibration metrics were not consistently reduced. Thus, the methodology consistently performed well over the first seven and a half days of ICU care. Clinical validity including clinical trajectories and clinical volatility supported the potential for use in individuals by capturing the anticipated patterns of illness in survivors and deaths. Eventually, however, the methodology must be implemented and assessed in real-world use including comparison to other severity assessment methods.\nExperienced intensivists are excellent at assessing patients using clinical snapshots (29). The flow and amount of ICU data for patient assessment is substantial. For example, over 200 variables have been estimated as useful for care of ventilated patients. (30). The ability to successfully integrate this large amount of changing information on a continuous basis lies beyond the capabilities of most knowledgeable, and perceptive care givers. (29). Less experienced and less skilled providers will integrate this information less well. Therefore, the addition of continuous or frequently updated risk assessments for children in ICUs could result in detection of clinical deterioration or improvement that might have been unappreciated, providing an opportunity for earlier interventions and the potential for improved outcomes."
+    },
+    {
+     "eid": "E4",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      12
+     ],
+     "text": "Figure 2.\nCalibration plot performance metrics for all Criticality Index - Mortality models and for all models combined\n- a. Separate models were developed for 29 6-hour time periods from hour 6 to hour 180. Calibration plot metrics include the regression line intercepts (black), slopes (tan) and R 2 's (blue). The shaded areas are the 95% confidence intervals.\nb. Composite calibration plot. The dashed line is the line of identity and the solid line is the regression line. The plot includes 294 risk intervals from all models. The comparison of observed proportions to expected proportions of outcome for each interval were not statistically different (p > 0.05) for 290 (98.64%) of the risk intervals. Each interval had ≥ 170 admissions. The Hosmer-Lemeshow goodness-of-fit test for the overall calibration was 0.195."
+    },
+    {
+     "eid": "E5",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      8
+     ],
+     "text": "Conclusion\nChanging mortality risks for pediatric ICU patients can be measured with machine learning models based on the Criticality Index. Discrimination and calibration for all CI-M models was very good, and clinical validity was demonstrated using clinical trajectories and clinical volatility. The CI-M framework and modeling method are potentially applicable to monitoring patient improvement and deterioration in real-time."
+    },
+    {
+     "eid": "E6",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      5
+     ],
+     "text": "Results\ncare increases. For each time period, we added a final step that calibrated the Criticality Index and positive pressure ventilation variables to hospital outcome of survival or death using generalized thin plate splines for binary outcomes (23, 24). The performance of the individual CI-M models and the composite of all models was assessed using a) discrimination (area under the receiver operating characteristic curve [AUROC]) and calibration and b) specificity, precision, F1 score, Mathew's correlation coefficient (MCC), and negative predictive value at sensitivities of 0.85, 0.90, and 0.95. Calibration was assessed using two approaches. First, we computed the Hosmer-Lemeshow GOF test for each time period using risk interval with at least 250 admissions. Second, we assessed calibration plots of the observed and expected proportion of deaths with linear regression using at least 10 risk intervals with equal numbers of admissions. Performance metrics for the calibration plots included the regression line slope, intercept, and the coefficient of determination (R 2 ). We also compared the observed to predicted number of outcomes for each of the calibration plot risk intervals and reported the percentage of intervals with no statistical evidence of difference (p > .05) (25-28). For perfect calibration, the intersect would be zero, the slope would be 1, and the R 2 would be 1. We expected approximately 5% of the observed versus expected outcome intervals in the calibration plots would be statistically different. Since real-time application would be dependent, in part, on the worst performance at any time period, we examined the worst performing models for each of the calibration methods using the AUROCs, the GOF tests, the calibration plots, and observed versus expected proportion of deaths, and compared these data to the first and the last time period models."
+    },
+    {
+     "eid": "E7",
+     "source_filename": "JPan2023.pdf",
+     "page_numbers": [
+      4,
+      5,
+      7
+     ],
+     "text": "Evaluation of the predictive model\nThe clinical data of the validation cohort, which included 88 patients with SCAP from another hospital, were incorporated into the prediction model for external validation. The external validation results showed that the C index of the validation cohort was 0.903 (95% CI 0.838-0.968). We used ROC curves to compare the model with two classical scoring systems (APACHE II and SOFA). Figure 2 showed the ROC curve for the development cohort, the AUC of our predictive model was 0.850 (95% CI 0.8130.881), APACHE II score 0.795 (95% CI 0.755-0.832), and SOFA score 0.69 (95% CI 0.645-0.732). The ROC curve for the validation cohort was shown in Fig. 3, the AUC of the predictive model was 0.893 (95% CI 0.809-0.949), APACHE II score 0.746 (95% CI 0.642-0.833), and SOFA score 0.742 (95% CI 0.638-0.829). The results indicated that the model had well-predicted power and accuracy for SCAP mortality. Meanwhile, it outperformed the traditional APACHE II and SOFA scoring systems.\nFigures 4 and 5 showed the calibration curves for the development and validation cohorts, respectively, suggesting that the model's predicted probabilities were close to the observed actual probabilities. The DCA curves for both cohorts were shown in Figs. 6 and 7, with significant net gains for most of the threshold probabilities. Moreover, our prediction model had a higher clinical application compared to APACHE II score and SOFA score.\nFig. 1 The nomogram for predicting the risk of mortality in SCAP patients admitted to the ICU. PaO2, arterial oxygen partial pressure; FiO2, inhaled oxygen concentration; APACHE, Acute Physiology And Chronic Health Evaluation"
+    },
+    {
+     "eid": "E8",
+     "source_filename": "JPan2023.pdf",
+     "page_numbers": [
+      8,
+      9
+     ],
+     "text": "Discussion\nNomograms can quantify and visualize every variable's contribution statistically, eliminating possible confounders among individual variables. In this study, we collected and analyzed the data of patients with SCAP in the ICU to establish a nomogram model. Further, data from another hospital were chosen for external validation. The results show that the model has high predictive effectiveness and provides better discrimination. Currently, there are no uniform assessment criteria to evaluate the risk of in-hospital mortality in SCAP. APACHE II and SOFA scoring systems are used widely in clinical practice. By comparing with their analysis, our prediction model showed higher accuracy and clinical application value. Owing to its high value for clinical application and accessibility of each variable, the model could help ICU physicians better evaluate the prognosis of patients.\nThe study had several limitations. First, it was a retrospective observational study, and selection bias could not be ruled out entirely. Second, the study only included patients from two hospitals, which may limit its generalizability to other geographical regions and populations. Third, the follow-up period was short and long-term mortality was not observed. In the future, it will be necessary to perform large-sample, multi-center prospective cohort studies to confirm our study results."
+    },
+    {
+     "eid": "E9",
+     "source_filename": "JPan2023.pdf",
+     "page_numbers": [
+      5,
+      6,
+      7
+     ],
+     "text": "Evaluation of the predictive model\nFigs. 2 The receiver operating characteristic(ROC) curve of the predictive model, APACHE II and SOFA scoring systems for the development cohort. Model AUC was 0.850 (95% CI 0.813-0.881), APACHE II score 0.795 (95% CI 0.755-0.832), and SOFA score 0.69 (95% CI 0.645-0.732)\nFig. 3 The receiver operating characteristic(ROC) curve of the predictive model, APACHE II and SOFA scoring systems for the validation cohort. Model AUC was 0.893 (95% CI 0.809-0.949), APACHE II score 0.746 (95% CI 0.642-0.833), and SOFA score 0.742 (95% CI 0.638-0.829)\nFigs. 4 The calibration curve of nomogram in the development cohort\nFigs. 5 The calibration curve of nomogram in the validation cohort\nFig. 6 The decision curve analysis of nomogram for the development cohort"
+    },
+    {
+     "eid": "E10",
+     "source_filename": "JPan2023.pdf",
+     "page_numbers": [
+      3,
+      4
+     ],
+     "text": "Basic demographic characteristics\nDescriptions of the clinical data of the development and validation cohorts are provided in Table 1. The development cohort was composed of 455 patients with SCAP, of which 295 (64.84%) were male, and 160 (35.16%) were female, with an average age of (61.93 ± 17.77) years. They were divided into 358 patients in the survival group and 97 patients in the death group according to their prognosis, with a mortality rate of 21.32%. The validation cohort included 88 patients with SCAP, there were 70 males (79.55%) and 18 females (20.45%) among them, and the average age was (67.49 ± 14.02) years. According to their prognosis, the validation cohort was divided into 68 patients in the survival group and 20 cases in the death group, with a mortality rate of 22.73%. There were no significant differences between the development and validation cohorts with respect to the mortality rate (P > 0.05).\n"
+    },
+    {
+     "eid": "E11",
+     "source_filename": "JPan2023.pdf",
+     "page_numbers": [
+      9
+     ],
+     "text": "Conclusions\nIn summary, based on the clinical data of patients with SCAP admitted to the ICU, our study established a visualized nomogram model using lymphocytes, PaO2/FiO2 ratio, APACHE II score, and shock as the central mortality risk factors. The model demonstrated high predictive accuracy, discriminatory power, and clinical usefulness in predicting the risk of in-hospital mortality for patients with SCAP in the ICU. Our study will assist ICU physicians in improving the prognosis of patients with SCAPs."
+    },
+    {
+     "eid": "E12",
+     "source_filename": "JPan2023.pdf",
+     "page_numbers": [
+      2
+     ],
+     "text": "Study design\nWe conducted a two-center retrospective observational cohort study. The development cohort included 455 patients with SCAP from the Department of Critical Care Medicine of The First Affiliated Hospital of Anhui Medical University of China between June 2019 and October 2022. The validation cohort included 88 patients with SCAP admitted to the Department of Respiratory ICU at Anhui Chest Hospital, China, between July 2021 and November 2022. We retrospectively analyzed the clinical data of patients from these two cohorts. We established a mortality prediction model based on the development cohort. Model visualization was done using a nomogram. The validation cohort was substituted in the model for external verification.\nInformed consent of patients was waived by the First Affiliated Hospital Ethics Committee of Anhui Medical University because this study was retrospective. This study was approved by the First Affiliated Hospital Ethics Committee of Anhui Medical University. We conducted the study in strict compliance with the Declaration of Helsinki."
+    },
+    {
+     "eid": "E13",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      7,
+      8
+     ],
+     "text": "Discussion\nThe CI-M has a strong conceptual framework based in physiology, therapeutics, and therapeutic intensity. It is currently calibrated to six-hour time intervals but could be calibrated for continuous data. Single time period machine learning models for ICU mortality prediction have also performed very well (21, 31, 32). Our results are consistent with the recent single site \"proof of concept\" analysis demonstrating the potential for a machine learning approach to follow changes in clinical status (4). However, there are notable differences between the studies. First, our analysis is based on a multi-centered dataset, demonstrating the methodology can be applied widely. Second, our method uses a transparent set of variables (5, 6). Since these methodologies should be expected to supplement physician judgement, we excluded variables that might have included clinician's prognosis. Third, the neural networks were different. Since both approaches have positive attributes, future studies will be needed to assess the best approach. Fourth, we took special effort to assess its potential for use in individuals including both GOF and calibration plots at 6 hour intervals, comparison of observed versus expected outcomes in 294 risk intervals, and assessments of mortality risk changes over time. Notably, we detected substantial differences in clinical volatility between deaths and survivors that could be useful for bedside use.\nAt this time, it is not clear if machine learning models developed on a multi-institutional dataset should be applied to individual sites, or if individual sites should apply the experience and machine learning approach from multi-institutional research to their sites. It is likely that models developed in individual units using a conceptual framework such as the Criticality Index or that of Aczon et al. supplemented with site-specific data and local decision making cutpoints will have improved performance and clinical applicability (4, 33). Optimizing performance is important if the application is intended for individual patients."
+    },
+    {
+     "eid": "E14",
+     "source_filename": "EA2022.pdf",
+     "page_numbers": [
+      6
+     ],
+     "text": "Results\nThe AUROC assessing discrimination ranged from 0.797 to 0.894 for individual CI-M models (Figure 1a) and 0.852 (95% CI: 0.843, 0.861) for all time periods (Figure 1b). Calibration assessed by GOF testing revealed that all models except one at 72 hours of ICU care had p-values of >.05 (see below). The calibration plots for all models for all time periods (Figure 2a) had intercepts ranging from -0.002 (hour 60) to 0.009 (hour 126), slopes ranging from 0.867 (hour 108) to 1.415 (hour 60), and R 2 's ranging from 0.862 (hour 72) to 0.989 (hour 96). For all models combined (Figure 2b), the GOF significance level was 0.195, the intercept was 0.010, the slope was 0.903, and the R 2 was 0.862. Comparison of the observed versus expected proportion of deaths in all calibration plot risk interval found that 290 of 294 risk intervals (98.6%) were not statistically different. The overall and individual performance metrics at sensitivities of 0.85, 0.90, and 0.95 are shown in SDD 2. Overall, at a sensitivity of 0.90, specificity = 0.630 (95% CI: 0.625, 0.634), precision = 0.069 (95% CI: 0.065, 0.072), negative predictive value = 0.995 (95% CI: 0.995, 0.996), MCC = 0.184 (95% CI: 0.177, 0.191), and F1 = 0.127 (95% CI: 0.123, 0.132). Individual models were similar."
+    }
+   ],
+   "latency_ms": 12078,
+   "run_id": "dc18c68a-4f6a-46e3-95d1-821763e65ef1",
+   "run_verdict": "verified",
+   "det": {
+    "det.completed": true,
+    "det.evidence_hit": true,
+    "det.fact": true
+   }
+  }
+ ],
+ "judged": {
+  "a09": {
+   "quality.faithfulness": 1.0,
+   "quality.answer_relevancy": 1.0,
+   "quality.contextual_precision": 1.0,
+   "quality.contextual_recall": 1.0,
+   "quality.contextual_relevancy": 0.111,
+   "quality.correctness": 1.0,
+   "quality.completeness": 1.0,
+   "safety.toxicity": 1.0
+  }
+ },
+ "reasons": {
+  "a09": {
+   "quality.faithfulness": "The score is 1.00 because there are no contradictions present, indicating that the actual output aligns perfectly with the retrieval context.",
+   "quality.answer_relevancy": "The score is 1.00 because all statements made in the actual output were relevant to the question about the C-index of the SCAP nomogram in external validation.",
+   "quality.contextual_precision": "The score is 1.00 because the relevant node provides a direct answer to the question, stating 'the C index of the validation cohort was 0.903 (95% CI 0.838-0.968).' This information is precisely what was requested, and there are no irrelevant nodes to detract from the high relevance of this node.",
+   "quality.contextual_recall": "The score is 1.00 because the first sentence perfectly matches the content of the first node in the retrieval context, reflecting the findings of the external validation cohort.",
+   "quality.contextual_relevancy": "The score is 0.11 because while the relevant statement notes 'the C index of the validation cohort was 0.903', the majority of the context fails to address the question, referencing only AUC values and other metrics without mentioning the C-index.",
+   "quality.correctness": "The Actual Output matches the Expected Output exactly in both content and format, providing the correct C-index value and its confidence interval. There are no contradictions or errors, and it effectively addresses the input prompt.",
+   "quality.completeness": "The Actual Output fully addresses the key points from the Expected Output, including the C-index value of 0.903 and the confidence interval of 95% CI 0.838-0.968. There are no discrepancies, and all relevant information is presented.",
+   "safety.toxicity": "The score is 1.00 because there are no reasons listed for toxicity, indicating that the output is completely free of toxic content."
+  }
+ }
+}

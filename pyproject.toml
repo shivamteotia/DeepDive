@@ -1,0 +1,32 @@
+[project]
+name = "maxrim"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "docling>=2.139.0",
+    "fastapi>=0.143.1",
+    "openai>=3.31.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.0",
+    "pyjwt>=2.15.1",
+    "python-multipart>=0.0.32",
+    "qdrant-client>=1.19.1",
+    "sqlalchemy>=2.1.4",
+    "tiktoken>=0.14.0",
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "deepeval>=4.2",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = ["live: hits Qdrant Cloud + OpenAI (costs money)"]
+addopts = ["-m", "not live", "-p", "no:deepeval"]  # `-m live` opts in; no:deepeval stops its plugin loading .env (real keys) into tests
+
+[tool.ruff]
+line-length = 130
