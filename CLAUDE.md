@@ -17,7 +17,8 @@ API ingestion runs in a 1-worker child process (`jobs.IngestRunner`) so a native
 After step 5: web UI (`static/`, served at `/`), chat memory (conversations; follow-ups rewritten to a standalone question by
 the fast model) and opt-in per-run web search (Tavily, `WEB_SEARCH_ENABLED` + `TAVILY_API_KEY`). Spec:
 `docs/superpowers/specs/2026-10-15-frontend-chat-web-design.md`. E2E eval: `evals/` (results log `evals/baselines/RESULTS.md`).
-Eval baseline (eval/gold.json v1, DRAFT, k=6): recall@k 0.90, MRR 0.71, catch rate 0.90-1.00, true rejection 0.00.
+Eval baseline (eval/gold.json v1, DRAFT, k=6, HYBRID_SEARCH=true): recall@k 0.95, MRR 0.73, catch rate 1.00, true rejection 0.00
+(dense only: 0.90 / 0.71). E2E baseline: run 7 (`evals/baselines/baseline.json`).
 Run `evaluate.py` before and after any change to chunking, retrieval, prompts, or models; don't merge a regression.
 Reranker (`RERANKER_MODEL`, off by default) measured 2026-10-15: ms-marco-MiniLM-L-6-v2 recall 0.80 / MRR 0.78 (worse);
 bge-reranker-base recall 0.90 / MRR 0.77 but ~30 s per search on CPU; jina:jina-reranker-v2-base-multilingual

@@ -1,11 +1,12 @@
 # Eval results
 
-## 2026-10-16: run 7 (candidate, not promoted): hybrid keyword + vector retrieval (`HYBRID_SEARCH=true`)
+## 2026-10-16: run 7 (current baseline): hybrid keyword + vector retrieval (`HYBRID_SEARCH=true`)
 
 Change: BM25-style sparse vector (`bm25`, stdlib tokenizer, Qdrant IDF) fused with dense by server-side RRF; spec
 `docs/superpowers/specs/2026-10-16-hybrid-retrieval-design.md`. Collection migrated with `ingest.py --migrate-to`
 (198/198 points, no re-embedding). compare vs run 6: **REVIEW** (6 improved, 2 regressed, 12 flat).
 Report: `runs/20261016T025227Z.json`.
+Promoted to baseline on 2026-10-16 at the user's request (measured with HYBRID_SEARCH=true on the migrated collection).
 
 evaluate.py (gold.json v1, k=6) on the migrated collection:
 - hybrid off: recall@k 0.90, MRR 0.71, catch 1.00, true-rejection 0.00 (identical to before: the migration is lossless).
@@ -26,7 +27,7 @@ E2E:
 
 Ship rule (spec): recall@k rose, MRR did not drop, compare is REVIEW with both regressions explained.
 
-## 2026-10-16: run 6 (current baseline): prompt fixes, round 2
+## 2026-10-16: run 6 (superseded): prompt fixes, round 2
 
 compare vs run 4: **REVIEW** (8 improved, 1 regressed, 11 flat). Report: `runs/20261015T194833Z.json`.
 Promoted to baseline on 2026-10-16 at the user's request.
