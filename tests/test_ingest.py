@@ -6,6 +6,7 @@ import pytest
 from qdrant_client import QdrantClient
 
 import chunking
+import db
 import ingest
 
 COLL = "unit"
@@ -281,3 +282,69 @@ def test_points_from_an_older_chunker_are_rechunked(env):
     env.q.set_payload(COLL, {"chunker_version": 1}, points=ingest.doc_filter("projA", ingest.sha256_file(env.pdf)))
     assert not ingest.already_indexed(env.q, COLL, "projA", ingest.sha256_file(env.pdf))
     assert env.run("projA") == 3
+
+
+def seed(sessions, upload_dir, docs):
+    """docs: [(project_name, sha, filename, status, write_pdf)] -> {filename: (project_id, doc_id)}"""
+    out, projects = {}, {}
+    with sessions() as s:
+        u = db.User(email="r@x.io", password_hash="h")
+        s.add(u)
+        s.flush()
+        for pname, sha, fn, status, write in docs:
+            if pname not in projects:
+                projects[pname] = db.Project(owner_id=u.id, name=pname)
+                s.add(projects[pname])
+                s.flush()
+            pid = projects[pname].id
+            d = db.Document(project_id=pid, filename=fn, sha256=sha, status=status)
+            s.add(d)
+            s.flush()
+            if write:
+                (upload_dir / str(pid)).mkdir(parents=True, exist_ok=True)
+                (upload_dir / str(pid) / f"{sha}.pdf").write_bytes(b"%PDF-1.4 " + sha.encode())
+            out[fn] = (str(pid), d.id)
+        s.commit()
+    return out
+
+
+def test_reindex_parses_each_file_once_and_updates_postgres(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ingest, "parse_pdf", lambda path, filename, model: calls.append(path) or
+                        ingest.ParsedDoc(pieces=FAKE_PIECES, title="Fake paper", page_count=5))
+    monkeypatch.setattr(ingest, "token_counter", lambda model: lambda s: len(s.split()))
+    sessions = db.make_sessions("sqlite://")
+    a, b = "a" * 64, "b" * 64
+    ids = seed(sessions, tmp_path, [("P1", a, "a.pdf", "ready", True), ("P2", a, "a-copy.pdf", "ready", True),
+                                    ("P1", b, "gone.pdf", "ready", False), ("P1", "c" * 64, "bad.pdf", "failed", True)])
+    q = QdrantClient(":memory:")
+    out = ingest.reindex(qdrant=q, openai_client=FakeOpenAI(), sessions=sessions, src="unit", dst="new",
+                         upload_dir=tmp_path, embed_model="m")
+    assert out == {"documents": 2, "points": 6, "skipped": ["gone.pdf"], "failed": []}
+    assert len(calls) == 1  # same sha in two projects: parsed once
+    for fn in ("a.pdf", "a-copy.pdf"):
+        pid, doc_id = ids[fn]
+        assert q.count("new", count_filter=ingest.doc_filter(pid, a), exact=True).count == 3
+        with sessions() as s:
+            d = s.get(db.Document, doc_id)
+            assert d.chunk_count == 3 and d.doc_type == "generic"
+
+
+def test_reindex_reports_a_pdf_the_parser_crashes_on_and_continues(tmp_path, monkeypatch):
+    def parse(path, filename, model):
+        if filename == "crash.pdf":
+            raise RuntimeError("layout model crashed")
+        return ingest.ParsedDoc(pieces=FAKE_PIECES, title="T", page_count=5)
+    monkeypatch.setattr(ingest, "parse_pdf", parse)
+    monkeypatch.setattr(ingest, "token_counter", lambda model: lambda s: len(s.split()))
+    sessions = db.make_sessions("sqlite://")
+    seed(sessions, tmp_path, [("P", "d" * 64, "crash.pdf", "ready", True), ("P", "e" * 64, "ok.pdf", "ready", True)])
+    out = ingest.reindex(qdrant=QdrantClient(":memory:"), openai_client=FakeOpenAI(), sessions=sessions, src="unit",
+                         dst="new", upload_dir=tmp_path, embed_model="m")
+    assert out["documents"] == 1 and out["failed"] == ["crash.pdf: RuntimeError: layout model crashed"]
+
+
+def test_reindex_refuses_the_live_collection(tmp_path):
+    with pytest.raises(ValueError, match="differ"):
+        ingest.reindex(qdrant=QdrantClient(":memory:"), openai_client=FakeOpenAI(), sessions=db.make_sessions("sqlite://"),
+                       src="unit", dst="unit", upload_dir=tmp_path, embed_model="m")

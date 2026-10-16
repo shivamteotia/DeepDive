@@ -2,6 +2,7 @@
 
 Usage: uv run python ingest.py <project_id> <pdf>
        uv run python ingest.py --migrate-to <new_collection>   # add keyword vectors to an existing collection
+       uv run python ingest.py --reindex-to <new_collection>   # re-chunk every ready document (smart chunking)
 """
 
 import argparse
@@ -248,6 +249,46 @@ def migrate(qdrant: QdrantClient, src: str, dst: str) -> int:
     return copied
 
 
+def reindex(*, qdrant: QdrantClient, openai_client, sessions, src: str, dst: str, upload_dir: Path, embed_model: str,
+            context_model: str = "", contextual: bool = True) -> dict:
+    """Re-chunk every ready document from its stored PDF into dst. Each file is parsed, contextualised and embedded
+    once and written to every project that has it. src (the live collection) is never touched."""
+    from sqlalchemy import select, update
+
+    import db
+
+    if src == dst:
+        raise ValueError("destination collection must differ from the live collection")
+    with sessions() as s:
+        rows = [(d.id, str(d.project_id), d.sha256, d.filename)
+                for d in s.scalars(select(db.Document).where(db.Document.status == "ready").order_by(db.Document.created_at))]
+    cache: dict[str, Prepared | Exception] = {}
+    out = {"documents": 0, "points": 0, "skipped": [], "failed": []}
+    for doc_id, project_id, sha, filename in rows:
+        path = upload_dir / project_id / f"{sha}.pdf"
+        if not path.is_file():
+            out["skipped"].append(filename)
+            continue
+        if sha not in cache:
+            try:
+                cache[sha] = prepare_document(path, source_filename=filename, openai_client=openai_client,
+                                              embed_model=embed_model, context_model=context_model, contextual=contextual)
+            except Exception as exc:  # noqa: BLE001 — one bad PDF (e.g. a native Docling crash) must not stop the rest
+                cache[sha] = exc
+        prepared = cache[sha]
+        if isinstance(prepared, Exception):
+            out["failed"].append(f"{filename}: {type(prepared).__name__}: {prepared}")
+            continue
+        n = write_document(qdrant, dst, project_id=project_id, sha=sha, source_filename=filename,
+                           embed_model=embed_model, prepared=prepared)
+        with sessions() as s:
+            s.execute(update(db.Document).where(db.Document.id == doc_id).values(chunk_count=n, doc_type=prepared.doc_type))
+            s.commit()
+        out["documents"] += 1
+        out["points"] += n
+    return out
+
+
 def main() -> None:
     from openai import OpenAI
 
@@ -258,6 +299,7 @@ def main() -> None:
     ap.add_argument("pdf", type=Path, nargs="?")
     ap.add_argument("--migrate-to", metavar="COLLECTION",
                     help="copy QDRANT_COLLECTION into COLLECTION with keyword vectors added, then exit")
+    ap.add_argument("--reindex-to", metavar="COLLECTION", help="re-chunk every ready document into COLLECTION, then exit")
     args = ap.parse_args()
 
     s = Settings()
@@ -266,8 +308,21 @@ def main() -> None:
         n = migrate(qdrant, s.qdrant_collection, args.migrate_to)
         print(f"copied {n} points {s.qdrant_collection} -> {args.migrate_to}; set QDRANT_COLLECTION={args.migrate_to} in .env")
         return
+    if args.reindex_to:
+        import db
+
+        out = reindex(qdrant=qdrant, openai_client=OpenAI(api_key=s.openai_api_key), sessions=db.make_sessions(s.database_url),
+                      src=s.qdrant_collection, dst=args.reindex_to, upload_dir=Path(__file__).parent / "data" / "uploads",
+                      embed_model=s.openai_embed_model, context_model=s.openai_context_model or s.openai_fast_model,
+                      contextual=s.contextual_chunks)
+        print(f"re-indexed {out['documents']} documents ({out['points']} points) into {args.reindex_to}")
+        for fn in out["skipped"]:
+            print(f"  skipped (no stored PDF): {fn}")
+        for line in out["failed"]:
+            print(f"  failed: {line}")
+        return
     if args.project_id is None or args.pdf is None:
-        ap.error("project_id and pdf are required unless --migrate-to is given")
+        ap.error("project_id and pdf are required unless --migrate-to or --reindex-to is given")
     n = ingest(
         args.project_id, args.pdf,
         qdrant=qdrant,
