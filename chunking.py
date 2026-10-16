@@ -115,3 +115,98 @@ def classify(pieces: list[Piece], page_count: int, count_tokens: CountTokens, pa
     if not isinstance(guess, DocTypeGuess):
         return "generic", reasons + ["llm: no answer"]
     return guess.doc_type, reasons + [f"llm: {guess.reason}"]
+
+
+class Chunk(BaseModel):
+    body: str
+    headings: list[str]
+    page_numbers: list[int]
+    content_type: Literal["text", "table"]
+
+
+def _chunk(lines: list[str], members: list[Piece], headings: list[str]) -> Chunk:
+    return Chunk(body="\n".join(lines), headings=headings,
+                 page_numbers=sorted({n for p in members for n in p.page_numbers}),
+                 content_type="table" if any(p.content_type == "table" for p in members) else "text")
+
+
+def _group_chunks(members: list[Piece], name: str, sep: str, count_tokens: CountTokens) -> list[Chunk]:
+    """Merge a group's pieces (heading kept inline), splitting at piece boundaries to stay within CHUNK_MAX_TOKENS."""
+    out, lines, cur = [], [], []
+    for p in members:
+        h = p.headings[-1] if p.headings else ""
+        line = f"{h}{sep}{p.text}" if h and not p.text.startswith(h) else p.text
+        if lines and count_tokens("\n".join([*lines, line])) > CHUNK_MAX_TOKENS:
+            out.append(_chunk(lines, cur, [name]))
+            lines, cur = [], []
+        lines.append(line)
+        cur.append(p)
+    if lines:
+        out.append(_chunk(lines, cur, [name]))
+    return out
+
+
+def _merge_tiny(chunks: list[Chunk], is_body: list[bool], count_tokens: CountTokens) -> list[Chunk]:
+    """Merge body chunks under TINY_TOKENS into the previous, else the next, body chunk with the same top heading."""
+    def mergeable(a: Chunk, b: Chunk) -> bool:
+        return a.headings[:1] == b.headings[:1] and count_tokens(a.body + "\n\n" + b.body) <= CHUNK_MAX_TOKENS
+
+    def join(a: Chunk, b: Chunk) -> Chunk:
+        return Chunk(body=a.body + "\n\n" + b.body, headings=a.headings,
+                     page_numbers=sorted(set(a.page_numbers) | set(b.page_numbers)),
+                     content_type="table" if "table" in (a.content_type, b.content_type) else "text")
+
+    items = list(zip(chunks, is_body, strict=True))
+    i = 0
+    while i < len(items):
+        c, body = items[i]
+        if body and count_tokens(c.body) < TINY_TOKENS:
+            if i > 0 and items[i - 1][1] and mergeable(items[i - 1][0], c):
+                items[i - 1] = (join(items[i - 1][0], c), True)
+                del items[i]
+                continue
+            if i + 1 < len(items) and items[i + 1][1] and mergeable(c, items[i + 1][0]):
+                items[i + 1] = (join(c, items[i + 1][0]), True)
+                del items[i]
+                continue
+        i += 1
+    return [c for c, _ in items]
+
+
+def regroup(pieces: list[Piece], doc_type: DocType, count_tokens: CountTokens) -> list[Chunk]:
+    if doc_type == "research_article":
+        start = next((i for i, p in enumerate(pieces) if matches(p, ABSTRACT_RE)), 0)
+        drop, front, back, back_name = (REFERENCES_RE,), KEYWORDS_RE, DECLARATIONS_RE, "Declarations"
+    elif doc_type == "report_guideline":
+        start = next((i for i, p in enumerate(pieces) if matches(p, REPORT_START_RE)), 0)
+        drop, front, back, back_name = (REFERENCES_RE, TOC_RE), FOREWORD_RE, REPORT_BACK_RE, "Acknowledgements"
+    else:
+        start, drop, front, back, back_name = 0, (), None, None, ""
+
+    kinds: list[tuple[str, Piece]] = []
+    for i, p in enumerate(pieces):
+        if any(matches(p, d) for d in drop):
+            continue
+        if front is not None and (i < start or matches(p, front)):
+            kinds.append(("front", p))
+        elif back is not None and matches(p, back):
+            kinds.append(("back", p))
+        else:
+            kinds.append(("body", p))
+
+    groups = {"front": [p for k, p in kinds if k == "front"], "back": [p for k, p in kinds if k == "back"]}
+    names = {"front": ("Front matter", "\n"), "back": (back_name, ": ")}
+    out: list[Chunk] = []
+    is_body: list[bool] = []
+    emitted = set()
+    for kind, p in kinds:
+        if kind == "body":
+            out.append(_chunk([p.text], [p], p.headings))
+            is_body.append(True)
+        elif kind not in emitted:  # a merged group takes the position of its first piece
+            emitted.add(kind)
+            name, sep = names[kind]
+            made = _group_chunks(groups[kind], name, sep, count_tokens)
+            out += made
+            is_body += [False] * len(made)
+    return _merge_tiny(out, is_body, count_tokens)

@@ -97,3 +97,63 @@ def test_ambiguous_without_an_llm_is_generic():
 
 def test_take_tokens_stops_at_budget():
     assert chunking.take_tokens(["a b", "c d", "e f"], 4, words) == "a b\n\nc d"
+
+
+def heads(chunks):
+    return [c.headings for c in chunks]
+
+
+def test_article_merges_front_matter_and_declarations_and_drops_references():
+    out = chunking.regroup(ARTICLE, "research_article", words)
+    assert heads(out) == [["Front matter"], ["Abstract"], ["Methods"], ["Results"], ["Declarations"], ["Figure 1."]]
+    front = out[0]
+    assert "Development and validation" in front.body and "Jane Doe" in front.body and "pneumonia; nomogram" in front.body
+    assert front.page_numbers == [1, 2]
+    decl = out[4]
+    assert "Funding: Supported by grant 123." in decl.body
+    assert "Competing interests: The authors declare" in decl.body
+    assert not any("Smith J." in c.body for c in out)  # references dropped
+    assert out[5].body == "Figure 1 shows the nomogram."  # caption after References kept
+
+
+def test_tiny_piece_merges_into_same_section_neighbour():
+    out = chunking.regroup(ARTICLE, "research_article", words)
+    results = out[3]
+    assert results.body.endswith("short tail") and not any(c.body == "short tail" for c in out)
+
+
+def test_declarations_nested_under_a_parent_heading_still_merge():
+    pieces = [P("Background " + LONG, "Abstract"), P(LONG, "Methods"),
+              P("Grant 9.", "Declarations", "Funding"), P("None.", "Declarations", "Competing interests")]
+    out = chunking.regroup(pieces, "research_article", words)
+    assert heads(out)[-1] == ["Declarations"] and "Funding: Grant 9." in out[-1].body
+
+
+def test_article_without_an_abstract_heading_keeps_its_front_matter():
+    pieces = [P("Title words", pages=(1,)), P(LONG, "Methods"), P(LONG, "Results")]
+    out = chunking.regroup(pieces, "research_article", words)
+    assert ["Front matter"] not in heads(out) and out[0].body.startswith("Title words")
+
+
+def test_report_drops_contents_and_merges_front_and_back_matter():
+    out = chunking.regroup(REPORT, "report_guideline", words)
+    assert heads(out)[0] == ["Front matter"] and heads(out)[-1] == ["Acknowledgements"]
+    assert "National Guideline" in out[0].body and "This guideline" in out[0].body
+    assert not any("1 Introduction 2 Diagnosis" in c.body for c in out)
+    assert ["2.3 Severity scores"] in heads(out)
+
+
+def test_generic_keeps_references_and_front_matter_as_they_are():
+    out = chunking.regroup(ARTICLE, "generic", words)
+    assert any("Smith J." in c.body for c in out) and ["Front matter"] not in heads(out)
+
+
+def test_oversized_group_splits_at_piece_boundaries():
+    names = ["Funding", "Acknowledgements", "Ethics approval", "Consent for publication", "Competing interests",
+             "Data availability", "Author details"]
+    pieces = [P("x " * 100, n, pages=(i + 1,)) for i, n in enumerate(names)]
+    out = chunking.regroup(pieces, "research_article", words)
+    assert len(out) >= 2 and all(c.headings == ["Declarations"] for c in out)
+    assert all(words(c.body) <= chunking.CHUNK_MAX_TOKENS for c in out)
+    assert sum(c.body.count("x") for c in out) == 700  # nothing cut or lost
+    assert sorted(p for c in out for p in c.page_numbers) == list(range(1, 8))
