@@ -168,25 +168,32 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
         run = s.get(db.ResearchRun, run_id)
         project_id, question, max_iterations = str(run.project_id), run.question, run.max_iterations
         use_web = run.web_search
-        ready = list(s.scalars(select(db.Document.sha256).where(db.Document.project_id == run.project_id,
-                                                                  db.Document.status == "ready")))
+        ready_docs = list(s.execute(select(db.Document.sha256, db.Document.filename).where(
+            db.Document.project_id == run.project_id, db.Document.status == "ready")))
+        ready = [sha for sha, _ in ready_docs]
         history = conversation_history(s, run)
     cfg = state.settings
 
-    def search_fn(q: str) -> list[dict]:  # project and ready-document filters are fixed here, server-side
+    def search_fn(q: str, document: str | None = None, k: int | None = None) -> list[dict]:
+        # project and ready-document filters are fixed here, server-side; document narrows to one ready document
+        only = [document] if document in ready else ready
         hits = ask.search(state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
-                          project_id=project_id, question=q, k=RESEARCH_K, rerank_model=cfg.reranker_model,
-                          rerank_api_key=cfg.jena_ai_api_key, sha256_in=ready, hybrid=cfg.hybrid_search)
-        if use_web:  # opt-in per run; web text is untrusted and quoted exactly like PDF chunks
+                          project_id=project_id, question=q, k=k or RESEARCH_K, rerank_model=cfg.reranker_model,
+                          rerank_api_key=cfg.jena_ai_api_key, sha256_in=only, hybrid=cfg.hybrid_search)
+        if use_web and document is None:  # opt-in per run; web text is untrusted and quoted exactly like PDF chunks
             hits += web.search(q, api_key=cfg.tavily_api_key, project_id=project_id,
                                timeout=cfg.web_search_timeout_seconds, max_results=WEB_RESULTS)
         return hits
 
     try:
+        has_coll = bool(ready) and state.qdrant.collection_exists(cfg.qdrant_collection)
+        titles = {d["sha256"]: d["title"] for d in ask.list_documents(state.qdrant, cfg.qdrant_collection, project_id)} \
+            if has_coll else {}
+        documents = [{"sha256": sha, "filename": fn, "title": titles.get(sha) or fn} for sha, fn in ready_docs]
         standalone = research.rewrite_followup(state.openai, cfg.openai_fast_model, history, question)
         result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
                               fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model, question=standalone,
-                              max_iterations=max_iterations)
+                              max_iterations=max_iterations, documents=documents)
         values = {"status": "completed", "result": research.audit_record(result), "error": None,
                   "standalone_question": standalone if standalone != question else None}
     except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the run

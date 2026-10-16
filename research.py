@@ -332,11 +332,17 @@ def main() -> None:
     s = Settings()
     oa = OpenAI(api_key=s.openai_api_key)
     qdrant = QdrantClient(url=s.qdrant_cluster_endpoint, api_key=s.qdrant_api_key)
-    search_fn = partial(ask.search, qdrant, oa, collection=s.qdrant_collection, embed_model=s.openai_embed_model,
-                        project_id=args.project_id, k=args.k, rerank_model=s.reranker_model,
-                        rerank_api_key=s.jena_ai_api_key, hybrid=s.hybrid_search)
-    result = run(oa, search_fn=lambda q: search_fn(question=q), project_id=args.project_id, model=s.openai_model, fast_model=s.openai_fast_model,
-                 guard_model=s.openai_guard_model, question=args.question, max_iterations=args.max_iterations)
+    base = partial(ask.search, qdrant, oa, collection=s.qdrant_collection, embed_model=s.openai_embed_model,
+                   project_id=args.project_id, rerank_model=s.reranker_model, rerank_api_key=s.jena_ai_api_key,
+                   hybrid=s.hybrid_search)
+    documents = ask.list_documents(qdrant, s.qdrant_collection, args.project_id)
+
+    def search_fn(q, document=None, k=None):
+        return base(question=q, k=k or args.k, sha256_in=[document] if document else None)
+
+    result = run(oa, search_fn=search_fn, project_id=args.project_id, model=s.openai_model, fast_model=s.openai_fast_model,
+                 guard_model=s.openai_guard_model, question=args.question, max_iterations=args.max_iterations,
+                 documents=documents)
     print(render(result))
     print(f"\nSaved: {save(result)}")
 

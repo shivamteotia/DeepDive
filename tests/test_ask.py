@@ -254,3 +254,10 @@ def test_scope_rules_are_appended_only_for_metric_scopes():
 def test_claim_schema_row_is_nullable_without_defaults():
     from openai.lib._pydantic import to_strict_json_schema
     assert '"default"' not in json.dumps(to_strict_json_schema(ask.Answer))
+
+
+def test_list_documents_is_project_scoped_and_deduped(hq):
+    hq.set_payload(COLL, {"document_sha256": "sA", "paper_title": "Paper A"}, points=[1, 2, 3])
+    hq.set_payload(COLL, {"document_sha256": "sB", "paper_title": "Paper B"}, points=[4])
+    assert ask.list_documents(hq, COLL, "projA") == [{"sha256": "sA", "filename": "projA.pdf", "title": "Paper A"}]
+    assert [d["sha256"] for d in ask.list_documents(hq, COLL, "projB")] == ["sB"]

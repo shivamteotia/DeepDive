@@ -130,6 +130,23 @@ def search(qdrant: QdrantClient, openai_client, *, collection: str, embed_model:
     return [{"eid": f"E{i}", **h} for i, h in enumerate(out, 1)]
 
 
+def list_documents(qdrant: QdrantClient, collection: str, project_id: str) -> list[dict]:
+    """Distinct documents of one project (server-side filter), for per-document coverage in research runs."""
+    flt = models.Filter(must=[models.FieldCondition(key="project_id", match=models.MatchValue(value=project_id))])
+    docs, offset = {}, None
+    while True:  # ponytail: scrolls every chunk of the project; store a per-document record if projects grow large
+        points, offset = qdrant.scroll(collection, scroll_filter=flt, limit=256, offset=offset,
+                                       with_payload=["document_sha256", "source_filename", "paper_title"])
+        for p in points:
+            sha = p.payload.get("document_sha256")
+            if sha and sha not in docs:
+                fn = p.payload.get("source_filename", "")
+                docs[sha] = {"sha256": sha, "filename": fn, "title": p.payload.get("paper_title") or fn}
+        if offset is None:
+            break
+    return sorted(docs.values(), key=lambda d: d["filename"])
+
+
 @lru_cache(maxsize=2)
 def _load_cross_encoder(model_name: str):
     from transformers import AutoModelForSequenceClassification, AutoTokenizer

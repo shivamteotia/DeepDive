@@ -140,3 +140,21 @@ def test_api_research_uses_hybrid_search_when_enabled(tmp_path, runner, monkeypa
         assert api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()["status"] == "completed"
     assert calls and all(kw["hybrid"] is True for kw in calls)
     assert {x["source_filename"] for x in fake_research["hits"]} == {"a.pdf"}  # isolation holds with hybrid on
+
+
+def test_api_research_passes_ready_documents_and_per_document_search(api, signup, monkeypatch):
+    seen = {}
+
+    def fake_run(openai_client, *, search_fn, project_id, question, max_iterations, documents=None, **kw):
+        seen["documents"] = documents
+        seen["hits"] = search_fn("q", document=documents[0]["sha256"], k=10)
+        return {"question": question, "status": "verified", "gaps": "", "evidence": seen["hits"], "claims": [], "log": []}
+
+    monkeypatch.setattr(jobs.research, "run", fake_run)
+    h = signup()
+    a, b = project(api, h, "A"), project(api, h, "B")
+    doc_a, doc_b = upload(api, h, a, PDF_A), upload(api, h, b, PDF_B)
+    seed_chunks(api, [(a, doc_a["sha256"], "a.pdf"), (b, doc_b["sha256"], "b.pdf")])
+    api.post(f"/api/v1/projects/{a}/research-runs", headers=h, json={"question": "AUC in all papers?"})
+    assert [d["sha256"] for d in seen["documents"]] == [doc_a["sha256"]]  # only project A's ready documents
+    assert {x["source_filename"] for x in seen["hits"]} == {"a.pdf"}
