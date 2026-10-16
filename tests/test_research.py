@@ -256,3 +256,23 @@ def test_audit_record_keeps_web_source_fields_only_for_web_evidence():
     out = r.audit_record({"evidence": [pdf, page], "claims": []})["evidence"]
     assert "url" not in out[0] and out[1]["url"] == "https://who.int/p" and out[1]["source_type"] == "web"
     assert "score" not in out[1]
+
+
+def test_plan_question_reads_scope_metric_and_target():
+    out = r.Plan(sub_questions=["AUC of each model"], scope="all_values", metric="AUC",
+                 metric_terms=["area under the curve"], target_paper="the SCAP study")
+    p = r.plan_question(FakeOpenAI({r.Plan: [out]}), "f", "What AUC values were reported in the SCAP study?")
+    assert (p.scope, p.metric, p.metric_terms, p.target_paper) == ("all_values", "AUC", ["area under the curve"], "the SCAP study")
+    assert p.sub_questions == ["AUC of each model"]
+
+
+def test_plan_question_defaults_to_standard():
+    p = r.plan_question(FakeOpenAI({r.Plan: [r.Plan(sub_questions=["q1"])]}), "f", "q")
+    assert (p.scope, p.metric, p.metric_terms, p.target_paper, p.sub_questions) == ("standard", "", [], "", ["q1"])
+    p = r.plan_question(FakeOpenAI({}), "f", "orig")  # planner failed
+    assert p.scope == "standard" and p.sub_questions == ["orig"]
+
+
+def test_plan_schema_has_no_non_null_defaults():
+    from openai.lib._pydantic import to_strict_json_schema
+    assert '"default"' not in __import__("json").dumps(to_strict_json_schema(r.Plan))
