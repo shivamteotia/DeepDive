@@ -18,7 +18,7 @@ from qdrant_client import QdrantClient, models
 CHUNK_MAX_TOKENS = 512
 EMBED_BATCH = 100
 UPSERT_BATCH = 64
-MIGRATE_BATCH = 256
+MIGRATE_BATCH = UPSERT_BATCH  # ~1 MB per Cloud upsert at 1536 dims; 256 risked the 5 s client timeout
 SPARSE_VECTOR = "bm25"
 BM25_K1 = 1.2
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./,][a-z0-9]+)*")
