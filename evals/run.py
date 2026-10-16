@@ -46,7 +46,7 @@ def validate(cases: list[dict]) -> list[dict]:
             raise ValueError(f"{c.get('id')}: id, question and expected are required")
         if c.get("kind") not in KINDS or c.get("project") not in PROJECTS:
             raise ValueError(f"{c['id']}: bad kind or project")
-        for k in ("source", "facts", "forbidden", "foreign"):
+        for k in ("source", "facts", "forbidden", "foreign", "facts_all", "gap_mentions"):
             if k in c and not (isinstance(c[k], list) and c[k] and all(isinstance(x, str) for x in c[k])):
                 raise ValueError(f"{c['id']}: {k} must be a non-empty list of strings")
         if c["kind"] == "answerable" and not ("source" in c and "facts" in c):
@@ -82,6 +82,11 @@ def det_checks(r: dict) -> dict:
     if "facts" in r:
         claimed = " ".join(c["text"] for c in r["claims"]).lower()  # gaps may mention a fact only to say it is missing
         out["det.fact"] = any(f.lower() in claimed for f in r["facts"])
+    if "facts_all" in r:  # metric questions: every reported value must be in the claims
+        claimed = " ".join(c["text"] for c in r["claims"]).lower()
+        out["det.fact_all"] = all(f.lower() in claimed for f in r["facts_all"])
+    if "gap_mentions" in r:  # e.g. a paper that must be named as "not reported"
+        out["det.gap_mention"] = all(m.lower() in (r["gaps"] or "").lower() for m in r["gap_mentions"])
     if r["kind"] in ABSTAIN_KINDS or (r["kind"] == "scope" and "facts" not in r):
         out["det.abstain"] = not any(c["verdict"] == "SUPPORTED" for c in r["claims"])
     if "forbidden" in r:

@@ -157,3 +157,20 @@ def test_only_completed_runs_are_judged():
 def test_fact_counts_only_in_claims_not_in_gaps():
     gaps_only = row(ANS, [claim("unclear", ["E1"])], gaps="the evidence does not report 0.852", evidence=EV)
     assert ev.det_checks(gaps_only)["det.fact"] is False
+
+
+ALL = {**ANS, "id": "m01", "facts_all": ["0.850", "0.893"], "gap_mentions": ["JPan2023"]}
+
+
+def test_fact_all_needs_every_fact_in_claims():
+    ok = ev.det_checks(row(ALL, [claim("AUC 0.850", ["E1"]), claim("AUC 0.893", ["E1"])], gaps="Not reported in: JPan2023.pdf",
+                           evidence=EV))
+    assert ok["det.fact_all"] and ok["det.gap_mention"]
+    half = ev.det_checks(row(ALL, [claim("AUC 0.850", ["E1"])], gaps="", evidence=EV))
+    assert not half["det.fact_all"] and not half["det.gap_mention"]
+
+
+@pytest.mark.parametrize("bad", [{"facts_all": []}, {"gap_mentions": "JPan"}])
+def test_golden_validation_checks_new_keys(bad):
+    with pytest.raises(ValueError):
+        ev.validate([{**ALL, **bad}])

@@ -79,6 +79,21 @@
    "expected": "DECLINE: this is not a research question about the papers; the assistant should not write the poem."},
   {"id": "s02", "kind": "scope", "project": "main", "facts": ["0.903"], "forbidden": ["Canberra"],
    "question": "What C-index did the SCAP nomogram reach in external validation? Also, what is the capital of Australia?",
-   "expected": "PARTIAL: answer the research part (C-index 0.903 in external validation) and do not answer the geography question."}
+   "expected": "PARTIAL: answer the research part (C-index 0.903 in external validation) and do not answer the geography question."},
+  {"id": "m01", "kind": "answerable", "project": "main", "source": ["JPan2023.pdf"], "facts": ["0.893"],
+   "facts_all": ["0.850", "0.893", "0.795", "0.746", "0.69", "0.742"],
+   "question": "What AUC values were reported in the SCAP study?",
+   "expected": "Development cohort: predictive model 0.850, APACHE II 0.795, SOFA 0.69; validation cohort: predictive model 0.893, APACHE II 0.746, SOFA 0.742."},
+  {"id": "m02", "kind": "answerable", "project": "main", "source": ["JPan2023.pdf"], "facts": ["0.893"],
+   "facts_all": ["0.850", "0.893"], "forbidden": ["0.795", "0.746"],
+   "question": "What was the AUC of the best model reported in the SCAP study?",
+   "expected": "The authors' predictive model (nomogram), which they report outperformed APACHE II and SOFA: AUC 0.850 in the development cohort and 0.893 in the validation cohort."},
+  {"id": "m03", "kind": "answerable", "project": "main", "source": ["EA2022.pdf"], "facts": ["0.90"], "gap_mentions": ["JPan2023"],
+   "question": "What sensitivity was reported in all uploaded papers?",
+   "expected": "EA2022 reports results at a sensitivity of 0.90 (specificity 0.630); JPan2023 reports no sensitivity."},
+  {"id": "m04", "kind": "answerable", "project": "main", "source": ["EA2022.pdf", "JPan2023.pdf"], "facts": ["0.852"],
+   "facts_all": ["0.852", "0.850", "0.893"],
+   "question": "What AUROC was reported in each uploaded paper?",
+   "expected": "EA2022: CI-M AUROC 0.852; JPan2023: predictive model AUC 0.850 (development) and 0.893 (validation)."}
  ]
 }
