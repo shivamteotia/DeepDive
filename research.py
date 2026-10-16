@@ -6,6 +6,7 @@ Each run is saved to data/runs/ as an audit record.
 
 import argparse
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,6 +19,10 @@ from pydantic import BaseModel
 import ask
 
 MAX_SUB_QUESTIONS = 4
+MAX_COVERAGE_DOCS = 12  # per-document search above this falls back to one project-wide search
+ROW_K = 10              # chunks per document for all_values / best_model
+ACROSS_K = 6            # chunks per document for across_papers
+TARGET_MIN_OVERLAP = 0.5
 
 PLANNER = """Break the research question into 1-4 focused sub-questions, each answerable by searching
 the project's research papers. If the question is already focused, return it as the only item.
@@ -146,17 +151,48 @@ def verify(openai_client, model: str, claims: list[ask.Claim], evidence: list[di
             for i in range(len(claims))]
 
 
+_WORD = re.compile(r"[a-z0-9]+")
+_STOP = {"the", "a", "an", "of", "in", "on", "for", "and", "study", "paper", "trial", "pdf"}
+
+
+def _tokens(s: str) -> set[str]:
+    return {w for w in _WORD.findall(s.lower()) if w not in _STOP and len(w) > 2}
+
+
+def resolve_target(target: str, documents: list[dict]) -> dict | None:
+    """The document the question names, by word overlap with its title/filename; None if no clear match."""
+    want = _tokens(target)
+    if not want:
+        return None
+    scored = [(len(want & _tokens(d["title"] + " " + d["filename"])) / len(want), d) for d in documents]
+    best = max(scored, key=lambda x: x[0], default=(0, None))
+    return best[1] if best[0] >= TARGET_MIN_OVERLAP else None
+
+
 def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: str, guard_model: str, question: str,
-        max_iterations: int = 3) -> dict:
+        max_iterations: int = 3, documents: list[dict] | None = None) -> dict:
     if max_iterations < 1:
         raise ValueError("max_iterations must be >= 1")
     log: list[dict] = []
-    subs = plan(openai_client, fast_model, question)
-    log.append({"step": "plan", "sub_questions": subs})
+    qp = plan_question(openai_client, fast_model, question)
+    log.append({"step": "plan", "sub_questions": qp.sub_questions, "scope": qp.scope, "metric": qp.metric})
 
     evidence: list[dict] = []
-    for sq in subs:
-        add_evidence(evidence, search_fn(sq), project_id)
+    docs = list(documents or [])
+    coverage: list[dict] = []
+    if qp.scope != "standard" and docs and len(docs) <= MAX_COVERAGE_DOCS:
+        target = resolve_target(qp.target_paper, docs) if qp.scope != "across_papers" else None
+        k = ACROSS_K if qp.scope == "across_papers" else ROW_K
+        query = " ".join([question, qp.metric, *qp.metric_terms]).strip()
+        for d in [target] if target else docs:
+            added = add_evidence(evidence, search_fn(query, document=d["sha256"], k=k), project_id)
+            coverage.append({"filename": d["filename"], "sha256": d["sha256"], "passages": added})
+        log.append({"step": "coverage", "documents": coverage})
+    else:
+        if qp.scope != "standard" and len(docs) > MAX_COVERAGE_DOCS:
+            log.append({"step": "coverage", "fallback": f"more than {MAX_COVERAGE_DOCS} papers"})
+        for sq in qp.sub_questions:
+            add_evidence(evidence, search_fn(sq), project_id)
     log.append({"step": "research", "passages": len(evidence)})
     if not evidence:
         return finalize(question, ask.Answer(claims=[], gaps="No sources found for this question."), [], [], log)
@@ -165,7 +201,7 @@ def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: st
     best = None  # last (answer, verdicts) that had claims; an empty retry must not discard it
     for it in range(1, max_iterations + 1):
         feedback = json.dumps(rejected, ensure_ascii=False, indent=1) if rejected else ""
-        ans = ask.answer(openai_client, model, question, evidence, feedback=feedback)
+        ans = ask.answer(openai_client, model, question, evidence, feedback=feedback, scope=qp.scope)
         if ans.dropped:  # audit only: invented-citation claims never reach the user
             log.append({"step": "synthesize", "iteration": it, "uncited": ans.dropped})
         if not ans.claims:
@@ -223,6 +259,8 @@ def render(result: dict) -> str:
             audit.append(f'plan: {len(e["sub_questions"])} sub-question(s)')
         elif e["step"] == "research":
             audit.append(f'research: +{e.get("new_passages", e.get("passages"))} passages')
+        elif e["step"] == "coverage":
+            audit.append(f'coverage: {e["fallback"]}' if "fallback" in e else f'coverage: {len(e["documents"])} paper(s) searched')
         elif e["step"] == "synthesize":
             audit.append(f'synthesize #{e["iteration"]}: empty answer')
         else:

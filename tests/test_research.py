@@ -276,3 +276,70 @@ def test_plan_question_defaults_to_standard():
 def test_plan_schema_has_no_non_null_defaults():
     from openai.lib._pydantic import to_strict_json_schema
     assert '"default"' not in __import__("json").dumps(to_strict_json_schema(r.Plan))
+
+
+DOCS = [{"sha256": "s1", "filename": "JPan2023.pdf", "title": "Development and validation of an in-hospital mortality "
+         "risk prediction model for patients with severe community-acquired pneumonia"},
+        {"sha256": "s2", "filename": "EA2022.pdf", "title": "Dynamic Mortality Risk Predictions for Children in ICU"}]
+
+
+def plan_out(scope, metric="AUC", target=""):
+    return r.Plan(sub_questions=["q"], scope=scope, metric=metric, metric_terms=["area under the curve"], target_paper=target)
+
+
+class RecordingSearch:
+    def __init__(self, docs=DOCS):
+        self.calls, self.docs = [], {d["sha256"] for d in docs}
+
+    def __call__(self, q, document=None, k=None):
+        assert document is None or document in self.docs  # only server-provided documents
+        self.calls.append((q, document, k))
+        return [hit(f"{document or 'all'}-{len(self.calls)}", "AUC 0.850", name=document or "a.pdf")]
+
+
+def run_scoped(scope, target="", docs=DOCS):
+    oa = FakeOpenAI({r.Plan: [plan_out(scope, target=target)], ask.Answer: [ask.Answer(claims=[], gaps="none")]})
+    search = RecordingSearch(docs)
+    r.run(oa, search_fn=search, project_id="demo", model="m", fast_model="f", guard_model="g", question="q",
+          documents=docs)
+    return search.calls
+
+
+def test_standard_scope_searches_the_project_once_per_sub_question():
+    assert [(d, k) for _, d, k in run_scoped("standard")] == [(None, None)]
+
+
+def test_all_values_without_target_searches_each_document():
+    calls = run_scoped("all_values")
+    assert [(d, k) for _, d, k in calls] == [("s1", r.ROW_K), ("s2", r.ROW_K)]
+    assert all("area under the curve" in q and "AUC" in q for q, _, _ in calls)
+
+
+def test_named_paper_is_searched_alone():
+    assert [d for _, d, _ in run_scoped("best_model", target="the severe community-acquired pneumonia study")] == ["s1"]
+
+
+def test_unmatched_target_falls_back_to_every_document():
+    assert [d for _, d, _ in run_scoped("all_values", target="Smith2019.pdf")] == ["s1", "s2"]
+
+
+def test_across_papers_uses_across_k():
+    assert [(d, k) for _, d, k in run_scoped("across_papers")] == [("s1", r.ACROSS_K), ("s2", r.ACROSS_K)]
+
+
+def test_too_many_documents_fall_back_to_one_project_search():
+    many = [{"sha256": f"s{i}", "filename": f"p{i}.pdf", "title": f"paper {i}"} for i in range(r.MAX_COVERAGE_DOCS + 1)]
+    assert [d for _, d, _ in run_scoped("across_papers", docs=many)] == [None]
+
+
+def test_resolve_target_needs_real_overlap():
+    assert r.resolve_target("the SCAP pneumonia mortality study", DOCS)["sha256"] == "s1"
+    assert r.resolve_target("children ICU mortality", DOCS)["sha256"] == "s2"
+    assert r.resolve_target("cardiology trial", DOCS) is None and r.resolve_target("", DOCS) is None
+
+
+def test_render_shows_the_coverage_step():
+    oa = FakeOpenAI({r.Plan: [plan_out("across_papers")], ask.Answer: [ask.Answer(claims=[], gaps="none")]})
+    res = r.run(oa, search_fn=RecordingSearch(), project_id="demo", model="m", fast_model="f", guard_model="g",
+                question="q", documents=DOCS)
+    assert "coverage: 2 paper(s) searched" in r.render(res)
