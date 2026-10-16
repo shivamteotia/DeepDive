@@ -28,6 +28,10 @@ finds r19, loses r10 (no stemming). E2E run 7: REVIEW (correctness/recall up; de
 **Collections need the `bm25` sparse vector:** ingest refuses one without it, even with hybrid off. Migrate first
 (`ingest.py --migrate-to <new>`), set `QDRANT_COLLECTION` to it, re-run the migration after switching if uploads
 happened in between, then deploy.
+Smart chunking (2026-10-16, branch smart-chunking): `chunking.py` classifies documents and regroups chunks; per-chunk
+LLM search context (`CONTEXTUAL_CHUNKS`, `OPENAI_CONTEXT_MODEL`). Run 8: recall 0.95 / MRR 0.85, e2e PASS vs run 7.
+Re-chunk with `ingest.py --reindex-to <new>`; after switching `QDRANT_COLLECTION` run `ingest.py --sync-counts`.
+Rerankers re-tested on it: none beat no-reranker.
 
 **Deferred until needed:** Celery/Redis (use FastAPI `BackgroundTasks`), S3 (local `data/`), MLflow (JSON results), Alembic (db.ADDED_COLUMNS for now).
 

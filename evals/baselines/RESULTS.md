@@ -1,5 +1,29 @@
 # Eval results
 
+## 2026-10-16: run 8 (candidate, not promoted): smart parsing and chunking + contextual retrieval
+
+Change: document-type classification (heuristics + LLM tie-break), front matter / declarations merged, references
+dropped, tiny fragments merged, `Paper:`/`Document:` + section label on every chunk, and an LLM-written search
+context per chunk (`OPENAI_CONTEXT_MODEL` = a nano model; context feeds embeddings/bm25 only, never evidence).
+Spec `docs/superpowers/specs/2026-10-16-smart-chunking-design.md`. Re-indexed into `<collection>_v2`
+(`ingest.py --reindex-to`; the gold project was CLI-ingested separately because it is not tracked in Postgres).
+Unique chunks 117 -> 87, under-40-word chunks 31 -> 15 (all remaining are link lists in the government backgrounder).
+compare vs run 7: **PASS** (4 improved, 16 flat, 0 regressed). Report: `runs/20261016T090908Z.json`.
+
+evaluate.py (gold.json v1, k=6, hybrid on): recall@k 0.95 (=), **MRR 0.73 -> 0.85**, catch 1.00, true-rejection 0.00.
+r01, r04, r08, r13 now rank 1; r09 4 -> 3; r06 5 -> 6; r10 (funding) still missed but now rank 8 (was not found).
+
+E2E improved: answer_relevancy 0.96 -> 1.00, completeness 0.89 -> 0.91, contextual_relevancy 0.43 -> 0.50,
+premise 0.95 -> 1.00. u01 now abstains cleanly. i01 still wrong (abstention 0.2 -> 0.0): JPan2023's title fell back
+to the filename (no Docling title element, no PDF metadata), so its chunks read `Paper: JPan2023`; next fix = use the
+first front-matter line as the title fallback.
+
+Rerankers re-tested on the new collection (k=6, hybrid on, 20 candidates):
+- none: recall 0.95 / MRR 0.85 (best)
+- cross-encoder/ms-marco-MiniLM-L-6-v2: 0.95 / 0.81
+- BAAI/bge-reranker-base: 0.90 / 0.77 (loses r06, r19; ~8.6 min for the eval on CPU)
+- jina-reranker-v2: not measured, HTTP 429 from Jina twice (key quota). Keep RERANKER_MODEL off.
+
 ## 2026-10-16: run 7 (current baseline): hybrid keyword + vector retrieval (`HYBRID_SEARCH=true`)
 
 Change: BM25-style sparse vector (`bm25`, stdlib tokenizer, Qdrant IDF) fused with dense by server-side RRF; spec
