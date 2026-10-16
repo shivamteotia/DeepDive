@@ -124,7 +124,7 @@ def test_budget_exhausted_never_auto_approves():
 def test_no_evidence_short_circuits():
     oa = FakeOpenAI({r.Plan: [r.Plan(sub_questions=["q"])]})
     res = run(oa, search_fn=lambda q: [])
-    assert res["status"] == "needs_review" and "No indexed documents" in res["gaps"]
+    assert res["status"] == "needs_review" and "No sources found" in res["gaps"]
     assert ask.Answer not in oa.inputs or not oa.inputs[ask.Answer]
 
 

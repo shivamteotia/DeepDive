@@ -159,7 +159,16 @@ async function loadDocuments() {
   }
 }
 
+function hasReadyPapers() {
+  return state.documents.some((d) => d.status === "ready");
+}
+
 function renderDocuments() {
+  const papers = hasReadyPapers();
+  $("#no-papers-hint").hidden = papers;
+  $("#no-papers-hint").textContent = state.webAvailable ? "No papers yet — turn on Web search to start, or upload a PDF."
+    : "No papers yet — upload a PDF to start.";
+  $("#question").placeholder = papers ? "Ask a question about your papers…" : "Ask a question…";
   const list = $("#document-list");
   if (!state.documents.length) {
     list.replaceChildren(h("li", { class: "empty-note" }, "No papers yet — upload PDFs to start."));
@@ -248,8 +257,10 @@ function newChat() {
 // ---------- asking ----------
 async function ask(question) {
   if (state.busy || !question) return;
-  if (!state.documents.some((d) => d.status === "ready")) {
-    toast("Upload a PDF and wait until it is indexed before asking.");
+  const useWeb = $("#web-toggle").checked && state.webAvailable;
+  if (!hasReadyPapers() && !useWeb) {  // web-only chat needs no papers; papers uploaded later join later turns
+    toast(state.webAvailable ? "No papers yet — turn on Web search or upload a PDF."
+      : "Upload a PDF and wait until it is indexed before asking.");
     return;
   }
   setBusy(true);
@@ -259,7 +270,7 @@ async function ask(question) {
     let conversationId = state.conversationId;
     if (!conversationId) conversationId = (await api("POST", `/api/v1/projects/${projectId}/conversations`, {})).id;
     const run = await api("POST", `/api/v1/projects/${projectId}/research-runs`, {
-      question, conversation_id: conversationId, web_search: $("#web-toggle").checked && state.webAvailable,
+      question, conversation_id: conversationId, web_search: useWeb,
     });
     if (view !== state.view) {  // user switched chat/project while we were posting: don't graft it onto that view
       toast("Your question was sent to the previous chat.");
@@ -378,7 +389,8 @@ function answerCards(turn) {
   const verified = res.status === "verified";
   const meta = h("div", { class: "meta" },
     h("span", { class: `badge ${verified ? "ok" : "review"}` }, verified ? "✓ Verified" : "Needs review"),
-    run.web_search ? h("span", { class: "badge web" }, "Web + papers") : h("span", { class: "badge neutral" }, "Papers only"),
+    run.web_search ? h("span", { class: "badge web" }, evidence && !evidence.some((e) => e.source_type !== "web") ? "Web only" : "Web + papers")
+      : h("span", { class: "badge neutral" }, "Papers only"),
     h("span", { class: "muted small" }, `${res.claims.length} finding${res.claims.length === 1 ? "" : "s"} · ${order.length} source${order.length === 1 ? "" : "s"}`));
 
   const summary = h("div", { class: "card" }, meta);

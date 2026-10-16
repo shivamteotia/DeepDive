@@ -164,3 +164,54 @@ def test_history_includes_a_turn_with_the_same_timestamp(api, signup):
         s.add_all([first, second])
         s.commit()
         assert jobs.conversation_history(s, second) == [{"question": "q1?", "answer": ["a1"]}]
+
+
+@pytest.fixture
+def web_api(tmp_path, runner, monkeypatch):
+    """An API with web search enabled and a fake Tavily returning one WHO page."""
+    def fake_web(query, *, api_key, project_id, timeout, **kw):
+        return [{"point_id": "web:1", "project_id": project_id, "source_type": "web", "url": "https://who.int/p",
+                 "title": "WHO", "source_filename": "WHO", "page_numbers": [], "section_headings": [], "text": "w"}]
+
+    monkeypatch.setattr(jobs.web, "search", fake_web)
+    settings = make_settings(web_search_enabled=True, tavily_api_key="tv-secret")
+    app = create_app(settings, qdrant=QdrantClient(":memory:"), openai_client=FakeOpenAI(), runner=runner,
+                     upload_dir=tmp_path / "u", ingest_pool=InlinePool(), research_pool=InlinePool())
+    with TestClient(app) as api:
+        api.maxrim = app.state.maxrim
+        api.post("/auth/register", json={"email": "w@example.com", "password": "correct horse battery"})
+        tok = api.post("/auth/login", json={"email": "w@example.com", "password": "correct horse battery"}).json()
+        api.h = {"Authorization": f"Bearer {tok['access_token']}"}
+        yield api
+
+
+def test_web_only_chat_works_without_papers(web_api, fake_research):
+    pid = project(web_api, web_api.h, "No papers")
+    run = ask_in(web_api, web_api.h, pid, "pneumonia mortality?", web_search=True)
+    assert run["status"] == "completed" and run["web_search"] is True
+    assert {x["source_filename"] for x in fake_research["calls"][-1]["hits"]} == {"WHO"}
+
+
+def test_no_papers_and_no_web_is_refused_with_a_hint(web_api, fake_research):
+    pid = project(web_api, web_api.h, "No papers")
+    r = web_api.post(f"/api/v1/projects/{pid}/research-runs", headers=web_api.h, json={"question": "risks?"})
+    assert r.status_code == 409 and "web search" in r.json()["detail"].lower()
+
+
+def test_web_only_request_is_refused_when_the_server_has_no_web_search(api, signup, fake_research):
+    h = signup()
+    pid = project(api, h, "No papers")
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "risks?", "web_search": True})
+    assert r.status_code == 400
+
+
+def test_papers_uploaded_mid_chat_are_searched_by_later_turns(web_api, fake_research):
+    h = web_api.h
+    pid = project(web_api, h, "Grows")
+    cid = web_api.post(f"/api/v1/projects/{pid}/conversations", headers=h, json={}).json()["id"]
+    ask_in(web_api, h, pid, "pneumonia mortality?", conversation_id=cid, web_search=True)
+    assert {x["source_filename"] for x in fake_research["calls"][-1]["hits"]} == {"WHO"}
+    doc = upload(web_api, h, pid, PDF_A)  # FakeRunner marks it ready
+    seed_chunks(web_api, [(pid, doc["sha256"], "a.pdf")])
+    ask_in(web_api, h, pid, "and in the paper?", conversation_id=cid)
+    assert {x["source_filename"] for x in fake_research["calls"][-1]["hits"]} == {"a.pdf"}

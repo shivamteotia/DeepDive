@@ -291,8 +291,8 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             raise HTTPException(400, "Web search is not enabled on this server")
         ready = s.scalar(select(db.Document.id).where(db.Document.project_id == project.id,
                                                        db.Document.status == "ready").limit(1))
-        if ready is None:
-            raise HTTPException(409, "No indexed documents in this project yet")
+        if ready is None and not body.web_search:  # web-only chat needs no papers; papers added later join later turns
+            raise HTTPException(409, "No indexed documents yet — upload a paper or turn on web search")
         run = db.ResearchRun(project_id=project.id, question=body.question, max_iterations=body.max_iterations,
                              conversation_id=convo.id if convo else None, web_search=body.web_search)
         s.add(run)
