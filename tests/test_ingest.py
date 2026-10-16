@@ -176,3 +176,17 @@ def test_sparse_vector_sums_colliding_indices(monkeypatch):
     v = ingest.sparse_vector("alpha beta", query=True)
     assert v.indices == [7] and v.values == [2.0]
 
+
+def test_new_collection_has_keyword_vector_and_points_carry_it(env):
+    env.run("projA")
+    assert ingest.has_sparse(env.q, COLL)
+    for p in env.q.scroll(COLL, with_vectors=True, limit=10)[0]:
+        assert set(p.vector) == {"", ingest.SPARSE_VECTOR}
+        assert weights(p.vector[ingest.SPARSE_VECTOR]) == pytest.approx(weights(ingest.sparse_vector(p.payload["text"])))
+
+
+def test_ingest_into_collection_without_keyword_vector_fails_before_writing(env):
+    env.q.create_collection(COLL, vectors_config=ingest.models.VectorParams(size=3, distance=ingest.models.Distance.COSINE))
+    with pytest.raises(ValueError, match="--migrate-to"):
+        env.run("projA")
+    assert count(env.q) == 0

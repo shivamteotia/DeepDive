@@ -99,9 +99,21 @@ def sparse_vector(text: str, *, query: bool = False) -> models.SparseVector:
     return models.SparseVector(indices=list(weights), values=list(weights.values()))
 
 
+MIGRATE_HINT = "run `uv run python ingest.py --migrate-to <new_collection>` and set QDRANT_COLLECTION to it"
+
+
+def has_sparse(qdrant: QdrantClient, collection: str) -> bool:
+    return SPARSE_VECTOR in (qdrant.get_collection(collection).config.params.sparse_vectors or {})
+
+
 def ensure_collection(qdrant: QdrantClient, collection: str, dim: int) -> None:
     if not qdrant.collection_exists(collection):
-        qdrant.create_collection(collection, vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE))
+        qdrant.create_collection(
+            collection, vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
+            sparse_vectors_config={SPARSE_VECTOR: models.SparseVectorParams(modifier=models.Modifier.IDF)},
+        )
+    elif not has_sparse(qdrant, collection):
+        raise ValueError(f"collection {collection!r} has no {SPARSE_VECTOR!r} keyword vector; {MIGRATE_HINT}")
     for field in ("project_id", "document_sha256"):
         qdrant.create_payload_index(collection, field, models.PayloadSchemaType.KEYWORD)
 
@@ -128,7 +140,7 @@ def ingest(project_id: str, path: Path, *, qdrant: QdrantClient, openai_client, 
     points = [
         models.PointStruct(
             id=point_id(project_id, sha, i),
-            vector=vec,
+            vector={"": vec, SPARSE_VECTOR: sparse_vector(c["text"])},
             payload={
                 **c,
                 "project_id": project_id,
