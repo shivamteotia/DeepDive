@@ -1,3 +1,4 @@
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -140,3 +141,38 @@ def test_source_filename_overrides_path_name(env):
     (a,), _ = env.q.scroll(COLL, limit=1, scroll_filter=ingest.doc_filter("projA", sha))
     (b,), _ = env.q.scroll(COLL, limit=1, scroll_filter=ingest.doc_filter("projB", sha))
     assert a.payload["source_filename"] == "paper.pdf" and b.payload["source_filename"] == "Original Name.pdf"
+
+
+def weights(v):
+    return dict(zip(v.indices, v.values, strict=True))
+
+
+def test_sparse_vector_is_deterministic_and_keeps_ratios_and_decimals_whole():
+    text = "PaO2/FiO2 was 21.32%, values, values."
+    v = ingest.sparse_vector(text)
+    assert v == ingest.sparse_vector(text)
+    w = weights(v)
+    for tok in (b"pao2/fio2", b"21.32", b"was", b"values"):
+        assert zlib.crc32(tok) in w
+    assert zlib.crc32(b"pao2") not in w and zlib.crc32(b"21") not in w
+    assert weights(ingest.sparse_vector("pao2/fio2 21.32", query=True)).keys() <= w.keys()  # question matches chunk
+
+
+def test_sparse_vector_doc_weights_saturate_and_query_weights_are_one():
+    doc = weights(ingest.sparse_vector("missing missing values"))
+    assert doc[zlib.crc32(b"missing")] == pytest.approx(2 * 2.2 / 3.2)
+    assert doc[zlib.crc32(b"values")] == pytest.approx(1.0)
+    assert set(weights(ingest.sparse_vector("missing missing values", query=True)).values()) == {1.0}
+
+
+def test_sparse_vector_of_text_without_tokens_is_empty():
+    for text in ("", "   ", "?!%"):
+        v = ingest.sparse_vector(text)
+        assert v.indices == [] and v.values == []
+
+
+def test_sparse_vector_sums_colliding_indices(monkeypatch):
+    monkeypatch.setattr(ingest.zlib, "crc32", lambda b: 7)
+    v = ingest.sparse_vector("alpha beta", query=True)
+    assert v.indices == [7] and v.values == [2.0]
+

@@ -5,7 +5,10 @@ Usage: uv run python ingest.py <project_id> <pdf>
 
 import argparse
 import hashlib
+import re
 import uuid
+import zlib
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,6 +17,9 @@ from qdrant_client import QdrantClient, models
 CHUNK_MAX_TOKENS = 512
 EMBED_BATCH = 100
 UPSERT_BATCH = 64
+SPARSE_VECTOR = "bm25"
+BM25_K1 = 1.2
+TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./,][a-z0-9]+)*")
 
 
 def sha256_file(path: Path) -> str:
@@ -81,6 +87,16 @@ def embed(openai_client, model: str, texts: list[str]) -> list[list[float]]:
         resp = openai_client.embeddings.create(model=model, input=texts[i:i + EMBED_BATCH])
         vectors.extend(d.embedding for d in resp.data)
     return vectors
+
+
+def sparse_vector(text: str, *, query: bool = False) -> models.SparseVector:
+    """Keyword vector for the IDF-weighted sparse index: BM25 term-frequency saturation with b=0 (chunks are
+    near-uniform in length); Qdrant applies IDF. Query terms weigh 1.0. Colliding crc32 indices are summed."""
+    weights: dict[int, float] = {}
+    for token, tf in Counter(TOKEN_RE.findall(text.lower())).items():
+        i = zlib.crc32(token.encode())
+        weights[i] = weights.get(i, 0.0) + (1.0 if query else tf * (BM25_K1 + 1) / (tf + BM25_K1))
+    return models.SparseVector(indices=list(weights), values=list(weights.values()))
 
 
 def ensure_collection(qdrant: QdrantClient, collection: str, dim: int) -> None:
