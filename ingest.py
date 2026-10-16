@@ -3,6 +3,7 @@
 Usage: uv run python ingest.py <project_id> <pdf>
        uv run python ingest.py --migrate-to <new_collection>   # add keyword vectors to an existing collection
        uv run python ingest.py --reindex-to <new_collection>   # re-chunk every ready document (smart chunking)
+       uv run python ingest.py --sync-counts                   # after switching QDRANT_COLLECTION: refresh Postgres counts
 """
 
 import argparse
@@ -92,10 +93,14 @@ def _pdf_meta_title(path: Path) -> str:
         return ""
 
 
-def piece_from_chunk(c) -> chunking.Piece:
-    """A Docling chunk as a Piece: its own text (headings kept apart), pages and whether it holds a table."""
+def piece_from_chunk(c, title: str = "") -> chunking.Piece:
+    """A Docling chunk as a Piece: its own text (headings kept apart), pages and whether it holds a table.
+    Docling keeps the document title at level 0 of every heading path; it is dropped (the label carries it)."""
     items = c.meta.doc_items
-    return chunking.Piece(text=c.text, headings=c.meta.headings or [],
+    headings = list(c.meta.headings or [])
+    if title and headings and headings[0].strip() == title.strip():
+        headings = headings[1:]
+    return chunking.Piece(text=c.text, headings=headings,
                           page_numbers=sorted({p.page_no for it in items for p in it.prov}),
                           content_type="table" if any(it.label.value == "table" for it in items) else "text")
 
@@ -109,8 +114,8 @@ def parse_pdf(path: Path, filename: str, embed_model: str) -> ParsedDoc:
     doc = DocumentConverter().convert(path).document
     chunker = HybridChunker(tokenizer=OpenAITokenizer(tokenizer=_plain_encoding(embed_model),
                                                       max_tokens=chunking.CHUNK_MAX_TOKENS))
-    pieces = [piece_from_chunk(c) for c in chunker.chunk(doc)]
     docling_title = next((t.text for t in doc.texts if t.label.value == "title"), "")
+    pieces = [piece_from_chunk(c, docling_title) for c in chunker.chunk(doc)]
     return ParsedDoc(pieces, chunking.resolve_title(docling_title, _pdf_meta_title(path), filename), doc.num_pages())
 
 
@@ -249,44 +254,83 @@ def migrate(qdrant: QdrantClient, src: str, dst: str) -> int:
     return copied
 
 
+def prepare_in_child(path: str, filename: str, embed_model: str, context_model: str, contextual: bool) -> Prepared:
+    """prepare_document inside a jobs.IngestRunner child with its own OpenAI client, so a native Docling crash
+    (Li2024 did) fails one document instead of the whole re-index."""
+    from openai import OpenAI
+
+    from config import Settings
+
+    return prepare_document(Path(path), source_filename=filename, openai_client=OpenAI(api_key=Settings().openai_api_key),
+                            embed_model=embed_model, context_model=context_model, contextual=contextual)
+
+
 def reindex(*, qdrant: QdrantClient, openai_client, sessions, src: str, dst: str, upload_dir: Path, embed_model: str,
-            context_model: str = "", contextual: bool = True) -> dict:
+            context_model: str = "", contextual: bool = True, prepare=None) -> dict:
     """Re-chunk every ready document from its stored PDF into dst. Each file is parsed, contextualised and embedded
-    once and written to every project that has it. src (the live collection) is never touched."""
-    from sqlalchemy import select, update
+    once and written to every project that has it. src (the live collection) and Postgres are never touched (the API
+    keeps serving src until QDRANT_COLLECTION is switched; then run --sync-counts). Documents already complete in dst
+    are skipped, so a re-run after the switch only does new uploads. prepare(path, filename) -> Prepared defaults to
+    an in-process prepare_document."""
+    from sqlalchemy import select
 
     import db
 
     if src == dst:
         raise ValueError("destination collection must differ from the live collection")
+    if prepare is None:
+        def prepare(path: Path, filename: str) -> Prepared:
+            return prepare_document(path, source_filename=filename, openai_client=openai_client, embed_model=embed_model,
+                                    context_model=context_model, contextual=contextual)
     with sessions() as s:
-        rows = [(d.id, str(d.project_id), d.sha256, d.filename)
+        rows = [(str(d.project_id), d.sha256, d.filename)
                 for d in s.scalars(select(db.Document).where(db.Document.status == "ready").order_by(db.Document.created_at))]
     cache: dict[str, Prepared | Exception] = {}
-    out = {"documents": 0, "points": 0, "skipped": [], "failed": []}
-    for doc_id, project_id, sha, filename in rows:
+    out = {"documents": 0, "points": 0, "already": 0, "skipped": [], "failed": []}
+    for project_id, sha, filename in rows:
         path = upload_dir / project_id / f"{sha}.pdf"
         if not path.is_file():
             out["skipped"].append(filename)
             continue
+        if already_indexed(qdrant, dst, project_id, sha):
+            out["already"] += 1
+            continue
         if sha not in cache:
             try:
-                cache[sha] = prepare_document(path, source_filename=filename, openai_client=openai_client,
-                                              embed_model=embed_model, context_model=context_model, contextual=contextual)
-            except Exception as exc:  # noqa: BLE001 — one bad PDF (e.g. a native Docling crash) must not stop the rest
+                cache[sha] = prepare(path, filename)
+            except Exception as exc:  # noqa: BLE001 — one bad PDF must not stop the rest
                 cache[sha] = exc
         prepared = cache[sha]
         if isinstance(prepared, Exception):
             out["failed"].append(f"{filename}: {type(prepared).__name__}: {prepared}")
             continue
-        n = write_document(qdrant, dst, project_id=project_id, sha=sha, source_filename=filename,
-                           embed_model=embed_model, prepared=prepared)
-        with sessions() as s:
-            s.execute(update(db.Document).where(db.Document.id == doc_id).values(chunk_count=n, doc_type=prepared.doc_type))
-            s.commit()
+        out["points"] += write_document(qdrant, dst, project_id=project_id, sha=sha, source_filename=filename,
+                                        embed_model=embed_model, prepared=prepared)
         out["documents"] += 1
-        out["points"] += n
     return out
+
+
+def sync_counts(qdrant: QdrantClient, sessions, collection: str) -> int:
+    """After switching QDRANT_COLLECTION: set each ready document's chunk_count and doc_type from that collection."""
+    from sqlalchemy import select, update
+
+    import db
+
+    with sessions() as s:
+        rows = [(d.id, str(d.project_id), d.sha256) for d in s.scalars(select(db.Document).where(db.Document.status == "ready"))]
+    updated = 0
+    for doc_id, project_id, sha in rows:
+        f = doc_filter(project_id, sha)
+        first, _ = qdrant.scroll(collection, scroll_filter=f, limit=1, with_payload=["doc_type"])
+        if not first:
+            continue
+        n = qdrant.count(collection, count_filter=f, exact=True).count
+        with sessions() as s:
+            s.execute(update(db.Document).where(db.Document.id == doc_id).values(chunk_count=n,
+                                                                              doc_type=first[0].payload.get("doc_type")))
+            s.commit()
+        updated += 1
+    return updated
 
 
 def main() -> None:
@@ -300,6 +344,7 @@ def main() -> None:
     ap.add_argument("--migrate-to", metavar="COLLECTION",
                     help="copy QDRANT_COLLECTION into COLLECTION with keyword vectors added, then exit")
     ap.add_argument("--reindex-to", metavar="COLLECTION", help="re-chunk every ready document into COLLECTION, then exit")
+    ap.add_argument("--sync-counts", action="store_true", help="update Postgres chunk counts/types from QDRANT_COLLECTION")
     args = ap.parse_args()
 
     s = Settings()
@@ -308,21 +353,33 @@ def main() -> None:
         n = migrate(qdrant, s.qdrant_collection, args.migrate_to)
         print(f"copied {n} points {s.qdrant_collection} -> {args.migrate_to}; set QDRANT_COLLECTION={args.migrate_to} in .env")
         return
-    if args.reindex_to:
+    if args.sync_counts:
         import db
 
-        out = reindex(qdrant=qdrant, openai_client=OpenAI(api_key=s.openai_api_key), sessions=db.make_sessions(s.database_url),
-                      src=s.qdrant_collection, dst=args.reindex_to, upload_dir=Path(__file__).parent / "data" / "uploads",
-                      embed_model=s.openai_embed_model, context_model=s.openai_context_model or s.openai_fast_model,
-                      contextual=s.contextual_chunks)
-        print(f"re-indexed {out['documents']} documents ({out['points']} points) into {args.reindex_to}")
+        print(f"updated {sync_counts(qdrant, db.make_sessions(s.database_url), s.qdrant_collection)} documents from QDRANT_COLLECTION")
+        return
+    if args.reindex_to:
+        import db
+        import jobs
+
+        ctx_model = s.openai_context_model or s.openai_fast_model
+        runner = jobs.IngestRunner(fn=prepare_in_child)
+        try:
+            out = reindex(qdrant=qdrant, openai_client=None, sessions=db.make_sessions(s.database_url),
+                          src=s.qdrant_collection, dst=args.reindex_to, upload_dir=Path(__file__).parent / "data" / "uploads",
+                          embed_model=s.openai_embed_model, prepare=lambda path, fn: runner.run(
+                              str(path), fn, s.openai_embed_model, ctx_model, s.contextual_chunks))
+        finally:
+            runner.shutdown()
+        print(f"re-indexed {out['documents']} documents ({out['points']} points, {out['already']} already done) "
+              f"into {args.reindex_to}; after switching QDRANT_COLLECTION run: uv run python ingest.py --sync-counts")
         for fn in out["skipped"]:
             print(f"  skipped (no stored PDF): {fn}")
         for line in out["failed"]:
             print(f"  failed: {line}")
         return
     if args.project_id is None or args.pdf is None:
-        ap.error("project_id and pdf are required unless --migrate-to or --reindex-to is given")
+        ap.error("project_id and pdf are required unless --migrate-to, --reindex-to or --sync-counts is given")
     n = ingest(
         args.project_id, args.pdf,
         qdrant=qdrant,

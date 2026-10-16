@@ -308,7 +308,7 @@ def seed(sessions, upload_dir, docs):
     return out
 
 
-def test_reindex_parses_each_file_once_and_updates_postgres(tmp_path, monkeypatch):
+def test_reindex_parses_each_file_once_and_writes_every_project(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(ingest, "parse_pdf", lambda path, filename, model: calls.append(path) or
                         ingest.ParsedDoc(pieces=FAKE_PIECES, title="Fake paper", page_count=5))
@@ -320,14 +320,11 @@ def test_reindex_parses_each_file_once_and_updates_postgres(tmp_path, monkeypatc
     q = QdrantClient(":memory:")
     out = ingest.reindex(qdrant=q, openai_client=FakeOpenAI(), sessions=sessions, src="unit", dst="new",
                          upload_dir=tmp_path, embed_model="m")
-    assert out == {"documents": 2, "points": 6, "skipped": ["gone.pdf"], "failed": []}
+    assert out == {"documents": 2, "points": 6, "already": 0, "skipped": ["gone.pdf"], "failed": []}
     assert len(calls) == 1  # same sha in two projects: parsed once
     for fn in ("a.pdf", "a-copy.pdf"):
-        pid, doc_id = ids[fn]
+        pid, _ = ids[fn]
         assert q.count("new", count_filter=ingest.doc_filter(pid, a), exact=True).count == 3
-        with sessions() as s:
-            d = s.get(db.Document, doc_id)
-            assert d.chunk_count == 3 and d.doc_type == "generic"
 
 
 def test_reindex_reports_a_pdf_the_parser_crashes_on_and_continues(tmp_path, monkeypatch):
@@ -348,3 +345,62 @@ def test_reindex_refuses_the_live_collection(tmp_path):
     with pytest.raises(ValueError, match="differ"):
         ingest.reindex(qdrant=QdrantClient(":memory:"), openai_client=FakeOpenAI(), sessions=db.make_sessions("sqlite://"),
                        src="unit", dst="unit", upload_dir=tmp_path, embed_model="m")
+
+
+def test_docling_title_is_removed_from_the_heading_path():
+    c = lambda headings: SimpleNamespace(text="t", meta=SimpleNamespace(doc_items=[], headings=headings))
+    assert ingest.piece_from_chunk(c(["My Paper", "Methods"]), title="My Paper").headings == ["Methods"]
+    assert ingest.piece_from_chunk(c(["My Paper"]), title="My Paper").headings == []
+    assert ingest.piece_from_chunk(c(["Methods"]), title="My Paper").headings == ["Methods"]
+
+
+def reindex_env(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ingest, "parse_pdf", lambda path, filename, model: calls.append(path) or
+                        ingest.ParsedDoc(pieces=FAKE_PIECES, title="Fake paper", page_count=5))
+    monkeypatch.setattr(ingest, "token_counter", lambda model: lambda s: len(s.split()))
+    sessions = db.make_sessions("sqlite://")
+    ids = seed(sessions, tmp_path, [("P1", "a" * 64, "a.pdf", "ready", True), ("P2", "a" * 64, "a-copy.pdf", "ready", True)])
+    q = QdrantClient(":memory:")
+    run = lambda **kw: ingest.reindex(qdrant=q, openai_client=FakeOpenAI(), sessions=sessions, src="unit", dst="new",
+                                      upload_dir=tmp_path, embed_model="m", **kw)
+    return SimpleNamespace(calls=calls, sessions=sessions, ids=ids, q=q, run=run)
+
+
+def test_reindex_leaves_postgres_alone_and_a_rerun_skips_finished_documents(tmp_path, monkeypatch):
+    env = reindex_env(tmp_path, monkeypatch)
+    assert env.run()["documents"] == 2
+    with env.sessions() as s:
+        assert all(s.get(db.Document, d).chunk_count is None for _, d in env.ids.values())  # API still serves the old collection
+    again = env.run()
+    assert again["already"] == 2 and again["documents"] == 0 and len(env.calls) == 1  # no second paid parse
+
+
+def test_sync_counts_updates_postgres_from_the_live_collection(tmp_path, monkeypatch):
+    env = reindex_env(tmp_path, monkeypatch)
+    env.run()
+    assert ingest.sync_counts(env.q, env.sessions, "new") == 2
+    with env.sessions() as s:
+        assert {(s.get(db.Document, d).chunk_count, s.get(db.Document, d).doc_type) for _, d in env.ids.values()} == {(3, "generic")}
+
+
+def test_reindex_uses_the_given_prepare_step(tmp_path, monkeypatch):
+    env = reindex_env(tmp_path, monkeypatch)
+    def crashing(path, filename):
+        raise RuntimeError("PDF parser crashed (native error); this PDF may be unsupported")
+    out = env.run(prepare=crashing)
+    assert out["documents"] == 0 and out["failed"][0].startswith("a.pdf: RuntimeError: PDF parser crashed")
+    assert env.calls == []
+
+
+def make_prepared(name):
+    return ingest.Prepared("generic", [{"text": name, "context": ""}], [[0.1, 0.2]])
+
+
+def test_prepared_result_survives_the_crash_isolating_child():
+    import jobs
+    runner = jobs.IngestRunner(fn=make_prepared, timeout=120)
+    try:
+        assert runner.run("x") == make_prepared("x")
+    finally:
+        runner.shutdown()

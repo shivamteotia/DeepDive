@@ -291,3 +291,13 @@ def test_report_introduction_on_page_two_is_not_an_article_signal():
 def test_dotted_chapter_numbers_count_as_chapters():
     pieces = [P(LONG, "1. Scope"), P(LONG, "2.1. Diagnosis"), P(LONG, "3. Treatment"), P(LONG, "Foreword")]
     assert chunking.classify(pieces, 10, words, None)[0] == "report_guideline"
+
+
+def test_unheaded_abstract_before_a_numbered_introduction_stays_searchable():
+    pieces = [P("Title of the paper", pages=(1,)), P("Jane Doe, Some Hospital", "Jane Doe", pages=(1,)),
+              P("We aimed to predict mortality " + "word " * 120, pages=(1,)),
+              P(LONG, "1. Introduction", pages=(1,)), P(LONG, "2. Methods", pages=(2,))]
+    out = chunking.regroup(pieces, "research_article", words)
+    front = next(c for c in out if c.headings == ["Front matter"])
+    assert "Title of the paper" in front.body and "Jane Doe" in front.body and "We aimed" not in front.body
+    assert any(c.body.startswith("We aimed to predict mortality") for c in out if c.headings != ["Front matter"])

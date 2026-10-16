@@ -44,6 +44,7 @@ def _re(pattern: str) -> re.Pattern:
 
 
 FRONT_PAGES = 2  # front matter ends at an Abstract/Summary/Introduction heading on one of the first pages
+FRONT_LONG_TOKENS = 100  # a passage this long before the Introduction is an unheaded abstract, not front matter
 NUM = r"(?:\d+(?:\.\d+)*\.?|[ivx]+\.)?\s*"  # optional section numbering: "1.", "2.1.", "IV."
 ABSTRACT_RE = _re(rf"^\s*{NUM}(abstract|summary|background|introduction)\b")
 ABSTRACT_SIGNAL_RE = _re(rf"^\s*{NUM}(abstract|summary)\b")
@@ -196,11 +197,16 @@ def regroup(pieces: list[Piece], doc_type: DocType, count_tokens: CountTokens) -
         start = next((i for i, p in enumerate(pieces)
                       if matches(p, ABSTRACT_RE) and min(p.page_numbers or [99]) <= FRONT_PAGES), 0)
         drop, front, back, back_name = (REFERENCES_RE,), KEYWORDS_RE, DECLARATIONS_RE, "Declarations"
+        # Front matter ends at Introduction/Background without an Abstract heading: a long passage before it is the
+        # (unheaded) abstract, which must stay its own searchable chunk rather than sink into author lists.
+        keep_long = not (start < len(pieces) and matches(pieces[start], ABSTRACT_SIGNAL_RE))
     elif doc_type == "report_guideline":
         start = next((i for i, p in enumerate(pieces) if matches(p, REPORT_START_RE)), 0)
         drop, front, back, back_name = (REFERENCES_RE, TOC_RE), FOREWORD_RE, REPORT_BACK_RE, "Acknowledgements"
     else:
         start, drop, front, back, back_name = 0, (), None, None, ""
+    if doc_type != "research_article":
+        keep_long = False
 
     kinds: list[tuple[str, Piece]] = []
     for i, p in enumerate(pieces):
@@ -208,7 +214,8 @@ def regroup(pieces: list[Piece], doc_type: DocType, count_tokens: CountTokens) -
             if not CAPTION_RE.search(p.text):
                 continue
             p = p.model_copy(update={"headings": []})  # a caption that inherited the References heading
-        if front is not None and (i < start or matches(p, front)):
+        before_start = i < start and not (keep_long and count_tokens(p.text) >= FRONT_LONG_TOKENS)
+        if front is not None and (before_start or matches(p, front)):
             kinds.append(("front", p))
         elif back is not None and (matches(p, back) or (doc_type == "research_article" and (
                 matches(p, DATE_LINE_RE) or DATE_LINE_RE.search(p.text.split("\n", 1)[0])))):
