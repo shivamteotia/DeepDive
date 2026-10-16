@@ -195,7 +195,8 @@ def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: st
             add_evidence(evidence, search_fn(sq), project_id)
     log.append({"step": "research", "passages": len(evidence)})
     if not evidence:
-        return finalize(question, ask.Answer(claims=[], gaps="No sources found for this question."), [], [], log)
+        return finalize(question, ask.Answer(claims=[], gaps="No sources found for this question."), [], [], log,
+                        scope=qp.scope, coverage=coverage, metric=qp.metric)
 
     rejected: list[dict] = []  # cumulative, so a claim rejected in round 1 isn't silently retried in round 3
     best = None  # last (answer, verdicts) that had claims; an empty retry must not discard it
@@ -226,25 +227,51 @@ def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: st
             log.append({"step": "research", "iteration": it, "new_passages": added})
         rejected += [{"claim": c.text, "verdict": v.verdict, "rationale": v.rationale} for c, v in bad]
     ans, verdicts = best or (ans, [])
-    return finalize(question, ans, verdicts, evidence, log)
+    return finalize(question, ans, verdicts, evidence, log, scope=qp.scope, coverage=coverage, metric=qp.metric)
 
 
-def finalize(question: str, ans: ask.Answer, verdicts: list[Verdict], evidence: list[dict], log: list[dict]) -> dict:
-    """Keep SUPPORTED, label THINLY_SUPPORTED, remove UNSUPPORTED. Never approve what wasn't verified."""
-    claims, removed = [], []
+def finalize(question: str, ans: ask.Answer, verdicts: list[Verdict], evidence: list[dict], log: list[dict],
+             scope: str = "standard", coverage: list[dict] | None = None, metric: str = "") -> dict:
+    """Keep SUPPORTED, label THINLY_SUPPORTED, remove UNSUPPORTED. Never approve what wasn't verified.
+    Metric scopes: rows keep `best` only with a SUPPORTED designation from the same paper; every searched paper
+    left without a row is named in gaps."""
+    by_eid = {e["eid"]: e for e in evidence}
+
+    def papers(c: ask.Claim) -> set[str]:
+        return {by_eid[i]["source_filename"] for i in c.evidence_ids if i in by_eid and by_eid[i].get("source_type") != "web"}
+
+    designated = {p for c, v in zip(ans.claims, verdicts, strict=True) if c.row is None and v.verdict == "SUPPORTED"
+                  for p in papers(c)} if scope == "best_model" else set()
+    claims, removed, best_cleared = [], [], False
     for c, v in zip(ans.claims, verdicts, strict=True):
         if v.verdict == "UNSUPPORTED":
             removed.append(c.text)
-        else:
-            claims.append({"text": c.text, "evidence_ids": c.evidence_ids, "verdict": v.verdict, "rationale": v.rationale})
+            continue
+        out = {"text": c.text, "evidence_ids": c.evidence_ids, "verdict": v.verdict, "rationale": v.rationale}
+        if c.row is not None:
+            row = c.row.model_dump()
+            if row["best"] and not (papers(c) & designated):
+                row["best"], best_cleared = False, True
+            out["row"] = row
+        claims.append(out)
     gaps = ans.gaps
     if removed:  # count only: rejected text (e.g. an off-topic poem) must not reach the user; audit keeps it
         gaps = (gaps + "\n" if gaps else "") + f"Removed {len(removed)} unsupported claim(s) (see the audit log)."
+    if best_cleared:
+        gaps = (gaps + "\n" if gaps else "") + "The authors' designation of a best model could not be verified."
+    if coverage and (scope == "across_papers" or (scope == "all_values" and len(coverage) > 1)):  # not for a named paper
+        reported = {by_eid[i]["source_filename"] for c in claims if "row" in c for i in c["evidence_ids"]
+                    if i in by_eid and by_eid[i].get("source_type") != "web"}
+        for d in coverage:
+            if d["filename"] not in reported:
+                gaps = (gaps + "\n" if gaps else "") + f"Not reported in: {d['filename']} (searched; no {metric or 'value'} found)."
+    if any(e.get("fallback") for e in log):
+        gaps = (gaps + "\n" if gaps else "") + f"Searched the project as a whole: more than {MAX_COVERAGE_DOCS} papers."
     uncited = ask.UNCITED_PREFIX in ans.gaps  # synthesizer invented a citation: flag for review too
     status = ("verified" if claims and all(c["verdict"] == "SUPPORTED" for c in claims) and not removed and not uncited
-              else "needs_review")
-    return {"question": question, "status": status, "claims": claims, "gaps": gaps, "removed_claims": removed,
-            "evidence": evidence, "log": log}
+              and not best_cleared else "needs_review")
+    return {"question": question, "status": status, "scope": scope, "claims": claims, "gaps": gaps,
+            "removed_claims": removed, "evidence": evidence, "log": log}
 
 
 def render(result: dict) -> str:

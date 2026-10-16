@@ -343,3 +343,62 @@ def test_render_shows_the_coverage_step():
     res = r.run(oa, search_fn=RecordingSearch(), project_id="demo", model="m", fast_model="f", guard_model="g",
                 question="q", documents=DOCS)
     assert "coverage: 2 paper(s) searched" in r.render(res)
+
+
+def row(model="predictive model", best=False, paper="JPan2023.pdf"):
+    return ask.MetricRow(paper=paper, model=model, condition="validation cohort", metric="AUC", value="0.893", best=best)
+
+
+def scoped_result(scope, claims, vs, docs=DOCS, hits=None):
+    oa = FakeOpenAI({r.Plan: [plan_out(scope)], ask.Answer: [ask.Answer(claims=claims, gaps="")], r.Verification: [vs]})
+    by_doc = hits or {"s1": [hit("p1", "our predictive model outperformed APACHE II", "JPan2023.pdf")], "s2": []}
+    search = lambda q, document=None, k=None: by_doc.get(document, [])
+    return r.run(oa, search_fn=search, project_id="demo", model="m", fast_model="f", guard_model="g", question="q",
+                 documents=docs, max_iterations=1)
+
+
+def test_rows_survive_into_the_result():
+    res = scoped_result("all_values", [ask.Claim(text="AUC 0.893", evidence_ids=["E1"], row=row())], verdicts("SUPPORTED"))
+    assert res["claims"][0]["row"]["model"] == "predictive model" and res["scope"] == "all_values"
+
+
+def test_best_row_needs_a_supported_designation_in_the_same_paper():
+    designation = ask.Claim(text="The authors' predictive model outperformed APACHE II and SOFA.", evidence_ids=["E1"])
+    best = ask.Claim(text="AUC 0.893", evidence_ids=["E1"], row=row(best=True))
+    ok = scoped_result("best_model", [designation, best], verdicts("SUPPORTED", "SUPPORTED"))
+    assert ok["claims"][1]["row"]["best"] is True and ok["status"] == "verified"
+    bad = scoped_result("best_model", [designation, best], verdicts("UNSUPPORTED", "SUPPORTED"))
+    assert bad["claims"][0]["row"]["best"] is False and bad["status"] == "needs_review"
+
+
+def test_searched_paper_without_rows_gets_a_coverage_line():
+    res = scoped_result("across_papers", [ask.Claim(text="AUC 0.893", evidence_ids=["E1"], row=row())], verdicts("SUPPORTED"))
+    assert "Not reported in: EA2022.pdf (searched; no AUC found)" in res["gaps"]
+    assert "JPan2023.pdf" not in res["gaps"]
+
+
+def test_web_hits_never_count_as_papers_in_coverage():
+    hits = {"s1": [hit("p1", "AUC 0.893", "JPan2023.pdf")],
+            "s2": [hit("w1", "AUC on the web", "Some page") | {"source_type": "web", "url": "https://x.org"}]}
+    res = scoped_result("across_papers", [ask.Claim(text="AUC on web", evidence_ids=["E2"], row=row(paper="Some page"))],
+                        verdicts("SUPPORTED"), hits=hits)
+    assert "Not reported in: EA2022.pdf" in res["gaps"] and "JPan2023.pdf (searched" in res["gaps"]
+
+
+def test_standard_scope_adds_no_coverage_lines():
+    res = run(FakeOpenAI({ask.Answer: [ask.Answer(claims=[claim("c", "E1")], gaps="")],
+                          r.Verification: [verdicts("SUPPORTED")]}))
+    assert "Not reported in" not in res["gaps"] and "row" not in res["claims"][0]
+
+
+def test_too_many_papers_says_so_in_gaps():
+    many = [{"sha256": f"s{i}", "filename": f"p{i}.pdf", "title": f"paper {i}"} for i in range(r.MAX_COVERAGE_DOCS + 1)]
+    res = scoped_result("across_papers", [claim("AUC 0.893", "E1")], verdicts("SUPPORTED"), docs=many,
+                        hits={None: [hit("p1", "AUC 0.893")]})
+    assert f"Searched the project as a whole: more than {r.MAX_COVERAGE_DOCS} papers." in res["gaps"]
+
+
+def test_metric_question_with_no_evidence_keeps_scope_and_coverage_lines():
+    res = scoped_result("across_papers", [], verdicts(), hits={"s1": [], "s2": []})
+    assert res["scope"] == "across_papers" and "Not reported in: JPan2023.pdf" in res["gaps"]
+    assert "Not reported in: EA2022.pdf" in res["gaps"]
