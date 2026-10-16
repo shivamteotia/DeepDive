@@ -1,6 +1,6 @@
 # Eval results
 
-## 2026-10-16: run 8 (candidate, not promoted): smart parsing and chunking + contextual retrieval
+## 2026-10-16: run 8 (current baseline): smart parsing and chunking + contextual retrieval
 
 Change: document-type classification (heuristics + LLM tie-break), front matter / declarations merged, references
 dropped, tiny fragments merged, `Paper:`/`Document:` + section label on every chunk, and an LLM-written search
@@ -9,6 +9,7 @@ Spec `docs/superpowers/specs/2026-10-16-smart-chunking-design.md`. Re-indexed in
 (`ingest.py --reindex-to`; the gold project was CLI-ingested separately because it is not tracked in Postgres).
 Unique chunks 117 -> 87, under-40-word chunks 31 -> 15 (all remaining are link lists in the government backgrounder).
 compare vs run 7: **PASS** (4 improved, 16 flat, 0 regressed). Report: `runs/20261016T090908Z.json`.
+Promoted to baseline and shipped on 2026-10-16 at the user's request (QDRANT_COLLECTION switched to the _v2 collection, --sync-counts run).
 
 evaluate.py (gold.json v1, k=6, hybrid on): recall@k 0.95 (=), **MRR 0.73 -> 0.85**, catch 1.00, true-rejection 0.00.
 r01, r04, r08, r13 now rank 1; r09 4 -> 3; r06 5 -> 6; r10 (funding) still missed but now rank 8 (was not found).
@@ -24,7 +25,7 @@ Rerankers re-tested on the new collection (k=6, hybrid on, 20 candidates):
 - BAAI/bge-reranker-base: 0.90 / 0.77 (loses r06, r19; ~8.6 min for the eval on CPU)
 - jina-reranker-v2: not measured, HTTP 429 from Jina twice (key quota). Keep RERANKER_MODEL off.
 
-## 2026-10-16: run 7 (current baseline): hybrid keyword + vector retrieval (`HYBRID_SEARCH=true`)
+## 2026-10-16: run 7 (superseded): hybrid keyword + vector retrieval (`HYBRID_SEARCH=true`)
 
 Change: BM25-style sparse vector (`bm25`, stdlib tokenizer, Qdrant IDF) fused with dense by server-side RRF; spec
 `docs/superpowers/specs/2026-10-16-hybrid-retrieval-design.md`. Collection migrated with `ingest.py --migrate-to`
