@@ -1,6 +1,6 @@
 # Smart parsing and chunking — design
 
-Date: 2026-10-16. Status: approved in chat (parts 1–3); awaiting written-spec review.
+Date: 2026-10-16. Status: approved (chat parts 1–3 + written spec, 2026-10-16). Cheap-model setting added at the user's request.
 
 ## Goal
 
@@ -78,7 +78,7 @@ Heuristics over the pieces (headings and text, case-insensitive):
   ≥ 3 headings starting with a chapter number (`^\d+(\.\d+)*\s` or `^Chapter \d+`); `page_count ≥ 30`.
 - Decision: article if article ≥ 3 and report ≤ 1; report if report ≥ 2 and article ≤ 1; generic if both are 0;
   otherwise ambiguous → LLM tie-break.
-- LLM tie-break: `OPENAI_FAST_MODEL`, input = the first pieces up to 3,000 tokens, JSON-quoted as untrusted data;
+- LLM tie-break: the context model (below), input = the first pieces up to 3,000 tokens, JSON-quoted as untrusted data;
   output validated as `DocTypeGuess{doc_type: Literal[...], reason: str}`. `None`/invalid → `generic`.
 - `reasons`: the list of matched signals (or `"llm: <reason>"`), stored for audit.
 
@@ -119,7 +119,7 @@ Title resolution: Docling's first `title` item → PDF metadata title (pypdfium2
 
 ### 4. Contextual retrieval — `contextualize(chunks, doc_text, llm) -> list[str]`
 
-- One `OPENAI_FAST_MODEL` call per chunk; up to 4 concurrently (thread pool) inside the ingest child.
+- One call per chunk to the **context model**; up to 4 concurrently (thread pool) inside the ingest child.
 - Input: the document text (references excluded, first `DOC_CONTEXT_TOKENS = 8000` tokens) first and identical
   for every chunk of a document (so provider prompt caching applies), then the chunk; both JSON-quoted.
   Instructions: write 1–2 sentences situating the chunk in the document (which study, cohort, section, what it
@@ -127,6 +127,11 @@ Title resolution: Docling's first `title` item → PDF metadata title (pypdfium2
 - Output validated as `ChunkContext{context: str}`; trimmed to 60 words. `None`/error → `""` for that chunk;
   the document still ingests.
 - Setting `contextual_chunks: bool = True` (`CONTEXTUAL_CHUNKS`) to switch it off.
+- **Context model (cost):** setting `openai_context_model: str = ""` (`OPENAI_CONTEXT_MODEL`); empty falls back to
+  `OPENAI_FAST_MODEL`. Used for chunk contexts and the classification tie-break. The user asked for a cheap OpenAI
+  model; recommended value `gpt-4.1-nano` (non-reasoning, structured outputs, cached-input discount), set in `.env`
+  by the user, never hard-coded. Implementation spot-checks a few contexts against `OPENAI_FAST_MODEL`; the run 8
+  eval gate decides whether the cheaper model is good enough.
 
 **Safety rule:** `context` is LLM-generated, not source text. It must never enter `text`, the evidence passed to
 the synthesizer or verifier, or the UI snippet. It only shapes the embedding and the sparse vector.
