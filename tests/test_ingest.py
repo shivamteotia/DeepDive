@@ -190,3 +190,13 @@ def test_ingest_into_collection_without_keyword_vector_fails_before_writing(env)
     with pytest.raises(ValueError, match="--migrate-to"):
         env.run("projA")
     assert count(env.q) == 0
+    assert env.oa.calls == 0  # schema is checked before Docling and the paid embedding call
+
+
+def test_unmigrated_collection_fails_even_for_an_already_indexed_document(env):
+    env.q.create_collection(COLL, vectors_config=ingest.models.VectorParams(size=3, distance=ingest.models.Distance.COSINE))
+    sha = ingest.sha256_file(env.pdf)
+    env.q.upsert(COLL, [ingest.models.PointStruct(id=ingest.point_id("projA", sha, 0), vector=[1.0, 0.0, 0.0], payload={
+        "project_id": "projA", "document_sha256": sha, "chunk_count": 1, "text": "t"})])
+    with pytest.raises(ValueError, match="--migrate-to"):  # not a silent "already indexed"
+        env.run("projA")

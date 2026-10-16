@@ -126,6 +126,8 @@ def ingest(project_id: str, path: Path, *, qdrant: QdrantClient, openai_client, 
     if path.suffix.lower() != ".pdf" or not path.is_file():
         raise ValueError(f"not a PDF file: {path}")
 
+    if qdrant.collection_exists(collection) and not has_sparse(qdrant, collection):  # before Docling and paid embeddings
+        raise ValueError(f"collection {collection!r} has no {SPARSE_VECTOR!r} keyword vector; {MIGRATE_HINT}")
     sha = sha256_file(path)
     if already_indexed(qdrant, collection, project_id, sha):
         return 0
