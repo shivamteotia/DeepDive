@@ -21,7 +21,12 @@ Eval baseline (eval/gold.json v1, DRAFT, k=6): recall@k 0.90, MRR 0.71, catch ra
 Run `evaluate.py` before and after any change to chunking, retrieval, prompts, or models; don't merge a regression.
 Reranker (`RERANKER_MODEL`, off by default) measured 2026-10-15: ms-marco-MiniLM-L-6-v2 recall 0.80 / MRR 0.78 (worse);
 bge-reranker-base recall 0.90 / MRR 0.77 but ~30 s per search on CPU; jina:jina-reranker-v2-base-multilingual
-(hosted, fast) recall 0.80 / MRR 0.78. None beat plain vector recall; r19 is missed by all. Next idea: hybrid keyword+vector.
+(hosted, fast) recall 0.80 / MRR 0.78. None beat plain vector recall; r19 is missed by all.
+Hybrid keyword+vector (`HYBRID_SEARCH`, off by default; bm25 sparse vector + RRF, 2026-10-16): recall 0.95 / MRR 0.73,
+finds r19, loses r10 (no stemming). E2E run 7: REVIEW (correctness/recall up; det.abstain and contextual_relevancy down).
+**Collections need the `bm25` sparse vector:** ingest refuses one without it, even with hybrid off. Migrate first
+(`ingest.py --migrate-to <new>`), set `QDRANT_COLLECTION` to it, re-run the migration after switching if uploads
+happened in between, then deploy.
 
 **Deferred until needed:** Celery/Redis (use FastAPI `BackgroundTasks`), S3 (local `data/`), MLflow (JSON results), Alembic (db.ADDED_COLUMNS for now).
 
@@ -42,6 +47,7 @@ uv run pytest -m "not live"  # unit tests (no network, no cost)
 uv run pytest -m live        # hits Qdrant Cloud + OpenAI (costs money); plain `pytest` excludes these (pyproject addopts)
 docker compose up -d --wait               # local Postgres (127.0.0.1:5432)
 uv run uvicorn app:create_app --factory   # UI + API on http://127.0.0.1:8000 (UI at /, docs at /docs)
+uv run python ingest.py --migrate-to <new_collection>   # copy QDRANT_COLLECTION adding bm25 vectors (free; no OpenAI)
 uv run python evaluate.py    # retrieval + verifier metrics vs eval/gold.json -> data/evals/ (costs money)
 uv run python -m evals.run   # end-to-end eval via the running API (26 golden cases + DeepEval judge) -> evals/baselines/candidate.json
 uv run python -m evals.compare   # candidate vs baseline: PASS=0 FAIL=1 REVIEW=2 (results log: evals/baselines/RESULTS.md)

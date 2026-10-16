@@ -1,5 +1,31 @@
 # Eval results
 
+## 2026-10-16: run 7 (candidate, not promoted): hybrid keyword + vector retrieval (`HYBRID_SEARCH=true`)
+
+Change: BM25-style sparse vector (`bm25`, stdlib tokenizer, Qdrant IDF) fused with dense by server-side RRF; spec
+`docs/superpowers/specs/2026-10-16-hybrid-retrieval-design.md`. Collection migrated with `ingest.py --migrate-to`
+(198/198 points, no re-embedding). compare vs run 6: **REVIEW** (6 improved, 2 regressed, 12 flat).
+Report: `runs/20261016T025227Z.json`.
+
+evaluate.py (gold.json v1, k=6) on the migrated collection:
+- hybrid off: recall@k 0.90, MRR 0.71, catch 1.00, true-rejection 0.00 (identical to before: the migration is lossless).
+- hybrid on: **recall@k 0.95, MRR 0.73**, catch 1.00, true-rejection 0.00. r19 found at rank 2 (missed by dense and all
+  three rerankers), r06 found at rank 5; r10 ("Who funded...") lost (was rank 5): no stemming, so "funded" doesn't match
+  "funding", and "pediatric Criticality Index study" keyword-matches many chunks.
+
+E2E:
+- Improved: correctness 0.93 -> 0.98, completeness 0.85 -> 0.89, contextual_precision 0.92 -> 1.00,
+  contextual_recall 0.92 -> 1.00, det.fact 0.93 -> 1.00. a11 (the motivating miss) now retrieves the imputation chunk.
+- Regressed: det.abstain 0.80 -> 0.60 (u01, u07). Both decline correctly and the judge gives both abstention 1.0; the
+  deterministic check fails on form: u01 states "not reported in the evidence" as a claim, u07 declines and then adds
+  in-hospital rates as context. Synthesizer wording, same pattern as run 5; quality.abstention is flat (0.90 -> 0.89).
+- Regressed: contextual_relevancy 0.62 -> 0.43. Share of all six retrieved chunks that are relevant: RRF fills the
+  tail with keyword matches. Precision/recall of the relevant evidence went to 1.00 and answers improved, so the
+  extra context is noise the synthesizer ignores.
+- Safety flat: isolation 1.00, forbidden 1.00, protected_leakage 1.00.
+
+Ship rule (spec): recall@k rose, MRR did not drop, compare is REVIEW with both regressions explained.
+
 ## 2026-10-16: run 6 (current baseline): prompt fixes, round 2
 
 compare vs run 4: **REVIEW** (8 improved, 1 regressed, 11 flat). Report: `runs/20261015T194833Z.json`.
