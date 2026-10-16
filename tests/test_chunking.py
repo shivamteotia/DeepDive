@@ -220,3 +220,74 @@ def test_build_chunks_without_context_makes_no_llm_calls():
     parse = FakeParse({})
     _, records = chunking.build_chunks(ARTICLE, page_count=11, title="T", count_tokens=words, parse=parse, contextual=False)
     assert parse.calls == [] and all(r["context"] == "" for r in records)
+
+
+# --- fixes from code-checker (real journal heading styles) ---
+
+def test_late_background_heading_does_not_swallow_the_paper():
+    pieces = [P("Title", pages=(1,)), P("Abstract: we did things " + LONG, pages=(1,)),
+              P(LONG, "1. Introduction", pages=(2,)), P(LONG, "2. Methods", pages=(3,)), P(LONG, "3. Results", pages=(4,)),
+              P(LONG, "Background characteristics of participants", pages=(5,))]
+    out = chunking.regroup(pieces, "research_article", words)
+    assert ["2. Methods"] in heads(out) and ["3. Results"] in heads(out)
+    front = [c for c in out if c.headings == ["Front matter"]]
+    assert front and "Title" in front[0].body and "2. Methods" not in front[0].body
+
+
+def test_body_sections_that_look_like_declarations_stay_in_place():
+    pieces = [P("Background " + LONG, "Abstract", pages=(1,)), P(LONG, "Funding mechanisms for primary care", pages=(3,)),
+              P(LONG, "Ethical considerations", pages=(3,)), P(LONG, "Consent process", pages=(3,)),
+              P(LONG, "Published trials", pages=(4,)), P(LONG, "Acknowledged limitations", pages=(5,)),
+              P("Grant 7.", "Funding", pages=(9,))]
+    out = chunking.regroup(pieces, "research_article", words)
+    assert heads(out) == [["Abstract"], ["Funding mechanisms for primary care"], ["Ethical considerations"],
+                          ["Consent process"], ["Published trials"], ["Acknowledged limitations"], ["Declarations"]]
+
+
+@pytest.mark.parametrize("heading", ["7. Acknowledgments", "Declaration of competing interest",
+                                     "CRediT authorship contribution statement", "Declaration of interests",
+                                     "Role of the funding source", "Contributors", "Institutional Review Board Statement",
+                                     "Conflicts of Interest and Sources of Funding", "Ethics approval and consent to participate"])
+def test_publisher_declaration_headings_are_recognised(heading):
+    pieces = [P("Background " + LONG, "Abstract", pages=(1,)), P(LONG, "Methods", pages=(2,)), P("Statement text.", heading)]
+    assert heads(chunking.regroup(pieces, "research_article", words))[-1] == ["Declarations"]
+
+
+def test_lancet_summary_and_numbered_introduction_mark_the_end_of_front_matter():
+    lancet = [P("Title", pages=(1,)), P("Background " + LONG, "Summary", pages=(1,)), P(LONG, "Introduction", pages=(2,))]
+    assert heads(chunking.regroup(lancet, "research_article", words))[:2] == [["Front matter"], ["Summary"]]
+    ieee = [P("Title", pages=(1,)), P(LONG, "I. INTRODUCTION", pages=(1,)), P(LONG, "II. METHODS", pages=(2,))]
+    assert heads(chunking.regroup(ieee, "research_article", words))[:2] == [["Front matter"], ["I. INTRODUCTION"]]
+
+
+def test_received_published_text_lines_join_the_declarations():
+    pieces = [P("Background " + LONG, "Abstract", pages=(1,)), P(LONG, "Methods", pages=(2,)),
+              P("Received: 10 June 2023 / Accepted: 17 July 2023 Published online: 17 August 2023", "Methods", pages=(9,))]
+    out = chunking.regroup(pieces, "research_article", words)
+    assert heads(out)[-1] == ["Declarations"] and "Received: 10 June 2023" in out[-1].body
+
+
+def test_tiny_piece_merged_forward_keeps_the_larger_sections_label():
+    pieces = [P("Background " + LONG, "Abstract"), P("tiny", "Results", "A"), P(LONG, "Results", "B")]
+    out = chunking.regroup(pieces, "generic", words)
+    assert heads(out)[-1] == ["Results", "B"] and out[-1].body.startswith("tiny")
+
+
+def test_captions_inheriting_the_references_heading_are_kept():
+    pieces = [P("Background " + LONG, "Abstract"), P("1. Smith J. A paper.", "References"),
+              P("Figure 1. The nomogram for SCAP mortality.", "References"), P("Table 2 Baseline characteristics", "References")]
+    out = chunking.regroup(pieces, "research_article", words)
+    bodies = "\n".join(c.body for c in out)
+    assert "Smith J." not in bodies and "Figure 1. The nomogram" in bodies and "Table 2 Baseline" in bodies
+
+
+def test_report_introduction_on_page_two_is_not_an_article_signal():
+    report = [P("Guideline", pages=(1,)), P(LONG, "Introduction", pages=(2,)), P(LONG, "Executive summary", pages=(3,)),
+              P(LONG, "Contents", pages=(2,)), P(LONG, "References", pages=(9,))]
+    parse = FakeParse({})
+    assert chunking.classify(report, 10, words, parse)[0] == "report_guideline" and parse.calls == []
+
+
+def test_dotted_chapter_numbers_count_as_chapters():
+    pieces = [P(LONG, "1. Scope"), P(LONG, "2.1. Diagnosis"), P(LONG, "3. Treatment"), P(LONG, "Foreword")]
+    assert chunking.classify(pieces, 10, words, None)[0] == "report_guideline"

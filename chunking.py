@@ -43,21 +43,36 @@ def _re(pattern: str) -> re.Pattern:
     return re.compile(pattern, re.IGNORECASE)
 
 
-ABSTRACT_RE = _re(r"^\s*(abstract|background|introduction)\b")
+FRONT_PAGES = 2  # front matter ends at an Abstract/Summary/Introduction heading on one of the first pages
+NUM = r"(?:\d+(?:\.\d+)*\.?|[ivx]+\.)?\s*"  # optional section numbering: "1.", "2.1.", "IV."
+ABSTRACT_RE = _re(rf"^\s*{NUM}(abstract|summary|background|introduction)\b")
+ABSTRACT_SIGNAL_RE = _re(rf"^\s*{NUM}(abstract|summary)\b")
 KEYWORDS_RE = _re(r"^\s*key\s*words?\b")
-DECLARATIONS_RE = _re(r"^\s*(acknowledg|funding|sources? of funding|conflicts? of interest|competing interests?|"
-                      r"data availability|availability of data|ethic|consent|authors?['’]?\s*contributions|author details|"
-                      r"author information|publisher['’]?s note|supplementary material|received\s*:|accepted\s*:|published\b)")
-REFERENCES_RE = _re(r"^\s*(references|bibliography|literature cited)\b")
+# Whole-heading names only, so body sections like "Funding mechanisms ..." or "Ethical considerations" stay in place.
+DECLARATION_NAMES = [
+    r"acknowledge?ments?", r"funding(?: (?:statement|information|sources?))?", r"sources? of funding",
+    r"role of the funding sources?", r"conflicts? of interests?(?: and sources? of funding)?",
+    r"(?:declaration of )?competing interests?(?: statement)?", r"declarations? of (?:competing )?interests?",
+    r"declarations?", r"disclosures?(?: statement)?", r"data (?:availability|sharing)(?: statement)?",
+    r"availability of data(?: and materials?)?", r"ethics(?: approval)?(?: and consent to participate)?(?: statement)?",
+    r"ethical approval", r"institutional review board statement", r"informed consent statement",
+    r"consent (?:for publication|to participate)", r"patient consent(?: statement)?", r"authors?['’]? contributions?",
+    r"credit authorship contribution statement", r"contributors", r"author (?:details|information)",
+    r"publisher['’]?s note", r"supplementary (?:materials?|information|data)",
+]
+DECLARATIONS_RE = _re(rf"^\s*{NUM}(?:{'|'.join(DECLARATION_NAMES)})\s*[:.]?\s*$")
+DATE_LINE_RE = _re(r"^\s*(received|accepted|published(?: online)?)\b.*\b(19|20)\d{2}\b")
+REFERENCES_RE = _re(rf"^\s*{NUM}(references|bibliography|literature cited)\b")
+CAPTION_RE = _re(r"^\s*(fig(?:ure)?|table|supplementary)\s*\.?\s*s?\d")
 METHODS_RE = _re(r"^\s*(materials and methods|methods|results)\b")
 DOI_RE = re.compile(r"\b10\.\d{4,9}/\S+")
 RECEIVED_RE = _re(r"\b(received|accepted)\s*:")
 EXEC_RE = _re(r"^\s*executive summary\b")
 TOC_RE = _re(r"^\s*(table of contents|contents)\s*$")
 FOREWORD_RE = _re(r"^\s*(foreword|preface)\b")
-CHAPTER_RE = _re(r"^\s*(\d+(\.\d+)*\s|chapter\s+\d+)")
+CHAPTER_RE = _re(r"^\s*(\d+(\.\d+)*\.?\s|chapter\s+\d+)")
 REPORT_START_RE = _re(r"^\s*(executive summary|introduction|chapter\s+1\b|1[\s.])")
-REPORT_BACK_RE = _re(r"^\s*(acknowledg|contributors|disclaimer)")
+REPORT_BACK_RE = _re(rf"^\s*{NUM}(acknowledge?ments?|contributors|disclaimer)\s*[:.]?\s*$")
 
 CLASSIFY_PROMPT = """Classify the document from the start of its text. research_article: a journal paper (abstract,
 methods, results, references). report_guideline: a report, clinical guideline, policy or government document,
@@ -86,7 +101,8 @@ def classify(pieces: list[Piece], page_count: int, count_tokens: CountTokens, pa
     """Heuristics first; the LLM only breaks ties. Returns (doc_type, reasons) for the audit trail."""
     text = "\n".join(p.text for p in pieces)
     article = [name for name, hit in (
-        ("abstract heading", any(matches(p, ABSTRACT_RE) and min(p.page_numbers or [99]) <= 2 for p in pieces)),
+        ("abstract heading", any(matches(p, ABSTRACT_SIGNAL_RE) and min(p.page_numbers or [99]) <= FRONT_PAGES
+                                 for p in pieces)),
         ("references", any(matches(p, REFERENCES_RE) for p in pieces)),
         ("methods/results", any(matches(p, METHODS_RE) for p in pieces)),
         ("doi", bool(DOI_RE.search(text))),
@@ -153,8 +169,8 @@ def _merge_tiny(chunks: list[Chunk], is_body: list[bool], count_tokens: CountTok
     def mergeable(a: Chunk, b: Chunk) -> bool:
         return a.headings[:1] == b.headings[:1] and count_tokens(a.body + "\n\n" + b.body) <= CHUNK_MAX_TOKENS
 
-    def join(a: Chunk, b: Chunk) -> Chunk:
-        return Chunk(body=a.body + "\n\n" + b.body, headings=a.headings,
+    def join(a: Chunk, b: Chunk, headings: list[str]) -> Chunk:
+        return Chunk(body=a.body + "\n\n" + b.body, headings=headings,
                      page_numbers=sorted(set(a.page_numbers) | set(b.page_numbers)),
                      content_type="table" if "table" in (a.content_type, b.content_type) else "text")
 
@@ -164,11 +180,11 @@ def _merge_tiny(chunks: list[Chunk], is_body: list[bool], count_tokens: CountTok
         c, body = items[i]
         if body and count_tokens(c.body) < TINY_TOKENS:
             if i > 0 and items[i - 1][1] and mergeable(items[i - 1][0], c):
-                items[i - 1] = (join(items[i - 1][0], c), True)
+                items[i - 1] = (join(items[i - 1][0], c, items[i - 1][0].headings), True)
                 del items[i]
                 continue
             if i + 1 < len(items) and items[i + 1][1] and mergeable(c, items[i + 1][0]):
-                items[i + 1] = (join(c, items[i + 1][0]), True)
+                items[i + 1] = (join(c, items[i + 1][0], items[i + 1][0].headings), True)  # the larger part names it
                 del items[i]
                 continue
         i += 1
@@ -177,7 +193,8 @@ def _merge_tiny(chunks: list[Chunk], is_body: list[bool], count_tokens: CountTok
 
 def regroup(pieces: list[Piece], doc_type: DocType, count_tokens: CountTokens) -> list[Chunk]:
     if doc_type == "research_article":
-        start = next((i for i, p in enumerate(pieces) if matches(p, ABSTRACT_RE)), 0)
+        start = next((i for i, p in enumerate(pieces)
+                      if matches(p, ABSTRACT_RE) and min(p.page_numbers or [99]) <= FRONT_PAGES), 0)
         drop, front, back, back_name = (REFERENCES_RE,), KEYWORDS_RE, DECLARATIONS_RE, "Declarations"
     elif doc_type == "report_guideline":
         start = next((i for i, p in enumerate(pieces) if matches(p, REPORT_START_RE)), 0)
@@ -188,10 +205,13 @@ def regroup(pieces: list[Piece], doc_type: DocType, count_tokens: CountTokens) -
     kinds: list[tuple[str, Piece]] = []
     for i, p in enumerate(pieces):
         if any(matches(p, d) for d in drop):
-            continue
+            if not CAPTION_RE.search(p.text):
+                continue
+            p = p.model_copy(update={"headings": []})  # a caption that inherited the References heading
         if front is not None and (i < start or matches(p, front)):
             kinds.append(("front", p))
-        elif back is not None and matches(p, back):
+        elif back is not None and (matches(p, back) or (doc_type == "research_article" and (
+                matches(p, DATE_LINE_RE) or DATE_LINE_RE.search(p.text.split("\n", 1)[0])))):
             kinds.append(("back", p))
         else:
             kinds.append(("body", p))
