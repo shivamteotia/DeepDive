@@ -259,9 +259,10 @@ def test_audit_record_keeps_web_source_fields_only_for_web_evidence():
 
 
 def test_plan_question_reads_scope_metric_and_target():
-    out = r.Plan(sub_questions=["AUC of each model"], scope="all_values", metric="AUC",
-                 metric_terms=["area under the curve"], target_paper="the SCAP study")
-    p = r.plan_question(FakeOpenAI({r.Plan: [out]}), "f", "What AUC values were reported in the SCAP study?")
+    out = r.Classification(scope="all_values", metric="AUC", metric_terms=["area under the curve"],
+                           target_paper="the SCAP study")
+    p = r.plan_question(FakeOpenAI({r.Plan: [r.Plan(sub_questions=["AUC of each model"])], r.Classification: [out]}), "f",
+                        "What AUC values were reported in the SCAP study?")
     assert (p.scope, p.metric, p.metric_terms, p.target_paper) == ("all_values", "AUC", ["area under the curve"], "the SCAP study")
     assert p.sub_questions == ["AUC of each model"]
 
@@ -275,7 +276,8 @@ def test_plan_question_defaults_to_standard():
 
 def test_plan_schema_has_no_non_null_defaults():
     from openai.lib._pydantic import to_strict_json_schema
-    assert '"default"' not in __import__("json").dumps(to_strict_json_schema(r.Plan))
+    for m in (r.Plan, r.Classification):
+        assert '"default"' not in __import__("json").dumps(to_strict_json_schema(m))
 
 
 DOCS = [{"sha256": "s1", "filename": "JPan2023.pdf", "title": "Development and validation of an in-hospital mortality "
@@ -288,7 +290,7 @@ ASKS = {"standard": "q", "all_values": "What AUC values were reported?",  # ques
 
 
 def plan_out(scope, metric="AUC", target=""):
-    return r.Plan(sub_questions=["q"], scope=scope, metric=metric, metric_terms=["area under the curve"], target_paper=target)
+    return r.Classification(scope=scope, metric=metric, metric_terms=["area under the curve"], target_paper=target)
 
 
 class RecordingSearch:
@@ -302,7 +304,7 @@ class RecordingSearch:
 
 
 def run_scoped(scope, target="", docs=DOCS):
-    oa = FakeOpenAI({r.Plan: [plan_out(scope, target=target)], ask.Answer: [ask.Answer(claims=[], gaps="none")]})
+    oa = FakeOpenAI({r.Classification: [plan_out(scope, target=target)], ask.Answer: [ask.Answer(claims=[], gaps="none")]})
     search = RecordingSearch(docs)
     r.run(oa, search_fn=search, project_id="demo", model="m", fast_model="f", guard_model="g", question=ASKS[scope],
           documents=docs)
@@ -343,7 +345,7 @@ def test_resolve_target_needs_real_overlap():
 
 
 def test_render_shows_the_coverage_step():
-    oa = FakeOpenAI({r.Plan: [plan_out("across_papers")], ask.Answer: [ask.Answer(claims=[], gaps="none")]})
+    oa = FakeOpenAI({r.Classification: [plan_out("across_papers")], ask.Answer: [ask.Answer(claims=[], gaps="none")]})
     res = r.run(oa, search_fn=RecordingSearch(), project_id="demo", model="m", fast_model="f", guard_model="g",
                 question=ASKS["across_papers"], documents=DOCS)
     assert "coverage: 2 paper(s) searched" in r.render(res)
@@ -354,7 +356,7 @@ def row(model="predictive model", best=False, paper="JPan2023.pdf"):
 
 
 def scoped_result(scope, claims, vs, docs=DOCS, hits=None):
-    oa = FakeOpenAI({r.Plan: [plan_out(scope)], ask.Answer: [ask.Answer(claims=claims, gaps="")], r.Verification: [vs]})
+    oa = FakeOpenAI({r.Classification: [plan_out(scope)], ask.Answer: [ask.Answer(claims=claims, gaps="")], r.Verification: [vs]})
     by_doc = hits or {"s1": [hit("p1", "our predictive model outperformed APACHE II", "JPan2023.pdf")], "s2": []}
     search = lambda q, document=None, k=None: by_doc.get(document, [])
     return r.run(oa, search_fn=search, project_id="demo", model="m", fast_model="f", guard_model="g", question=ASKS[scope],
@@ -443,8 +445,8 @@ def test_designation_match_is_whole_word_and_non_empty(model):
     ("What was the overall AUROC of the Criticality Index-Mortality models?", "best_model", "AUROC"),
 ])
 def test_scope_the_question_does_not_back_falls_back_to_standard(question, scope, metric):
-    out = r.Plan(sub_questions=["q"], scope=scope, metric=metric, metric_terms=[], target_paper="")
-    assert r.plan_question(FakeOpenAI({r.Plan: [out]}), "f", question).scope == "standard"
+    out = r.Classification(scope=scope, metric=metric, metric_terms=[], target_paper="")
+    assert r.plan_question(FakeOpenAI({r.Classification: [out]}), "f", question).scope == "standard"
 
 
 @pytest.mark.parametrize("question,scope,metric", [  # eval cases m01-m04
@@ -454,13 +456,13 @@ def test_scope_the_question_does_not_back_falls_back_to_standard(question, scope
     ("What AUROC was reported in each uploaded paper?", "across_papers", "AUROC"),
 ])
 def test_scope_the_question_backs_is_kept(question, scope, metric):
-    out = r.Plan(sub_questions=["q"], scope=scope, metric=metric, metric_terms=[], target_paper="")
-    assert r.plan_question(FakeOpenAI({r.Plan: [out]}), "f", question).scope == scope
+    out = r.Classification(scope=scope, metric=metric, metric_terms=[], target_paper="")
+    assert r.plan_question(FakeOpenAI({r.Classification: [out]}), "f", question).scope == scope
 
 
 def test_metric_synonym_in_the_question_backs_the_scope():
-    out = r.Plan(sub_questions=["q"], scope="all_values", metric="AUC", metric_terms=["area under the curve"], target_paper="")
-    assert r.plan_question(FakeOpenAI({r.Plan: [out]}), "f", "Which area under the curve values were given?").scope == "all_values"
+    out = r.Classification(scope="all_values", metric="AUC", metric_terms=["area under the curve"], target_paper="")
+    assert r.plan_question(FakeOpenAI({r.Classification: [out]}), "f", "Which area under the curve values were given?").scope == "all_values"
 
 
 def test_rows_and_best_outside_their_scope_are_dropped_silently():
@@ -472,5 +474,26 @@ def test_rows_and_best_outside_their_scope_are_dropped_silently():
 
 
 def test_metric_must_appear_as_a_whole_word():
-    out = r.Plan(sub_questions=["q"], scope="all_values", metric="ROC", metric_terms=[], target_paper="")
-    assert r.plan_question(FakeOpenAI({r.Plan: [out]}), "f", "Which procedure values were reported?").scope == "standard"
+    out = r.Classification(scope="all_values", metric="ROC", metric_terms=[], target_paper="")
+    assert r.plan_question(FakeOpenAI({r.Classification: [out]}), "f", "Which procedure values were reported?").scope == "standard"
+
+
+RUN8_PLANNER = """Break the research question into 1-4 focused sub-questions, each answerable by searching
+the project's research papers. If the question is already focused, return it as the only item."""
+
+
+def test_planner_prompt_is_back_to_run8_and_classification_is_its_own_call():
+    assert r.PLANNER == RUN8_PLANNER and "scope" in r.CLASSIFIER
+    oa = FakeOpenAI({r.Plan: [r.Plan(sub_questions=["q1"])], r.Classification: [r.Classification(scope="standard")]})
+    r.plan_question(oa, "f", "q")
+    assert oa.inputs[r.Plan] == ["q"] and oa.inputs[r.Classification] == ["q"]
+
+
+def test_all_values_lists_no_not_reported_lines():
+    res = scoped_result("all_values", [ask.Claim(text="AUC 0.893", evidence_ids=["E1"], row=row())], verdicts("SUPPORTED"))
+    assert "Not reported in" not in res["gaps"]
+
+
+def test_all_values_rule_asks_for_comparison_models():
+    rule = ask.SCOPE_RULES["all_values"]
+    assert "comparison" in rule and "APACHE II" in rule

@@ -43,7 +43,8 @@ _ROW = ("Give one claim per reported value, each with `row` filled in (paper, mo
         "cohort was 0.893 (95% CI 0.809-0.949).\" Other claims have row = null.")
 SCOPE_RULES = {
     "all_values": "This question asks for every reported value of the metric. " + _ROW + " List every model x "
-                  "condition the evidence reports; do not select or summarise; best = false.",
+                  "condition the evidence reports, including comparison models and scores (e.g. APACHE II, SOFA), "
+                  "not only the paper's own model; do not select or summarise; best = false.",
     "best_model": "This question asks for the model the authors themselves designate as their best, final or "
                   "proposed model. First give one claim (row = null) quoting where the authors designate it, citing "
                   "that passage. Then " + _ROW + " Give rows only for that model, with best = true. Never choose "
