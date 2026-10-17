@@ -103,13 +103,29 @@ class Verification(BaseModel):
     verdicts: list[Verdict]
 
 
+_BEST = re.compile(r"\b(best|final|proposed|best-performing|top-performing)\b", re.IGNORECASE)
+_ALL_PAPERS = re.compile(r"\b(all|every|each)\b.*\b(papers?|stud(y|ies)|articles?|documents?|uploaded)\b", re.IGNORECASE)
+
+
+def scope_backed(question: str, scope: str, metric: str, terms: list[str]) -> bool:
+    """The planner's metric scope only stands if the question itself says so (eval run 9: the fast model tagged poems,
+    injections and cohort-size questions as metric questions). ponytail: keyword gate; English questions only."""
+    def named(t: str) -> bool:
+        return bool(re.search(rf"(?<!\w){re.escape(t)}(?!\w)", question, re.IGNORECASE))
+
+    if scope == "standard" or not metric or not any(named(t) for t in [metric, *terms]):
+        return False
+    return {"best_model": bool(_BEST.search(question)), "across_papers": bool(_ALL_PAPERS.search(question))}.get(scope, True)
+
+
 def plan_question(openai_client, model: str, question: str) -> QueryPlan:
     p = ask.parse_llm(openai_client, model, PLANNER, question, Plan)
     subs = [s.strip() for s in (p.sub_questions if p else []) if s.strip()][:MAX_SUB_QUESTIONS] or [question]
     if p is None:
         return QueryPlan(subs, "standard", "", [], "")
-    return QueryPlan(subs, p.scope or "standard", (p.metric or "").strip(),
-                     [t.strip() for t in (p.metric_terms or []) if t.strip()], (p.target_paper or "").strip())
+    metric, terms = (p.metric or "").strip(), [t.strip() for t in (p.metric_terms or []) if t.strip()]
+    scope = p.scope if p.scope and scope_backed(question, p.scope, metric, terms) else "standard"
+    return QueryPlan(subs, scope, metric, terms, (p.target_paper or "").strip())
 
 
 def plan(openai_client, model: str, question: str) -> list[str]:
@@ -256,9 +272,11 @@ def finalize(question: str, ans: ask.Answer, verdicts: list[Verdict], evidence: 
             removed.append(c.text)
             continue
         out = {"text": c.text, "evidence_ids": c.evidence_ids, "verdict": v.verdict, "rationale": v.rationale}
-        if c.row is not None:
+        if c.row is not None and scope != "standard":  # standard answers never become tables
             row = c.row.model_dump()
-            if row["best"] and not designated(c):
+            if row["best"] and scope != "best_model":
+                row["best"] = False  # only best_model asks for the authors' best; elsewhere the flag is noise
+            elif row["best"] and not designated(c):
                 row["best"], best_cleared = False, True
             out["row"] = row
         claims.append(out)
