@@ -418,3 +418,11 @@ def test_verifier_sees_row_fields():
     sent = oa.inputs[r.Verification][0]
     assert '"row"' in sent and '"condition": "validation cohort"' in sent
     assert "row" in r.VERIFIER
+
+
+@pytest.mark.parametrize("model", ["", "  ", "SOFA"])
+def test_designation_match_is_whole_word_and_non_empty(model):
+    context = ask.Claim(text="The authors' qSOFA model was proposed as final.", evidence_ids=["E1"])
+    best = ask.Claim(text="AUC 0.893", evidence_ids=["E1"], row=row(model=model, best=True))
+    res = scoped_result("best_model", [context, best], verdicts("SUPPORTED", "SUPPORTED"))
+    assert res["claims"][1]["row"]["best"] is False

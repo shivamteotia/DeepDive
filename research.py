@@ -248,7 +248,8 @@ def finalize(question: str, ans: ask.Answer, verdicts: list[Verdict], evidence: 
                     if c.row is None and v.verdict == "SUPPORTED"] if scope == "best_model" else []
 
     def designated(c: ask.Claim) -> bool:
-        return any(ps & papers(c) and c.row.model.lower() in text for ps, text in designations)
+        name = re.compile(rf"(?<!\w){re.escape(c.row.model.strip().lower())}(?!\w)")
+        return bool(c.row.model.strip()) and any(ps & papers(c) and name.search(text) for ps, text in designations)
     claims, removed, best_cleared = [], [], False
     for c, v in zip(ans.claims, verdicts, strict=True):
         if v.verdict == "UNSUPPORTED":
