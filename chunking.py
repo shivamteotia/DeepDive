@@ -226,7 +226,8 @@ def regroup(pieces: list[Piece], doc_type: DocType, count_tokens: CountTokens) -
         if any(matches(p, d) for d in drop):
             if not CAPTION_RE.search(p.text):
                 continue
-            p = p.model_copy(update={"headings": []})  # a caption that inherited the References heading
+            # A caption that inherited the References heading: unlabelled, outline label included.
+            p = p.model_copy(update={"headings": [], "path": [], "section": ""})
         before_start = i < start and not (keep_long and count_tokens(p.text) >= FRONT_LONG_TOKENS)
         if front is not None and (before_start or matches(p, front)):
             kinds.append(("front", p))

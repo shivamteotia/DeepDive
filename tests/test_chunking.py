@@ -350,3 +350,11 @@ def test_model_section_labels_never_move_or_drop_pieces():
     ethics = next(r for r in records if "Ethical considerations" in r["section_headings"])
     assert ethics["section_headings"] == ["Declarations", "Ethical considerations"]  # labelled, but still its own chunk
     assert any("Abbreviations" in r["section_headings"] for r in records)  # not dropped as References
+
+
+def test_captions_rescued_from_references_are_not_labelled_references():
+    pieces = [P("Background " + LONG, "Abstract"), P("We studied doi 10.1000/abc " + LONG, "Methods"),
+              P("1. Smith J.", "References"), P("Table 1 Baseline characteristics " + LONG, "References")]
+    _, records = chunking.build_chunks(pieces, page_count=9, title="T", count_tokens=words, parse=None, contextual=False)
+    table = next(r for r in records if "Table 1 Baseline" in r["text"])
+    assert table["section_headings"] == [] and table["section"] == "" and "Section: References" not in table["text"]
