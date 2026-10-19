@@ -138,3 +138,38 @@ def test_limitations_and_related_work_are_sections():
     nodes = sections.repair(["Discussion", "Strengths and weaknesses"],
                             [info(0, 1, None, "discussion"), info(1, 2, 0, "limitations")])
     assert nodes[1].section == "limitations" and nodes[1].path == ["Discussion", "Strengths and weaknesses"]
+
+
+# --- real-paper fixes (2026-10-19 before/after run on JPan2023 and EA2022) ---
+
+def test_a_child_from_another_section_becomes_a_root():
+    nodes = sections.repair(["Introduction", "Study design"], [info(0, 1, None, "introduction"), info(1, 2, 0, "methods")])
+    assert nodes[1].parent is None and nodes[1].path == ["Methods", "Study design"]
+
+
+def test_title_and_running_headers_are_never_parents():
+    nodes = sections.repair(["Author manuscript", "Abstract", "Sample"],
+                            [info(0, 1, None, "front_matter"), info(1, 2, 0, "abstract"), info(2, 2, 0, "other")])
+    assert [n.parent for n in nodes] == [None, None, None] and nodes[1].path == ["Abstract"]
+
+
+def test_structured_abstract_subheadings_stay_children():
+    nodes = sections.repair(["Abstract", "Methods"], [info(0, 1, None, "abstract"), info(1, 2, 0, "abstract")])
+    assert nodes[1].parent == 0 and nodes[1].section == "abstract" and nodes[1].path == ["Abstract", "Methods"]
+
+
+def test_a_root_heading_name_beats_the_model():
+    assert sections.repair(["Supplementary Material"], [info(0, 1, None, "limitations")])[0].section == "appendix"
+
+
+def test_captions_are_never_headings():
+    nodes = sections.repair(["Results", "Figure 2.", "Table 1 Baseline"],
+                            [info(0, 1, None, "results"), info(1, 2, 0, "results"), info(2, 2, 0, "results")])
+    assert [n.is_heading for n in nodes] == [True, False, False]
+
+
+def test_a_caption_after_back_matter_gets_no_label():
+    pieces = [P(LONG, "Results"), P("Fig text", "Figure 1."), P("1. Ref", "References"), P("Fig text", "Figure 2.")]
+    out = sections.apply_outline(pieces, None)
+    assert out[1].path == ["Results"] and out[1].section == "results"
+    assert out[3].path == [] and out[3].section == "" and out[3].text.startswith("Figure 2.\n")

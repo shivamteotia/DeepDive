@@ -48,6 +48,8 @@ NAMES: list[tuple[str, re.Pattern]] = [
 # A section number is followed by a capitalised word: "2.1 Cohort", "1. Introduction"; not "30 day mortality".
 NUMBERED_RE = re.compile(r"^\s*(\d{1,2}(?:\.\d{1,2})*)\.?\s+(?=[A-Z])")
 ROMAN_RE = re.compile(r"^\s*([IVX]{1,5})\.\s+(?=[A-Z])")
+CAPTION_RE = re.compile(r"^\s*(?:supplementary\s+)?(?:fig(?:ure)?|table)\s*\.?\s*s?\d", re.IGNORECASE)
+NO_LABEL_AFTER = {"front_matter", "declarations", "references"}  # a caption here is not about this section
 
 OUTLINE_PROMPT = """You rebuild the heading hierarchy of one document. The input lists its headings in reading order,
 each with its page and the first words of the text under it. For every index return:
@@ -112,9 +114,9 @@ def occurrences(pieces: list["Piece"]) -> list[tuple[str, list[int]]]:
     return out
 
 
-def _parent(i: int, text: str, inf: HeadingInfo | None, texts: list[str], nodes: list[Node]) -> tuple[int | None, int]:
-    """(parent index, wanted level). Numbering wins over the model; a model parent must be an earlier real heading
-    with a lower level; otherwise the nearest earlier real heading with a lower level."""
+def _parent(i: int, text: str, inf: HeadingInfo | None, texts: list[str], nodes: list[Node]) -> tuple[int | None, bool]:
+    """(parent index, backed by section numbering). Numbering wins over the model; a model parent must be an earlier
+    real heading with a lower level; otherwise the nearest earlier real heading with a lower level."""
     real = [j for j in range(i) if nodes[j].is_heading]
 
     def nearest_below(level: int) -> int | None:
@@ -123,13 +125,21 @@ def _parent(i: int, text: str, inf: HeadingInfo | None, texts: list[str], nodes:
     num = numbering(text)
     if num:
         if len(num) == 1:
-            return None, 1
+            return None, True
         prefix = next((j for j in reversed(real) if numbering(texts[j]) == num[:-1]), None)
-        return (prefix if prefix is not None else nearest_below(len(num))), len(num)
+        return (prefix, True) if prefix is not None else (nearest_below(len(num)), False)
     want = max(1, min(inf.level, MAX_LEVEL)) if inf else 1
     if inf and inf.parent in real and nodes[inf.parent].level < want:
-        return inf.parent, want
-    return (nearest_below(want) if want > 1 else None), want
+        return inf.parent, False
+    return (nearest_below(want) if want > 1 else None), False
+
+
+def _wrong_parent(own: str, parent: Node) -> bool:
+    """A parent the section says is wrong (run on JPan2023/EA2022: the model nested Methods under Introduction and
+    the whole paper under its title or an "Author manuscript" running header)."""
+    if parent.section == "front_matter":
+        return own != "front_matter"
+    return own not in ("other", parent.section) and not (own == "limitations" and parent.section == "discussion")
 
 
 def repair(texts: list[str], infos: list[HeadingInfo] | None) -> list[Node]:
@@ -142,13 +152,18 @@ def repair(texts: list[str], infos: list[HeadingInfo] | None) -> list[Node]:
         inf = by_index.get(i)
         named = name_section(text)
         model = inf.section if inf and inf.section != "other" else None
-        if inf is not None and not inf.is_heading:
+        if CAPTION_RE.match(text) or (inf is not None and not inf.is_heading):
             nodes.append(Node(text, False, 0, None, model or named, []))
             continue
-        parent, _ = _parent(i, text, inf, texts, nodes)
+        parent, backed = _parent(i, text, inf, texts, nodes)
+        if parent is not None and not backed and _wrong_parent(model or named, nodes[parent]):
+            parent = None
         level = min(nodes[parent].level + 1, MAX_LEVEL) if parent is not None else 1
-        # The model's section first; else a root is named by its own text and a subsection by its parent.
-        section = model or (nodes[parent].section if parent is not None else named)
+        # A root's whole-heading name first, then the model; a subsection's model section, else its parent's.
+        if parent is None:
+            section = named if named != "other" else (model or "other")
+        else:
+            section = model or nodes[parent].section
         if parent is not None:
             path = [*nodes[parent].path, text]
         elif section not in ("other", "front_matter") and named != section:
@@ -182,8 +197,9 @@ def apply_outline(pieces: list["Piece"], parse: Parse | None) -> list["Piece"]:
     for (text, idx), node in zip(occ, nodes, strict=True):
         if node.is_heading:
             path, section = node.path, node.section
+        caption_off = not node.is_heading and CAPTION_RE.match(text) and section in NO_LABEL_AFTER
         for k in idx:
-            update: dict = {"path": list(path), "section": section}
+            update: dict = {"path": [] if caption_off else list(path), "section": "" if caption_off else section}
             if not node.is_heading and k == idx[0] and not pieces[k].text.startswith(text):
                 update["text"] = f"{text}\n{pieces[k].text}"
             out[k] = pieces[k].model_copy(update=update)
