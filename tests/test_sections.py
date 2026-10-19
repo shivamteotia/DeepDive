@@ -130,3 +130,11 @@ def test_counts_at_the_start_are_not_section_numbers():
     nodes = sections.repair(["Methods", "30 day mortality", "1 in 5 patients"],
                             [info(0, 1, None, "methods"), info(1, 2, 0, "methods"), info(2, 2, 0, "methods")])
     assert [n.parent for n in nodes] == [None, 0, 0]
+
+
+def test_limitations_and_related_work_are_sections():
+    assert sections.name_section("5. Limitations") == "limitations" and sections.name_section("Study limitations") == "limitations"
+    assert sections.name_section("2. Related work") == "related_work" and sections.name_section("Literature review") == "related_work"
+    nodes = sections.repair(["Discussion", "Strengths and weaknesses"],
+                            [info(0, 1, None, "discussion"), info(1, 2, 0, "limitations")])
+    assert nodes[1].section == "limitations" and nodes[1].path == ["Discussion", "Strengths and weaknesses"]
