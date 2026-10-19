@@ -82,3 +82,10 @@ def test_title_step_needs_an_author_and_a_year():
 def test_year_window_does_not_chain():
     g, _ = dedup.group([rec(title="Effect of TRE in PCOS", year=y) for y in (2018, 2019, 2020)])
     assert sizes(g) == [1, 2]
+
+
+def test_canonical_choice_does_not_depend_on_input_order():
+    a, b = rec(title="Effect of TRE in women with PCOS", doi="10.1/k1"), rec(title="Effect of TRE in women with PCOS: a pilot")
+    assert [a, b][dedup.pick_canonical([a, b])] is a and [b, a][dedup.pick_canonical([b, a])] is a  # the one with a DOI
+    c, d = rec(title="Beta"), rec(title="Alpha")
+    assert [c, d][dedup.pick_canonical([c, d])].title == [d, c][dedup.pick_canonical([d, c])].title

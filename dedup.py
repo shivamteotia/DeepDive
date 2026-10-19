@@ -120,6 +120,10 @@ def group(records: list[Record]) -> tuple[list[Group], list[PossibleDup]]:
 
 
 def pick_canonical(records: list[Record]) -> int:
-    """Index of the record whose fields represent the paper: has an abstract, then PubMed, then the longest abstract."""
-    return max(range(len(records)),
-               key=lambda i: (bool(records[i].abstract), records[i].source == "pubmed", len(records[i].abstract)))
+    """Index of the record whose fields represent the paper: has an abstract, then PubMed, then the longest abstract,
+    then has a DOI / PMID, then the title text — never input order, which follows random ids."""
+    def key(i: int) -> tuple:
+        r = records[i]
+        return (bool(r.abstract), r.source == "pubmed", len(r.abstract), bool(r.doi), bool(r.pmid), r.title, r.source_key)
+
+    return max(range(len(records)), key=key)

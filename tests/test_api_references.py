@@ -179,7 +179,7 @@ def test_long_free_text_fields_are_clipped_to_their_columns():
                year=2020, journal="", doi="10.1/" + "x" * 300, pmid="", pmcid="", language="English; French; German",
                pub_types=[], keywords=[], raw={})
     f = funnel._paper_fields([r], "single")
-    assert len(f["first_author"]) <= 200 and len(f["language"]) <= 20 and len(f["doi"]) <= 255
+    assert all(len(f[k]) <= n for k, n in funnel.CLIP.items()) and len(f["first_author"]) == 200
 
 
 def test_keep_the_journal_article_supersedes_the_preprint(api, signup):

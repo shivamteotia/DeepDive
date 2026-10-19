@@ -126,3 +126,8 @@ def test_escaped_braces_do_not_break_an_entry():
 
 def test_more_doi_resolver_forms():
     assert references.norm_doi("http://www.doi.org/10.1/A") == "10.1/a" == references.norm_doi("doi.org/10.1/A")
+
+
+def test_pubmed_keeps_every_language():
+    r = references.parse_file("x.nbib", b"PMID- 5\nTI  - t\nLA  - fre\nLA  - eng\n")[0][0]
+    assert r.language == "fre|eng"

@@ -13,7 +13,7 @@ import dedup
 import references
 
 TABS = ("all", "duplicates", "fulltext")
-CLIP = {"doi": 255, "pmid": 20, "pmcid": 20, "first_author": 200, "language": 20}  # String(n) columns on Paper
+CLIP = {"doi": 255, "pmid": 20, "pmcid": 20, "first_author": 200, "language": 100}  # String(n) columns on Paper
 
 
 class Conflict(ValueError):

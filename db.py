@@ -101,7 +101,7 @@ class Paper(Base):
     journal: Mapped[str] = mapped_column(Text, default="")
     first_author: Mapped[str] = mapped_column(String(200), default="")
     authors: Mapped[list] = mapped_column(JSON, default=list)
-    language: Mapped[str] = mapped_column(String(20), default="")
+    language: Mapped[str] = mapped_column(String(100), default="")  # "fre|eng|spa"
     pub_types: Mapped[list] = mapped_column(JSON, default=list)
     sources: Mapped[list] = mapped_column(JSON, default=list)
     dedup_reason: Mapped[str] = mapped_column(String(30), default="single")

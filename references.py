@@ -109,7 +109,7 @@ def parse_medline(text: str) -> tuple[list[Record], list[str]]:
             source="pubmed", source_key=f"PMID:{pmid}", title=strip_html(first("TI")), abstract=strip_html(first("AB")),
             authors=b.get("FAU") or b.get("AU") or [], year=_year(first("DP")), journal=first("JT") or first("TA"),
             doi=norm_doi(_ids(b.get("AID", []), "doi") or _ids(b.get("LID", []), "doi")), pmid=pmid,
-            pmcid=first("PMC"), language=first("LA"), pub_types=b.get("PT", []),
+            pmcid=first("PMC"), language="|".join(b.get("LA", [])), pub_types=b.get("PT", []),
             keywords=[k.lstrip("*") for k in b.get("MH", []) + b.get("OT", [])], raw=b))
     return recs, errs
 
