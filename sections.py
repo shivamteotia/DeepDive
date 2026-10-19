@@ -167,8 +167,8 @@ def _ask(parse: Parse, occ: list[tuple[str, list[int]]], pieces: list["Piece"]) 
 
 
 def apply_outline(pieces: list["Piece"], parse: Parse | None) -> list["Piece"]:
-    """Pieces with headings = full outline path and section set. A non-heading (a caption Docling called a heading)
-    takes the previous real heading's path, and its text is kept in the piece."""
+    """Pieces with `path` = full outline path and `section` set (`headings` stays Docling's own). A non-heading (a
+    caption Docling called a heading) takes the previous real heading's path, and its text is kept in the piece."""
     occ = occurrences(pieces)
     if not occ:
         return list(pieces)
@@ -180,7 +180,7 @@ def apply_outline(pieces: list["Piece"], parse: Parse | None) -> list["Piece"]:
         if node.is_heading:
             path, section = node.path, node.section
         for k in idx:
-            update: dict = {"headings": list(path), "section": section}
+            update: dict = {"path": list(path), "section": section}
             if not node.is_heading and k == idx[0] and not pieces[k].text.startswith(text):
                 update["text"] = f"{text}\n{pieces[k].text}"
             out[k] = pieces[k].model_copy(update=update)

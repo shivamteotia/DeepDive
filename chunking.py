@@ -12,7 +12,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-CHUNKER_VERSION = 2
+import sections
+
+CHUNKER_VERSION = 3
 CHUNK_MAX_TOKENS = 512
 TINY_TOKENS = 50
 DOC_CONTEXT_TOKENS = 8000
@@ -32,7 +34,10 @@ class Piece(BaseModel):
     headings: list[str] = []
     page_numbers: list[int] = []
     content_type: Literal["text", "table"] = "text"
-    section: str = ""  # canonical section from sections.apply_outline ("" before the outline or when unheaded)
+    # From sections.apply_outline. `headings` stays Docling's own path: regroup's front/back/reference rules read it,
+    # so a model label can never move or drop a piece; `path` (the outline) only labels the chunk.
+    path: list[str] = []
+    section: str = ""
 
 
 class DocTypeGuess(BaseModel):
@@ -142,27 +147,29 @@ class Chunk(BaseModel):
     headings: list[str]
     page_numbers: list[int]
     content_type: Literal["text", "table"]
+    section: str = ""
 
 
-def _chunk(lines: list[str], members: list[Piece], headings: list[str]) -> Chunk:
+def _chunk(lines: list[str], members: list[Piece], headings: list[str], section: str | None = None) -> Chunk:
     return Chunk(body="\n".join(lines), headings=headings,
                  page_numbers=sorted({n for p in members for n in p.page_numbers}),
-                 content_type="table" if any(p.content_type == "table" for p in members) else "text")
+                 content_type="table" if any(p.content_type == "table" for p in members) else "text",
+                 section=members[0].section if section is None else section)
 
 
-def _group_chunks(members: list[Piece], name: str, sep: str, count_tokens: CountTokens) -> list[Chunk]:
+def _group_chunks(members: list[Piece], name: str, sep: str, count_tokens: CountTokens, section: str) -> list[Chunk]:
     """Merge a group's pieces (heading kept inline), splitting at piece boundaries to stay within CHUNK_MAX_TOKENS."""
     out, lines, cur = [], [], []
     for p in members:
         h = p.headings[-1] if p.headings else ""
         line = f"{h}{sep}{p.text}" if h and not p.text.startswith(h) else p.text
         if lines and count_tokens("\n".join([*lines, line])) > CHUNK_MAX_TOKENS:
-            out.append(_chunk(lines, cur, [name]))
+            out.append(_chunk(lines, cur, [name], section))
             lines, cur = [], []
         lines.append(line)
         cur.append(p)
     if lines:
-        out.append(_chunk(lines, cur, [name]))
+        out.append(_chunk(lines, cur, [name], section))
     return out
 
 
@@ -171,8 +178,13 @@ def _merge_tiny(chunks: list[Chunk], is_body: list[bool], count_tokens: CountTok
     def mergeable(a: Chunk, b: Chunk) -> bool:
         return a.headings[:1] == b.headings[:1] and count_tokens(a.body + "\n\n" + b.body) <= CHUNK_MAX_TOKENS
 
-    def join(a: Chunk, b: Chunk, headings: list[str]) -> Chunk:
-        return Chunk(body=a.body + "\n\n" + b.body, headings=headings,
+    def body_of(c: Chunk, named: Chunk) -> str:
+        # The label carries only `named`'s path: a part from another subsection keeps its own heading inline.
+        h = c.headings[-1] if c.headings else ""
+        return f"{h}: {c.body}" if c is not named and c.headings != named.headings and h else c.body
+
+    def join(a: Chunk, b: Chunk, named: Chunk) -> Chunk:  # `named` (the larger part) gives headings and section
+        return Chunk(body=body_of(a, named) + "\n\n" + body_of(b, named), headings=named.headings, section=named.section,
                      page_numbers=sorted(set(a.page_numbers) | set(b.page_numbers)),
                      content_type="table" if "table" in (a.content_type, b.content_type) else "text")
 
@@ -182,11 +194,11 @@ def _merge_tiny(chunks: list[Chunk], is_body: list[bool], count_tokens: CountTok
         c, body = items[i]
         if body and count_tokens(c.body) < TINY_TOKENS:
             if i > 0 and items[i - 1][1] and mergeable(items[i - 1][0], c):
-                items[i - 1] = (join(items[i - 1][0], c, items[i - 1][0].headings), True)
+                items[i - 1] = (join(items[i - 1][0], c, items[i - 1][0]), True)
                 del items[i]
                 continue
             if i + 1 < len(items) and items[i + 1][1] and mergeable(c, items[i + 1][0]):
-                items[i + 1] = (join(c, items[i + 1][0], items[i + 1][0].headings), True)  # the larger part names it
+                items[i + 1] = (join(c, items[i + 1][0], items[i + 1][0]), True)  # the larger part names it
                 del items[i]
                 continue
         i += 1
@@ -225,18 +237,18 @@ def regroup(pieces: list[Piece], doc_type: DocType, count_tokens: CountTokens) -
             kinds.append(("body", p))
 
     groups = {"front": [p for k, p in kinds if k == "front"], "back": [p for k, p in kinds if k == "back"]}
-    names = {"front": ("Front matter", "\n"), "back": (back_name, ": ")}
+    names = {"front": ("Front matter", "\n", "front_matter"), "back": (back_name, ": ", "declarations")}
     out: list[Chunk] = []
     is_body: list[bool] = []
     emitted = set()
     for kind, p in kinds:
         if kind == "body":
-            out.append(_chunk([p.text], [p], p.headings))
+            out.append(_chunk([p.text], [p], p.path or p.headings))
             is_body.append(True)
         elif kind not in emitted:  # a merged group takes the position of its first piece
             emitted.add(kind)
-            name, sep = names[kind]
-            made = _group_chunks(groups[kind], name, sep, count_tokens)
+            name, sep, section = names[kind]
+            made = _group_chunks(groups[kind], name, sep, count_tokens, section)
             out += made
             is_body += [False] * len(made)
     return _merge_tiny(out, is_body, count_tokens)
@@ -281,8 +293,10 @@ def contextualize(texts: list[str], doc_text: str, parse: Parse, workers: int = 
 
 
 def build_chunks(pieces: list[Piece], *, page_count: int, title: str, count_tokens: CountTokens, parse: Parse | None,
-                 contextual: bool) -> tuple[DocType, list[dict]]:
+                 contextual: bool, outline: bool = True) -> tuple[DocType, list[dict]]:
     doc_type, reasons = classify(pieces, page_count, count_tokens, parse)
+    if outline:  # heading tree + canonical sections; classify above still sees Docling's own headings
+        pieces = sections.apply_outline(pieces, parse)
     chunks = regroup(pieces, doc_type, count_tokens)
     texts = [label(c, title, doc_type) for c in chunks]
     if contextual and parse is not None and chunks:
@@ -291,7 +305,7 @@ def build_chunks(pieces: list[Piece], *, page_count: int, title: str, count_toke
         contexts = [""] * len(chunks)
     return doc_type, [
         {"text": t, "context": ctx, "section_headings": c.headings, "page_numbers": c.page_numbers,
-         "content_type": c.content_type, "doc_type": doc_type, "doc_type_reasons": reasons, "paper_title": title,
+         "content_type": c.content_type, "section": c.section, "doc_type": doc_type, "doc_type_reasons": reasons, "paper_title": title,
          "chunker_version": CHUNKER_VERSION}
         for c, t, ctx in zip(chunks, texts, contexts, strict=True)
     ]

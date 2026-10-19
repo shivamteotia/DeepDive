@@ -44,7 +44,7 @@ def test_occurrences_split_repeated_headings_and_skip_unheaded_pieces():
 
 def test_outline_builds_paths_with_virtual_section_parents():
     out = sections.apply_outline(JPAN, FakeParse({sections.Outline: JPAN_OUTLINE}))
-    assert [p.headings for p in out[1:7]] == [["Abstract"], ["Introduction"], ["Methods", "Study design"],
+    assert [p.path for p in out[1:7]] == [["Abstract"], ["Introduction"], ["Methods", "Study design"],
                                               ["Methods", "Study design", "Statistical analysis"],
                                               ["Results", "Basic demographic characteristics"], ["Discussion"]]
     assert [p.section for p in out[1:7]] == ["abstract", "introduction", "methods", "methods", "results", "discussion"]
@@ -53,7 +53,7 @@ def test_outline_builds_paths_with_virtual_section_parents():
 
 def test_non_heading_takes_previous_path_and_keeps_its_text():
     fig = sections.apply_outline(JPAN, FakeParse({sections.Outline: JPAN_OUTLINE}))[7]
-    assert fig.headings == ["Discussion"] and fig.section == "discussion" and fig.text.startswith("Figure 1.\n")
+    assert fig.path == ["Discussion"] and fig.section == "discussion" and fig.text.startswith("Figure 1.\n")
 
 
 def test_numbering_beats_the_model_and_bad_parents_are_repaired():
@@ -77,19 +77,19 @@ def test_children_inherit_the_parent_section():
 def test_without_a_model_sections_come_from_heading_names():
     out = sections.apply_outline([P("x", "Materials and Methods"), P("y", "2.1 Cohort"), P("z", "Weird")], None)
     assert [p.section for p in out] == ["methods", "methods", "other"]  # "2.1" has no "2": nearest lower-level heading
-    assert out[1].headings == ["Materials and Methods", "2.1 Cohort"]
+    assert out[1].path == ["Materials and Methods", "2.1 Cohort"]
 
 
 def test_failed_or_missing_outline_falls_back_without_raising():
     for parse in (FakeParse({sections.Outline: RuntimeError("down")}), FakeParse({}),
                   FakeParse({sections.Outline: sections.Outline(headings=[])})):
-        assert sections.apply_outline(JPAN, parse)[1].headings == ["Abstract"]
+        assert sections.apply_outline(JPAN, parse)[1].path == ["Abstract"]
 
 
 def test_all_non_headings_leave_leading_pieces_unheaded():
     allno = sections.Outline(headings=[info(i, is_heading=False) for i in range(7)])
     out = sections.apply_outline(JPAN, FakeParse({sections.Outline: allno}))
-    assert out[1].headings == [] and out[1].text.startswith("Abstract\n")
+    assert out[1].path == [] and out[1].text.startswith("Abstract\n")
 
 
 def test_headings_are_sent_as_quoted_json_data():

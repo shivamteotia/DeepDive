@@ -163,7 +163,7 @@ def ensure_collection(qdrant: QdrantClient, collection: str, dim: int) -> None:
         )
     elif not has_sparse(qdrant, collection):
         raise ValueError(f"collection {collection!r} has no {SPARSE_VECTOR!r} keyword vector; {MIGRATE_HINT}")
-    for field in ("project_id", "document_sha256"):
+    for field in ("project_id", "document_sha256", "section"):
         qdrant.create_payload_index(collection, field, models.PayloadSchemaType.KEYWORD)
     # Qdrant Cloud may refuse filters on unindexed fields; already_indexed filters on the chunker version.
     qdrant.create_payload_index(collection, "chunker_version", models.PayloadSchemaType.INTEGER)
