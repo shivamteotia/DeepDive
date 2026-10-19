@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 import auth
 import db
+import funnel
 import jobs
 from config import Settings
 
@@ -93,6 +94,10 @@ class RunIn(BaseModel):
     max_iterations: int = Field(3, ge=1, le=5)
     conversation_id: uuid.UUID | None = None
     web_search: bool = False
+
+
+class DuplicateAction(BaseModel):
+    action: Literal["merge", "dismiss", "keep_article"]
 
 
 class ConversationIn(BaseModel):
@@ -356,6 +361,48 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         r = run.result or {}
         return {"status": r.get("status"), "claims": r.get("claims", []), "gaps": r.get("gaps", ""),
                 "iterations": [public_iteration(e) for e in r.get("log", []) if e.get("step") == "verify"]}
+
+    # --- screening funnel: reference imports and papers ---
+
+    @app.post("/api/v1/projects/{project_id}/reference-files", status_code=201)
+    def upload_reference_file(file: UploadFile, response: Response, project: OwnedProject, s: DB):
+        data = file.file.read(MAX_UPLOAD_BYTES + 1)
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "File too large")
+        try:
+            summary, created = funnel.import_file(s, project.id, display_name(file.filename), data)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        except IntegrityError:  # the same file imported concurrently: the other request won
+            s.rollback()
+            summary, created = funnel.import_file(s, project.id, display_name(file.filename), data)
+        if not created:
+            response.status_code = 200
+        return summary
+
+    @app.get("/api/v1/projects/{project_id}/papers")
+    def list_papers(project: OwnedProject, s: DB, tab: Literal[funnel.TABS] = "all",
+                    offset: Annotated[int, Field(ge=0)] = 0, limit: Annotated[int, Field(ge=1, le=500)] = 50):
+        return funnel.list_papers(s, project.id, tab, offset, limit)
+
+    @app.post("/api/v1/projects/{project_id}/papers/{paper_id}/split")
+    def split_paper(paper_id: uuid.UUID, project: OwnedProject, s: DB):
+        out = funnel.split(s, project.id, paper_id)
+        if out is None:
+            raise HTTPException(404, "Paper not found")
+        if not out:
+            raise HTTPException(409, "This paper has only one reference")
+        return {"papers": out}
+
+    @app.post("/api/v1/projects/{project_id}/possible-duplicates/{dup_id}")
+    def resolve_duplicate(dup_id: uuid.UUID, body: DuplicateAction, project: OwnedProject, s: DB):
+        try:
+            out = funnel.resolve_duplicate(s, project.id, dup_id, body.action)
+        except funnel.Conflict as e:
+            raise HTTPException(409, str(e)) from None
+        if out is None:
+            raise HTTPException(404, "Possible duplicate not found")
+        return out
 
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 

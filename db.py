@@ -74,6 +74,70 @@ class ResearchRun(Base):
     standalone_question: Mapped[str | None] = mapped_column(Text)
 
 
+class ReferenceImport(Base):
+    """One uploaded reference export (.bib / .nbib). The same file twice in a project imports nothing."""
+    __tablename__ = "reference_imports"
+    __table_args__ = (UniqueConstraint("project_id", "sha256"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    sha256: Mapped[str] = mapped_column(String(64))
+    record_count: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Paper(Base):
+    """A deduplicated paper: canonical fields from its best reference; its references point here."""
+    __tablename__ = "papers"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    title: Mapped[str] = mapped_column(Text)
+    abstract: Mapped[str] = mapped_column(Text, default="")
+    year: Mapped[int | None] = mapped_column(Integer)
+    doi: Mapped[str] = mapped_column(String(255), default="")
+    pmid: Mapped[str] = mapped_column(String(20), default="")
+    pmcid: Mapped[str] = mapped_column(String(20), default="")
+    journal: Mapped[str] = mapped_column(Text, default="")
+    first_author: Mapped[str] = mapped_column(String(200), default="")
+    authors: Mapped[list] = mapped_column(JSON, default=list)
+    language: Mapped[str] = mapped_column(String(20), default="")
+    pub_types: Mapped[list] = mapped_column(JSON, default=list)
+    sources: Mapped[list] = mapped_column(JSON, default=list)
+    dedup_reason: Mapped[str] = mapped_column(String(30), default="single")
+    document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    fulltext_status: Mapped[str] = mapped_column(String(30), default="not_tried")
+    fulltext_url: Mapped[str | None] = mapped_column(Text)
+    fulltext_license: Mapped[str | None] = mapped_column(String(100))
+    # A preprint the user replaced by its journal article ("keep the journal article"): kept on record, not screened.
+    superseded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("papers.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Reference(Base):
+    """One source record from an import. `pinned` = placed by the user (split/merge): dedup never moves it."""
+    __tablename__ = "references"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    import_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reference_imports.id"), index=True)
+    paper_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("papers.id", ondelete="SET NULL"), index=True)
+    source: Mapped[str] = mapped_column(String(20))
+    source_key: Mapped[str] = mapped_column(String(255))
+    fields: Mapped[dict] = mapped_column(JSON)  # references.Record without raw
+    raw: Mapped[dict] = mapped_column(JSON)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class PossibleDuplicate(Base):
+    __tablename__ = "possible_duplicates"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    paper_a: Mapped[uuid.UUID] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"))
+    paper_b: Mapped[uuid.UUID] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"))
+    similarity: Mapped[float] = mapped_column(default=0.0)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 # Columns added after research_runs existed. create_all never alters a table, so add them in place (Postgres only:
 # SQLite is used by tests and always starts from fresh tables).
 ADDED_COLUMNS = [

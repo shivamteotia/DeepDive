@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     hybrid_search: bool = False  # dense + bm25 keyword search fused by RRF; needs a migrated collection (ingest.py --migrate-to)
     contextual_chunks: bool = True  # LLM-written search context per chunk at ingest (never shown as evidence)
     openai_context_model: str = ""  # cheap model for chunk context + doc-type tie-break; "" = OPENAI_FAST_MODEL
+    openai_screen_model: str = ""  # title/abstract screening + criteria drafting; "" = OPENAI_FAST_MODEL
+    unpaywall_email: str = ""  # Unpaywall requires a contact email; "" = skip Unpaywall (Europe PMC only)
+    fulltext_max_mb: int = 50  # open-access PDF download cap
     reranker_model: str = ""  # "" = off; "jina:<model>" = hosted Jina; otherwise a local Hugging Face cross-encoder id
     jena_ai_api_key: str = ""  # env var is spelled Jena_AI_API_KEY (Jina AI); matching is case-insensitive
     database_url: str
