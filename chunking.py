@@ -32,6 +32,7 @@ class Piece(BaseModel):
     headings: list[str] = []
     page_numbers: list[int] = []
     content_type: Literal["text", "table"] = "text"
+    section: str = ""  # canonical section from sections.apply_outline ("" before the outline or when unheaded)
 
 
 class DocTypeGuess(BaseModel):
