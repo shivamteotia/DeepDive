@@ -8,3 +8,6 @@ data/
 CLAUD.md.deepeval/
 docker-compose.yml
 uv.lock
+
+# brainstorming companion, SDD ledgers and review packages (local only)
+.superpowers/
