@@ -2,6 +2,7 @@
 split and merge. Every function takes the server-checked project id; nothing here trusts a client-supplied project."""
 
 import hashlib
+import threading
 import time
 import uuid
 from collections import Counter
@@ -509,7 +510,6 @@ def _write_batch(sessions: sessionmaker, project_id: uuid.UUID, version: int, cr
             d.verdicts, d.ai_decision = [v.model_dump() for v in verdicts], sc.decide(criteria, verdicts, bool(paper["abstract"]))
             d.disagrees = bool(d.human_decision and d.human_decision != d.ai_decision)
             counts[d.ai_decision] += 1
-            counts["calls"] += bool(ask)
         s.commit()
     return counts
 
@@ -520,16 +520,23 @@ def screen_all(sessions: sessionmaker, project_id: uuid.UUID, version: int, pars
     with sessions() as s:
         criteria, todo = _screen_plan(s, project_id, version)
     counts: Counter = Counter()
+    calls, lock = [0], threading.Lock()
+
+    def counted(*args):  # the real number of model calls (metadata exclusions make none)
+        with lock:
+            calls[0] += 1
+        return parse(*args)
+
     with ThreadPoolExecutor(max_workers=sc.SCREEN_WORKERS) as pool:
         for i in range(0, len(todo), SCREEN_BATCH):
             batch = todo[i:i + SCREEN_BATCH]
-            asked = list(pool.map(lambda t: sc.screen_paper(parse, t[0], t[2]) if t[2] else [], batch))
+            asked = list(pool.map(lambda t: sc.screen_paper(counted, t[0], t[2]) if t[2] else [], batch))
             try:
                 counts += _write_batch(sessions, project_id, version, criteria, batch, asked)
             except IntegrityError:  # a user decision or an import landed between our read and commit: re-read once
                 counts += _write_batch(sessions, project_id, version, criteria, batch, asked)
     return {"screened": counts["include"] + counts["exclude"] + counts["review"], "include": counts["include"],
-            "exclude": counts["exclude"], "review": counts["review"], "calls": counts["calls"]}
+            "exclude": counts["exclude"], "review": counts["review"], "calls": calls[0]}
 
 
 def action_out(a: db.PendingAction) -> dict:

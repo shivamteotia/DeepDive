@@ -367,3 +367,11 @@ def test_extracted_values_are_counted_for_the_agent(api, signup):
     with api.maxrim.sessions() as s:
         out = agent._status(agent.ToolContext(s=s, project_id=uuid.UUID(pid), parse=None, ask_research=None), None)
     assert out["extracted"]["Study design (c6)"] == {"retrospective cohort": 10, "RCT": 18, "no answer": 1}
+
+
+def test_screen_all_reports_real_model_calls(api, signup):
+    h, pid, llm = setup(api, signup)
+    draft(api, h, pid)
+    r = screen(api, h, pid)
+    result = api.get(f"/api/v1/actions/{r.json()['id']}", headers=h).json()["result"]
+    assert result["calls"] == len(llm.screen_calls) == 29  # the 2010 paper is excluded free, without a call
