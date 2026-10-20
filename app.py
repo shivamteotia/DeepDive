@@ -110,7 +110,7 @@ class CriteriaIn(BaseModel):
 
 
 class ActionIn(BaseModel):
-    tool: Literal["screen_all"]  # fetch_full_text joins with its job (Task 6)
+    tool: Literal["screen_all", "fetch_full_text"]
 
 
 class FeedbackIn(BaseModel):
@@ -263,8 +263,9 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
     def find_document(s: Session, project_id: uuid.UUID, sha: str) -> db.Document | None:
         return s.scalar(select(db.Document).where(db.Document.project_id == project_id, db.Document.sha256 == sha))
 
-    @app.post("/api/v1/projects/{project_id}/documents", status_code=202, response_model=DocumentOut)
-    def upload_document(file: UploadFile, response: Response, project: OwnedProject, s: DB):
+    def store_pdf(file: UploadFile, project: db.Project, s: Session) -> tuple[db.Document, bool]:
+        """Save an uploaded PDF as the project's document. (document, queued): queued=False when the same file is
+        already queued, processing or ready (no duplicate); the caller submits the ingest job when queued."""
         folder = state.upload_dir / str(project.id)
         folder.mkdir(parents=True, exist_ok=True)
         tmp = folder / f".upload-{uuid.uuid4().hex}"
@@ -272,8 +273,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             sha = save_pdf(file, tmp)
             doc = find_document(s, project.id, sha)
             if doc is not None and doc.status != "failed":
-                response.status_code = 200  # same file already queued, processing or ready: no duplicate
-                return doc
+                return doc, False
             tmp.replace(folder / f"{sha}.pdf")
         finally:
             tmp.unlink(missing_ok=True)
@@ -286,9 +286,38 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             s.commit()
         except IntegrityError:  # the same file was uploaded concurrently; return the row that won
             s.rollback()
+            return find_document(s, project.id, sha), False
+        return doc, True
+
+    @app.post("/api/v1/projects/{project_id}/documents", status_code=202, response_model=DocumentOut)
+    def upload_document(file: UploadFile, response: Response, project: OwnedProject, s: DB):
+        doc, queued = store_pdf(file, project, s)
+        if queued:
+            state.ingest_pool.submit(jobs.ingest_document, state, doc.id)
+        else:
             response.status_code = 200
-            return find_document(s, project.id, sha)
-        state.ingest_pool.submit(jobs.ingest_document, state, doc.id)
+        return doc
+
+    @app.post("/api/v1/projects/{project_id}/papers/{paper_id}/pdf", status_code=202, response_model=DocumentOut)
+    def upload_paper_pdf(paper_id: uuid.UUID, file: UploadFile, response: Response, project: OwnedProject, s: DB):
+        """The user's own copy of a paper's PDF (e.g. one with no free copy): linked to that paper, then ingested."""
+        paper = s.get(db.Paper, paper_id)
+        if paper is None or paper.project_id != project.id:
+            raise HTTPException(404, "Paper not found")
+        current = s.get(db.Document, paper.document_id) if paper.document_id else None
+        if current is not None and current.status != "failed":  # never silently replace a paper's PDF
+            raise HTTPException(409, "This paper already has a PDF")
+        doc, queued = store_pdf(file, project, s)
+        if funnel.linked_elsewhere(s, doc.id, paper.id):
+            if queued:  # a failed copy re-queued by this upload: ingest it for the paper it belongs to
+                state.ingest_pool.submit(jobs.ingest_document, state, doc.id)
+            raise HTTPException(409, "This PDF is already linked to another paper")
+        funnel.link_document(paper, doc.id, "uploaded")
+        s.commit()
+        if queued:
+            state.ingest_pool.submit(jobs.ingest_document, state, doc.id)
+        else:
+            response.status_code = 200
         return doc
 
     @app.get("/api/v1/projects/{project_id}/documents/{document_id}", response_model=DocumentOut)
@@ -519,7 +548,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             raise HTTPException(409, "Another screening run is in progress")
         if not jobs.claim(s, db.PendingAction, a.id, "pending", "confirmed"):
             raise HTTPException(409, "This action was already confirmed")
-        state.research_pool.submit(jobs.screen_all, state, a.id)
+        state.research_pool.submit(jobs.screen_all if a.tool == "screen_all" else jobs.fetch_full_text, state, a.id)
         s.refresh(a)
         return funnel.action_out(a)
 

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import db
 import dedup
+import fulltext
 import references
 import screening as sc
 
@@ -519,8 +520,50 @@ def propose(s: Session, project_id: uuid.UUID, tool: str) -> dict:
     version = latest_version(s, project_id)
     if version is None:
         raise Conflict("No screening criteria yet")
+    estimate = (screen_estimate(s, project_id, version) if tool == "screen_all"
+                else {"papers": len(included_without_pdf(s, project_id))})
     a = db.PendingAction(project_id=project_id, tool=tool, args={}, criteria_version=version, status="pending",
-                         estimate=screen_estimate(s, project_id, version))
+                         estimate=estimate)
     s.add(a)
     s.commit()
     return action_out(a)
+
+
+# --- full text ---
+
+def included_without_pdf(s: Session, project_id: uuid.UUID) -> list[db.Paper]:
+    """Papers whose final decision (latest criteria) is include and that have no usable PDF yet (none, or one whose
+    ingest failed: fetching again re-queues it)."""
+    q = _decision_join(select(db.Paper), latest_version(s, project_id)).outerjoin(
+        db.Document, db.Document.id == db.Paper.document_id).where(
+        db.Paper.project_id == project_id, db.Paper.superseded_by.is_(None), _final() == "include",
+        or_(db.Paper.document_id.is_(None), db.Document.status == "failed"))
+    return list(s.scalars(q.order_by(db.Paper.created_at, db.Paper.id)))
+
+
+def linked_elsewhere(s: Session, doc_id: uuid.UUID, paper_id: uuid.UUID) -> bool:
+    """The document already is another paper's PDF (one PDF never stands for two papers)."""
+    return s.scalar(select(db.Paper.id).where(db.Paper.document_id == doc_id, db.Paper.id != paper_id).limit(1)) is not None
+
+
+def link_document(paper: db.Paper, doc_id: uuid.UUID, status: str, url: str | None = None,
+                  license: str | None = None) -> None:
+    paper.document_id, paper.fulltext_status, paper.fulltext_url, paper.fulltext_license = doc_id, status, url, license
+
+
+def match_document(s: Session, project_id: uuid.UUID, doc_id: uuid.UUID, first_page: str) -> uuid.UUID | None:
+    """Link an uploaded PDF to the included paper its first page names, if exactly one confidently matches and the
+    document is not linked yet. Candidates: included papers still without a PDF (tens, not the whole export)."""
+    if not first_page or s.scalar(select(db.Paper.id).where(db.Paper.document_id == doc_id).limit(1)) is not None:
+        return None
+    papers = [p for p in included_without_pdf(s, project_id) if p.document_id is None]
+    hit = fulltext.match_upload(first_page, [{"id": str(p.id), "title": p.title, "doi": p.doi} for p in papers])
+    if hit is None:
+        return None
+    paper = s.get(db.Paper, uuid.UUID(hit), with_for_update=True, populate_existing=True)  # fresh after the lock
+    if paper is None or paper.document_id is not None:  # linked meanwhile (fetch or explicit upload)
+        s.rollback()
+        return None
+    link_document(paper, doc_id, "uploaded")
+    s.commit()
+    return paper.id

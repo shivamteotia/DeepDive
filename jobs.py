@@ -3,6 +3,8 @@
 Jobs run on the API's own executors (1 ingest thread, RESEARCH_WORKERS research threads), never on the threadpool that
 serves requests, so a batch of uploads queues instead of freezing the API."""
 
+import hashlib
+import logging
 import multiprocessing
 import threading
 import time
@@ -11,15 +13,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 import ask
 import db
+import fulltext
 import funnel
 import research
 import web
 from config import Settings
 
+log = logging.getLogger(__name__)
 RESTART_ERROR = "interrupted by server restart"
 RESEARCH_K = 6
 RESEARCH_WORKERS = 2
@@ -37,6 +42,7 @@ class State:
     upload_dir: Path
     ingest_pool: object = None  # executor with .submit(fn, *args) / .shutdown(...)
     research_pool: object = None
+    http_transport: object = None  # tests: an httpx MockTransport for full-text fetching
 
 
 def ingest_in_child(project_id: str, pdf_path: str, filename: str, collection: str) -> dict:
@@ -55,7 +61,7 @@ def ingest_in_child(project_id: str, pdf_path: str, filename: str, collection: s
     f = ingest.doc_filter(project_id, ingest.sha256_file(path))
     first, _ = qdrant.scroll(collection, scroll_filter=f, limit=1, with_payload=["doc_type"])
     return {"chunk_count": qdrant.count(collection, count_filter=f, exact=True).count,
-            "doc_type": first[0].payload.get("doc_type") if first else None}
+            "doc_type": first[0].payload.get("doc_type") if first else None, "first_page": fulltext.first_page_text(pdf_path)}
 
 
 class IngestFailed(RuntimeError):
@@ -150,6 +156,7 @@ def ingest_document(state: State, document_id: uuid.UUID) -> None:
         if not claim(s, db.Document, document_id, "queued", "processing"):
             return
         doc = s.get(db.Document, document_id)
+        project_id = doc.project_id
         args = (str(doc.project_id), str(state.upload_dir / str(doc.project_id) / f"{doc.sha256}.pdf"), doc.filename,
                 state.settings.qdrant_collection)
     try:
@@ -160,6 +167,8 @@ def ingest_document(state: State, document_id: uuid.UUID) -> None:
     with state.sessions() as s:
         s.execute(update(db.Document).where(db.Document.id == document_id).values(**values))
         s.commit()
+        if values["status"] == "ready":  # an upload that names one of the project's papers gets linked to it
+            funnel.match_document(s, project_id, document_id, out.get("first_page") or "")
 
 
 def run_research(state: State, run_id: uuid.UUID) -> None:
@@ -219,6 +228,96 @@ def screen_all(state: State, action_id: uuid.UUID) -> None:
                   "result": funnel.screen_all(state.sessions, project_id, version, screen_parse(state))}
     except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the action
         values = {"status": "failed", "error": short_error(exc, state.settings)}
+    with state.sessions() as s:
+        s.execute(update(db.PendingAction).where(db.PendingAction.id == action_id).values(**values))
+        s.commit()
+
+
+def save_fetched_pdf(state: State, project_id: uuid.UUID, data: bytes, filename: str) -> tuple[uuid.UUID, bool]:
+    """Store a downloaded PDF as the project's document (once per file). (document id, queued for ingest): a new
+    document, or a re-queued one whose earlier ingest failed."""
+    sha = hashlib.sha256(data).hexdigest()
+    folder = state.upload_dir / str(project_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{sha}.pdf"
+    tmp = folder / f".fetch-{uuid.uuid4().hex}"
+    tmp.write_bytes(data)
+    tmp.replace(path)  # atomic: a crash never leaves a truncated {sha}.pdf behind
+    for _ in range(2):  # a concurrent upload of the same bytes may win the insert; then use its row
+        with state.sessions() as s:
+            doc = s.scalar(select(db.Document).where(db.Document.project_id == project_id, db.Document.sha256 == sha))
+            if doc is not None:
+                if doc.status != "failed":
+                    return doc.id, False
+                doc.status, doc.error, doc.chunk_count = "queued", None, None
+                s.commit()
+                return doc.id, True
+            doc = db.Document(project_id=project_id, filename=filename[:255], sha256=sha)
+            s.add(doc)
+            try:
+                s.commit()
+                return doc.id, True
+            except IntegrityError:
+                s.rollback()
+    raise RuntimeError("could not store the fetched PDF")
+
+
+def _fetch_one(state: State, http, project_id: uuid.UUID, p: dict) -> tuple[str, uuid.UUID | None]:
+    """("found" | "not_found" | "skipped", document id to ingest). A candidate PDF already standing for another
+    paper (a repository's generic file) is passed over."""
+    cfg = state.settings
+    for f in fulltext.find_pdfs(http, p, cfg.unpaywall_email):
+        data = fulltext.download(http, f.url, cfg.fulltext_max_mb * 1024 * 1024)
+        if not data:
+            continue
+        sha = hashlib.sha256(data).hexdigest()
+        with state.sessions() as s:
+            doc_id = s.scalar(select(db.Document.id).where(db.Document.project_id == project_id, db.Document.sha256 == sha))
+            if doc_id is not None and funnel.linked_elsewhere(s, doc_id, uuid.UUID(p["id"])):
+                continue
+        doc_id, queued = save_fetched_pdf(state, project_id, data, f"{p['title'][:200]}.pdf")
+        with state.sessions() as s:
+            paper = s.get(db.Paper, uuid.UUID(p["id"]), with_for_update=True, populate_existing=True)
+            if paper is None or (paper.document_id not in (None, doc_id) and paper.fulltext_status == "uploaded"):
+                return "skipped", queued and doc_id  # regrouped away, or the user uploaded one meanwhile
+            if funnel.linked_elsewhere(s, doc_id, paper.id):
+                if queued:  # re-queued for the paper it belongs to: still ingest it
+                    state.ingest_pool.submit(ingest_document, state, doc_id)
+                continue
+            funnel.link_document(paper, doc_id, "open_access_found", f.url, f.license)
+            s.commit()
+        return "found", doc_id if queued else None
+    with state.sessions() as s:
+        paper = s.get(db.Paper, uuid.UUID(p["id"]), with_for_update=True)
+        if paper is not None and paper.document_id is None:
+            paper.fulltext_status = "not_found"
+            s.commit()
+    return "not_found", None
+
+
+def fetch_full_text(state: State, action_id: uuid.UUID) -> None:
+    """Runs a confirmed fetch_full_text PendingAction: a free PDF for each included paper that has none; the PDF
+    goes through the normal ingest job. ponytail: one paper at a time, polite to the free APIs."""
+    with state.sessions() as s:
+        if not claim(s, db.PendingAction, action_id, "confirmed", "running"):
+            return
+        project_id = s.get(db.PendingAction, action_id).project_id
+        papers = [funnel.paper_out(p) for p in funnel.included_without_pdf(s, project_id)]
+    counts = {"found": 0, "not_found": 0, "skipped": 0, "errors": 0}
+    try:
+        with fulltext.client(state.http_transport) as http:
+            for p in papers:
+                try:
+                    outcome, queue = _fetch_one(state, http, project_id, p)
+                except Exception as exc:  # noqa: BLE001 — one paper's failure (disk, database) must not stop the rest
+                    log.warning("full-text fetch failed for one paper: %s", type(exc).__name__)
+                    outcome, queue = "errors", None
+                counts[outcome] += 1
+                if queue:
+                    state.ingest_pool.submit(ingest_document, state, queue)
+        values = {"status": "done", "error": None, "result": counts}
+    except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the action
+        values = {"status": "failed", "error": short_error(exc, state.settings), "result": counts}
     with state.sessions() as s:
         s.execute(update(db.PendingAction).where(db.PendingAction.id == action_id).values(**values))
         s.commit()

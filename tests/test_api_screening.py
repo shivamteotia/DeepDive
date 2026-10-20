@@ -1,4 +1,5 @@
 import json
+import threading
 from types import SimpleNamespace
 
 import screening as sc
@@ -264,10 +265,10 @@ def test_a_decision_made_during_a_run_does_not_fail_it(api, signup, monkeypatch)
     h, pid, llm = setup(api, signup)
     draft(api, h, pid)
     target = by_pmid(all_papers(api, h, pid))["1027"]["id"]
-    real = llm.parse
+    real, once = llm.parse, threading.Lock()
 
     def parse_and_decide(*a, **kw):  # the user decides on a later paper while the first batch is being screened
-        if not llm.screen_calls:
+        if once.acquire(blocking=False):  # exactly one request: the test DB is one SQLite connection shared by threads
             decide_on(api, h, pid, target, decision="include", reason="mid-run")
         return real(*a, **kw)
 
