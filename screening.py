@@ -174,19 +174,24 @@ def _norm(s: str) -> str:
 _QUOTE_MARKS = " .,;:\"'“”‘’«»"
 
 
-def _quote_ok(v: Verdict, c: Criterion, text: str) -> bool:
-    """The quote is whole words of the title/abstract (wrapping quote marks ignored; parts around an ellipsis must
-    appear in order); a verdict that would exclude needs a few words."""
-    parts = [x.strip(_QUOTE_MARKS) for x in re.split(r"\.{3,}|…", _norm(v.quote))]
+def quote_words(quote: str, text: str) -> int | None:
+    """How many words of the quote appear as whole words of text (normalised; wrapping quote marks ignored; parts around
+    an ellipsis must appear in order), or None if it is not found."""
+    parts = [x.strip(_QUOTE_MARKS) for x in re.split(r"\.{3,}|…", _norm(quote))]
     parts = [x for x in parts if x]
     pos = 0
     for part in parts:
         m = re.compile(rf"(?<![\w-]){re.escape(part)}(?![\w-])").search(text, pos)
         if m is None:
-            return False
+            return None
         pos = m.end()
-    words = sum(len(x.split()) for x in parts)
-    return bool(parts) and (not excludes(c, v) or words >= MIN_EXCLUDING_QUOTE_WORDS)
+    return sum(len(x.split()) for x in parts) or None
+
+
+def _quote_ok(v: Verdict, c: Criterion, text: str) -> bool:
+    """The quote is whole words of the title/abstract; a verdict that would exclude needs a few words."""
+    words = quote_words(v.quote, text)
+    return words is not None and (not excludes(c, v) or words >= MIN_EXCLUDING_QUOTE_WORDS)
 
 
 def _meta_or_error(c: Criterion, paper: dict) -> Verdict | None:

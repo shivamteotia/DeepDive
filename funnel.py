@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import db
 import dedup
+import extraction
 import fulltext
 import references
 import screening as sc
@@ -228,8 +229,10 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
         q = _decision_join(q, version).where(_final() == _TAB_DECISION[tab])
     rows = list(s.scalars(q.order_by(db.Paper.created_at, db.Paper.id).offset(offset).limit(limit)))
     dec = _decisions(s, version, [p.id for p in rows])
+    cols = {} if blind else paper_columns(s, project_id, [p.id for p in rows])  # extracted values hint at decisions
     return {"total": tab_counts[tab], "counts": tab_counts, "criteria_version": version, "references": counts["references"],
-            "items": [_blinded(paper_out(p), blind) | decision_fields(dec.get(p.id), blind) for p in rows]}
+            "items": [_blinded(paper_out(p), blind) | decision_fields(dec.get(p.id), blind)
+                      | ({} if blind else {"columns": cols.get(p.id, {})}) for p in rows]}
 
 
 def _blinded(paper: dict, blind: bool) -> dict:
@@ -545,14 +548,41 @@ def action_out(a: db.PendingAction) -> dict:
             "error": a.error, "created_at": a.created_at}
 
 
-def propose(s: Session, project_id: uuid.UUID, tool: str) -> dict:
-    """A pending action with its estimate; nothing runs until the owner confirms it. Conflict without criteria."""
+class Invalid(ValueError):
+    """The request is malformed for this data (e.g. extracting from the duplicates tab)."""
+
+
+EXTRACT_TABS = ("all", "included", "review", "excluded", "fulltext")
+
+
+class NotFound(LookupError):
+    """A referenced row (e.g. an extraction column) is not in this project."""
+
+
+def propose(s: Session, project_id: uuid.UUID, tool: str, args: dict | None = None) -> dict:
+    """A pending action with its estimate; nothing runs until the owner confirms it. Conflict without criteria (an
+    extraction on the "all" tab needs none); NotFound for a column of another project."""
+    args = dict(args or {})
     version = latest_version(s, project_id)
-    if version is None:
-        raise Conflict("No screening criteria yet")
-    estimate = (screen_estimate(s, project_id, version) if tool == "screen_all"
-                else {"papers": len(included_without_pdf(s, project_id))})
-    a = db.PendingAction(project_id=project_id, tool=tool, args={}, criteria_version=version, status="pending",
+    if tool == "extract_column":
+        col = project_column(s, project_id, args.get("column_id"))
+        if col is None:
+            raise NotFound("Column not found")
+        tab = args.get("tab") or "included"
+        if tab not in EXTRACT_TABS:
+            raise Invalid(f"Extract from one of: {', '.join(EXTRACT_TABS)}")
+        if version is None and tab in _TAB_DECISION:
+            raise Conflict("No screening decisions yet: extract from the 'all' tab, or screen first")
+        targets = extract_targets(s, project_id, col.id, tab)
+        args = {"column_id": str(col.id), "tab": tab, "paper_ids": [p["id"] for p, _ in targets]}  # never more on confirm
+        estimate = {"papers": len(targets), "column": col.name, "tab": args["tab"],
+                    **extraction.estimate([p for p, _ in targets], sum(bool(sha) for _, sha in targets))}
+    else:
+        if version is None:
+            raise Conflict("No screening criteria yet")
+        estimate = (screen_estimate(s, project_id, version) if tool == "screen_all"
+                    else {"papers": len(included_without_pdf(s, project_id))})
+    a = db.PendingAction(project_id=project_id, tool=tool, args=args, criteria_version=version, status="pending",
                          estimate=estimate)
     s.add(a)
     s.commit()
@@ -615,3 +645,103 @@ def extracted_counts(s: Session, project_id: uuid.UUID) -> dict[str, dict[str, i
             if v["criterion_id"] in fields:
                 out[fields[v["criterion_id"]]][v.get("value") or "no answer"] += 1
     return {name: dict(c.most_common()) for name, c in out.items()}
+
+
+# --- data extraction columns ---
+
+def column_out(c: db.ExtractColumn) -> dict:
+    return {"id": str(c.id), "name": c.name, "instruction": c.instruction, "kind": c.kind, "options": c.options,
+            "created_at": c.created_at}
+
+
+def add_column(s: Session, project_id: uuid.UUID, col: extraction.Column) -> dict:
+    """Conflict when the project already has a column of that name (values are shown by name)."""
+    taken = {n.casefold() for n in s.scalars(select(db.ExtractColumn.name).where(db.ExtractColumn.project_id == project_id))}
+    if " ".join(col.name.split()).casefold() in taken:
+        raise Conflict(f"There is already a column named {col.name.strip()!r}")
+    c = db.ExtractColumn(project_id=project_id, name=col.name.strip()[:200], instruction=col.instruction.strip(),
+                         kind=col.kind, options=[o.strip() for o in col.options] if col.options else None)
+    s.add(c)
+    s.commit()
+    return column_out(c)
+
+
+def project_column(s: Session, project_id: uuid.UUID, column_id: uuid.UUID | str | None) -> db.ExtractColumn | None:
+    try:
+        c = s.get(db.ExtractColumn, uuid.UUID(str(column_id))) if column_id else None
+    except ValueError:
+        return None
+    return c if c is not None and c.project_id == project_id else None
+
+
+def list_columns(s: Session, project_id: uuid.UUID) -> list[dict]:
+    rows = s.scalars(select(db.ExtractColumn).where(db.ExtractColumn.project_id == project_id)
+                     .order_by(db.ExtractColumn.created_at))
+    filled = dict(s.execute(select(db.ExtractValue.column_id, func.count()).where(
+        db.ExtractValue.project_id == project_id).group_by(db.ExtractValue.column_id)).all())
+    return [column_out(c) | {"filled": filled.get(c.id, 0)} for c in rows]
+
+
+def column_values(s: Session, c: db.ExtractColumn) -> dict:
+    rows = s.execute(select(db.ExtractValue, db.Paper.title).join(db.Paper, db.Paper.id == db.ExtractValue.paper_id)
+                     .where(db.ExtractValue.column_id == c.id).order_by(db.Paper.created_at, db.Paper.id)).all()
+    values = [{"paper_id": str(v.paper_id), "title": title, "value": v.value, "quote": v.quote, "reason": v.reason,
+               "source": v.source} for v, title in rows]
+    return column_out(c) | {"values": values, "counts": dict(Counter(v["value"] for v in values).most_common(30))}
+
+
+def _papers_in_tab(s: Session, project_id: uuid.UUID, tab: str) -> list[db.Paper]:
+    q = select(db.Paper).where(db.Paper.project_id == project_id, db.Paper.superseded_by.is_(None))
+    if tab in _TAB_DECISION:
+        q = _decision_join(q, latest_version(s, project_id)).where(_final() == _TAB_DECISION[tab])
+    elif tab == "fulltext":
+        q = q.where(db.Paper.fulltext_status != "not_tried")
+    return list(s.scalars(q.order_by(db.Paper.created_at, db.Paper.id)))
+
+
+def _naive(t):
+    return t.replace(tzinfo=None) if t is not None and t.tzinfo else t
+
+
+def extract_targets(s: Session, project_id: uuid.UUID, column_id: uuid.UUID, tab: str,
+                    only: set[str] | None = None) -> list[tuple[dict, str | None]]:
+    """(paper, sha of its ingested PDF or None) for papers in the tab that still need a value: none yet, or one read
+    from the abstract before the paper's PDF finished ingesting. `only`: the paper ids a confirmed action covers."""
+    papers = _papers_in_tab(s, project_id, tab)
+    have = {v.paper_id: v for v in s.scalars(select(db.ExtractValue).where(db.ExtractValue.column_id == column_id))}
+    ready = {d.id: d for d in s.scalars(select(db.Document).where(db.Document.project_id == project_id,
+                                                                  db.Document.status == "ready"))}
+    out = []
+    for p in papers:
+        if only is not None and str(p.id) not in only:
+            continue
+        doc = ready.get(p.document_id) if p.document_id else None
+        v = have.get(p.id)
+        upgrade = v is not None and v.source == "abstract" and doc is not None and \
+            _naive(doc.updated_at) > _naive(v.updated_at)  # a PDF that yielded nothing is not billed again
+        if v is None or upgrade:
+            out.append((paper_out(p), doc.sha256 if doc else None))
+    return out
+
+
+def save_value(s: Session, project_id: uuid.UUID, column_id: uuid.UUID, paper_id: uuid.UUID,
+               x: extraction.Extracted) -> None:
+    v = s.scalar(select(db.ExtractValue).where(db.ExtractValue.column_id == column_id, db.ExtractValue.paper_id == paper_id))
+    if v is None:
+        v = db.ExtractValue(project_id=project_id, column_id=column_id, paper_id=paper_id)
+        s.add(v)
+    v.value, v.quote, v.reason, v.source = x.value, x.quote, x.reason, x.source
+    v.updated_at = db.utcnow()  # even when nothing changed: the upgrade rule compares it with the document
+
+
+def paper_columns(s: Session, project_id: uuid.UUID, paper_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict]:
+    """{paper id: {column name: {value, source, quote}}} for a page of papers."""
+    if not paper_ids:
+        return {}
+    rows = s.execute(select(db.ExtractValue, db.ExtractColumn.name).join(
+        db.ExtractColumn, db.ExtractColumn.id == db.ExtractValue.column_id).where(
+        db.ExtractValue.project_id == project_id, db.ExtractValue.paper_id.in_(paper_ids))).all()
+    out: dict[uuid.UUID, dict] = {}
+    for v, name in rows:
+        out.setdefault(v.paper_id, {})[name] = {"value": v.value, "source": v.source, "quote": v.quote}
+    return out

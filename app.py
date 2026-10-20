@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 import agent
 import auth
 import db
+import extraction
 import funnel
 import jobs
 import screening
@@ -112,7 +113,16 @@ class CriteriaIn(BaseModel):
 
 
 class ActionIn(BaseModel):
-    tool: Literal["screen_all", "fetch_full_text"]
+    tool: Literal["screen_all", "fetch_full_text", "extract_column"]
+    column_id: uuid.UUID | None = None  # extract_column
+    tab: Literal[funnel.TABS] = "included"  # extract_column: which papers
+
+
+class ColumnIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    instruction: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=2000)]
+    kind: Literal["category", "number", "text"]
+    options: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]] | None =         Field(None, max_length=30)
 
 
 class FeedbackIn(BaseModel):
@@ -555,10 +565,37 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
 
     @app.post("/api/v1/projects/{project_id}/actions", status_code=201)
     def propose_action(body: ActionIn, project: OwnedProject, s: DB):
+        args = {"column_id": str(body.column_id) if body.column_id else None, "tab": body.tab}
         try:
-            return funnel.propose(s, project.id, body.tool)
+            return funnel.propose(s, project.id, body.tool, args if body.tool == "extract_column" else None)
         except funnel.Conflict as e:
             raise HTTPException(409, str(e)) from None
+        except funnel.NotFound as e:
+            raise HTTPException(404, str(e)) from None
+        except funnel.Invalid as e:
+            raise HTTPException(422, str(e)) from None
+
+    @app.post("/api/v1/projects/{project_id}/columns", status_code=201)
+    def add_column(body: ColumnIn, project: OwnedProject, s: DB):
+        col = extraction.Column(**body.model_dump())
+        problem = extraction.validate(col)
+        if problem:
+            raise HTTPException(422, problem)
+        try:
+            return funnel.add_column(s, project.id, col)
+        except funnel.Conflict as e:
+            raise HTTPException(409, str(e)) from None
+
+    @app.get("/api/v1/projects/{project_id}/columns")
+    def list_columns(project: OwnedProject, s: DB):
+        return funnel.list_columns(s, project.id)
+
+    @app.get("/api/v1/columns/{column_id}")
+    def get_column(column_id: uuid.UUID, user: CurrentUser, s: DB):
+        col = s.get(db.ExtractColumn, column_id)
+        if col is None or s.get(db.Project, col.project_id).owner_id != user.id:
+            raise HTTPException(404, "Column not found")
+        return funnel.column_values(s, col)
 
     def owned_action(action_id: uuid.UUID, user: CurrentUser, s: DB) -> db.PendingAction:
         a = s.get(db.PendingAction, action_id)
@@ -584,7 +621,8 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         """The only way a paid step starts: its owner confirms this server-issued action (never a chat message)."""
         if a.status != "pending":
             raise HTTPException(409, f"This action is {a.status}")
-        if a.criteria_version != funnel.latest_version(s, a.project_id):
+        depends_on_criteria = a.tool != "extract_column" or a.args.get("tab") in ("included", "review", "excluded")
+        if depends_on_criteria and a.criteria_version != funnel.latest_version(s, a.project_id):
             a.status = "expired"
             s.commit()
             raise HTTPException(409, "expired: the criteria changed after this estimate; propose the run again")
@@ -595,7 +633,9 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             raise HTTPException(409, "Another screening run is in progress")
         if not jobs.claim(s, db.PendingAction, a.id, "pending", "confirmed"):
             raise HTTPException(409, "This action was already confirmed")
-        state.research_pool.submit(jobs.screen_all if a.tool == "screen_all" else jobs.fetch_full_text, state, a.id)
+        job = {"screen_all": jobs.screen_all, "fetch_full_text": jobs.fetch_full_text,
+               "extract_column": jobs.extract_column}[a.tool]
+        state.research_pool.submit(job, state, a.id)
         s.refresh(a)
         return funnel.action_out(a)
 

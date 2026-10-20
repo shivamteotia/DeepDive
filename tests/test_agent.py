@@ -176,3 +176,31 @@ def test_empty_replies_are_not_replayed(api, signup):
     cid, _ = chat(api, h, pid, script, "one")
     api.post(f"/api/v1/conversations/{cid}/agent", headers=h, json={"message": "two"})
     assert [i["content"] for i in script.requests[1]["input"] if isinstance(i, dict) and "role" in i] == ["one", "two"]
+
+
+def test_agent_adds_a_column_and_proposes_filling_it(api, signup):
+    from tests.test_api_screening import screen
+    h, pid, _ = setup(api, signup)
+    draft(api, h, pid)
+    screen(api, h, pid)
+    col = {"name": "Sample size", "instruction": "Number of participants", "kind": "number", "options": None}
+    script = Script([call("add_column", col)],
+                    lambda kw: [call("propose_action", {"tool": "extract_column", "column_id": outputs(kw)[0]["id"],
+                                                        "tab": "included"}, "c2")],
+                    [call("get_funnel_status", {}, "c3")], say("Confirm to extract sample size for 10 papers."))
+    _, r = chat(api, h, pid, script)
+    added, action = outputs(script.requests[1])[0], outputs(script.requests[2])[1]
+    assert added["name"] == "Sample size" and action["status"] == "pending" and action["estimate"]["papers"] == 10
+    assert outputs(script.requests[3])[2]["columns"][0]["name"] == "Sample size"
+    assert any(m["content"].get("action", {}).get("id") == action["id"] for m in r.json()["messages"])
+
+
+def test_agent_reads_a_column_of_its_own_project_only(api, signup):
+    h, pid, _ = setup(api, signup)
+    other = signup("b@example.com")
+    theirs = api.post("/api/v1/projects", headers=other, json={"name": "t"}).json()["id"]
+    col = api.post(f"/api/v1/projects/{theirs}/columns", headers=other,
+                   json={"name": "Country", "instruction": "Country of the study", "kind": "text"}).json()
+    script = Script([call("get_column", {"column_id": col["id"]})], say("ok"))
+    chat(api, h, pid, script)
+    assert "error" in outputs(script.requests[1])[0]

@@ -222,3 +222,19 @@ answered as "no"). Decision (user): **extract a column, then filter on it** — 
 - The agent reports value counts ("18 retrospective cohort, 2 prospective cohort") and turns "drop the prospectives" into
   `exclude_values`. Table and test panel show the value per paper (click → quote + reason).
 - Yes/no `ai` criteria and `metadata` checks stay as they are. This is the start of the `extract_evidence` tool.
+
+## Addendum (2026-10-20): extract_column — data extraction columns
+
+User request: "extract the study design" (or sample size, country, intervention…) as a standalone step on any set of
+papers, the first half of the `extract_evidence` tool. Calls below are mine unless marked (user).
+
+- **Column** (per project): name, instruction, type `category` (fixed options + "not stated") | `number` | `text`.
+- **Value** per paper × column: value, verbatim quote, reason, `source` = `fulltext` (the paper's PDF is ingested: the
+  most relevant passages of that document only, from Qdrant, project- and document-filtered) or `abstract`. A quote not
+  found in the text read → value "not stated". Category values must be one of the options.
+- **Scope:** included papers by default; any funnel tab on request.
+- **Paid → PendingAction** `extract_column` (args: column id, tab; estimate = papers × 1 call); runs only on Confirm.
+  Re-running fills papers without a value (or whose value came from the abstract while a PDF is now ingested).
+- **Agent:** `add_column` (free), `propose_action("extract_column", column, tab)`, `get_column` (values + counts),
+  `get_papers` shows column values. Text read from papers is data, never instructions.
+- **UI:** column values in the paper table (click → quote, source). Export to Excel/CSV comes with `generate_outputs`.

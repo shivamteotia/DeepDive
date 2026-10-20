@@ -293,3 +293,4 @@ a { color: var(--accent); }
 }
 .crit-head .del { border: none; background: none; cursor: pointer; color: var(--muted); padding: 0 4px; }
 .sc-table th:first-child, .sc-table td:first-child { min-width: 300px; }
+.sc-table th.col-extract { color: var(--accent); }

@@ -181,6 +181,32 @@ class ScreeningDecision(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class ExtractColumn(Base):
+    """A data extraction column (study design, sample size, ...) filled per paper by extraction.extract_one."""
+    __tablename__ = "extract_columns"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    instruction: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(10))
+    options: Mapped[list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExtractValue(Base):
+    __tablename__ = "extract_values"
+    __table_args__ = (UniqueConstraint("column_id", "paper_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    column_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("extract_columns.id", ondelete="CASCADE"), index=True)
+    paper_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"), index=True)
+    value: Mapped[str] = mapped_column(Text)
+    quote: Mapped[str] = mapped_column(Text, default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(10))  # fulltext | abstract
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class PendingAction(Base):
     """A paid step proposed by the agent or the UI; it runs only once its owner confirms it through the API."""
     __tablename__ = "pending_actions"

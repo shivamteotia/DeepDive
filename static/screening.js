@@ -280,18 +280,34 @@ function scRenderBody() {
   body.replaceChildren(...[head, h("div", { class: "table-wrap" }, table), more].filter(Boolean));
 }
 
+function columnCell(name, x) {
+  const td = h("td", { class: "verdict" });
+  if (!x) { td.append("–"); return td; }
+  const btn = h("button", { class: "v-btn", type: "button", title: `${name}: from the ${x.source}`,
+    onclick: (e) => {
+      e.stopPropagation();
+      showPopover(btn, { name }, { verdict: x.source === "fulltext" ? "from the full text" : "from the abstract",
+        quote: x.quote, reason: x.value });
+    } }, x.value);
+  td.append(btn);
+  return td;
+}
+
 function papersTable(tab) {
   const crit = sc.blind || !sc.criteria ? [] : sc.criteria.criteria;
+  const cols = sc.blind ? [] : [...new Set(sc.items.flatMap((p) => Object.keys(p.columns || {})))];
   const rows = sc.items.map((p, i) => h("tr", { class: "clickable", onclick: () => openQueue(i) },
     h("td", {}, h("div", { class: "t-title" }, p.title || "(no title)"),
       h("div", { class: "muted small" }, [p.year, p.journal, (p.sources || []).join(" + ")].filter(Boolean).join(" · "),
         p.abstract ? "" : " · no abstract")),
     ...crit.map((c) => verdictCell(c, (p.verdicts || []).find((v) => v.criterion_id === c.id))),
+    ...cols.map((name) => columnCell(name, (p.columns || {})[name])),
     sc.blind ? h("td", {}, p.blind_label ? `Labelled: ${p.blind_label}` : "–")
       : h("td", { class: "nowrap" }, decisionLabel(p), p.disagrees ? h("span", { class: "badge review", title: "Your decision differs from the AI's" }, "≠ AI") : null),
     tab === "fulltext" ? fulltextCell(p) : null));
   return h("table", { class: "sc-table" },
     h("thead", {}, h("tr", {}, h("th", {}, "Paper"), ...crit.map((c) => h("th", { title: c.definition }, c.name)),
+      ...cols.map((name) => h("th", { class: "col-extract", title: "Extracted column" }, name)),
       h("th", {}, sc.blind ? "Your label" : "Decision"), tab === "fulltext" ? h("th", {}, "Full text") : null)),
     h("tbody", {}, rows));
 }
@@ -440,12 +456,17 @@ function actionCard(action) {
   let inFlight = false;
   const fill = () => {
     const a = action;
-    const what = a.tool === "screen_all" ? "Screen all papers" : "Fetch free full text for included papers";
+    const what = a.tool === "screen_all" ? "Screen all papers"
+      : a.tool === "extract_column" ? `Extract “${a.estimate?.column || "column"}” for the ${a.estimate?.tab || "included"} papers`
+        : "Fetch free full text for included papers";
     const est = a.estimate || {};
-    const detail = a.tool === "screen_all"
+    const detail = a.tool === "extract_column"
+      ? `${(est.papers ?? 0).toLocaleString()} papers · ${(est.calls ?? 0).toLocaleString()} model calls · ${(est.with_fulltext ?? 0).toLocaleString()} read from the full text`
+      : a.tool === "screen_all"
       ? `${(est.papers ?? 0).toLocaleString()} papers · ${(est.calls ?? 0).toLocaleString()} model calls · ~${Math.round(((est.input_tokens ?? 0) + (est.output_tokens ?? 0)) / 1000).toLocaleString()}k tokens`
       : `${(est.papers ?? 0).toLocaleString()} papers · Europe PMC and Unpaywall (free, legal copies only)`;
-    const parts = [h("strong", {}, what), h("div", { class: "muted small" }, `${detail} · criteria version ${a.criteria_version}`)];
+    const parts = [h("strong", {}, what), h("div", { class: "muted small" },
+      a.criteria_version != null ? `${detail} · criteria version ${a.criteria_version}` : detail)];
     if (a.status === "pending") {
       parts.push(h("div", { class: "row" },
         h("button", { class: "btn primary small", type: "button", disabled: inFlight, onclick: () => act("confirm") }, "Confirm"),
@@ -455,7 +476,8 @@ function actionCard(action) {
     } else {
       const r = a.result || {};
       const summary = a.status === "done"
-        ? (a.tool === "screen_all" ? `Done: ${r.include ?? 0} included, ${r.review ?? 0} need review, ${r.exclude ?? 0} excluded.`
+        ? (a.tool === "extract_column" ? `Done: ${r.filled ?? 0} papers filled (${r.fulltext ?? 0} from full text, ${r.not_stated ?? 0} not stated).`
+          : a.tool === "screen_all" ? `Done: ${r.include ?? 0} included, ${r.review ?? 0} need review, ${r.exclude ?? 0} excluded.`
           : `Done: ${r.found ?? 0} free PDFs found, ${r.not_found ?? 0} need an upload.`)
         : a.status === "failed" ? `Failed: ${a.error || "unknown error"}` : `${a.status[0].toUpperCase()}${a.status.slice(1)}.`;
       parts.push(h("div", { class: `small ${a.status === "failed" ? "error" : ""}` }, summary));
@@ -514,6 +536,7 @@ const TOOL_LABEL = {
   import_status: "Checked the imports", deduplicate_status: "Checked deduplication", get_funnel_status: "Checked the funnel",
   draft_criteria: "Drafted criteria", update_criteria: "Saved criteria", test_screen: "Tested on 20 papers",
   propose_action: "Proposed a step", get_papers: "Read papers", ask_research_question: "Asked your papers",
+  add_column: "Added a column", get_column: "Read a column",
 };
 
 function renderAgent() {

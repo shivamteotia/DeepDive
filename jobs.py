@@ -9,6 +9,7 @@ import multiprocessing
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,9 +19,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import ask
 import db
+import extraction
 import fulltext
 import funnel
 import research
+import screening
 import web
 from config import Settings
 
@@ -228,6 +231,76 @@ def screen_all(state: State, action_id: uuid.UUID) -> None:
                   "result": funnel.screen_all(state.sessions, project_id, version, screen_parse(state))}
     except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the action
         values = {"status": "failed", "error": short_error(exc, state.settings)}
+    with state.sessions() as s:
+        s.execute(update(db.PendingAction).where(db.PendingAction.id == action_id).values(**values))
+        s.commit()
+
+
+EXTRACT_K = 4  # passages of the paper's own PDF read per extraction
+
+
+def passages_for(state: State, project_id: uuid.UUID, sha: str, query: str) -> list[str]:
+    """The most relevant passages of one ingested PDF (project- and document-filtered, server-side)."""
+    cfg = state.settings
+    hits = ask.search(state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
+                      project_id=str(project_id), question=query, k=EXTRACT_K, sha256_in=[sha], hybrid=cfg.hybrid_search)
+    return [h.get("text") or "" for h in hits if h.get("text")]
+
+
+def extract_column(state: State, action_id: uuid.UUID) -> None:
+    """Runs a confirmed extract_column PendingAction: one value per target paper, from its PDF when ingested."""
+    with state.sessions() as s:
+        if not claim(s, db.PendingAction, action_id, "confirmed", "running"):
+            return
+        a = s.get(db.PendingAction, action_id)
+        project_id = a.project_id
+        col = funnel.project_column(s, project_id, a.args.get("column_id"))
+        if col is None:
+            a.status, a.error = "failed", "the column was deleted"
+            s.commit()
+            return
+        column = extraction.Column(name=col.name, instruction=col.instruction, kind=col.kind, options=col.options)
+        column_id = col.id
+        targets = funnel.extract_targets(s, project_id, column_id, a.args.get("tab") or "included",
+                                         only=set(a.args.get("paper_ids") or []))
+    parse, query = screen_parse(state), f"{column.name}: {column.instruction}"
+    counts = {"filled": 0, "fulltext": 0, "not_stated": 0, "errors": 0}
+
+    def one(t):
+        paper, sha = t
+        passages = []
+        if sha:
+            try:
+                passages = passages_for(state, project_id, sha, query)
+            except Exception as e:  # noqa: BLE001 — search down: no value now (retried), never a silent downgrade
+                log.warning("passages for extraction failed: %s", type(e).__name__)
+                return paper, None
+        return paper, extraction.extract_one(parse, column, paper, passages)
+
+    try:
+        with ThreadPoolExecutor(max_workers=screening.SCREEN_WORKERS) as pool:
+            for i in range(0, len(targets), funnel.SCREEN_BATCH):
+                done = list(pool.map(one, targets[i:i + funnel.SCREEN_BATCH]))
+                with state.sessions() as s:
+                    alive = set(s.scalars(select(db.Paper.id).where(db.Paper.id.in_([uuid.UUID(p["id"]) for p, _ in done]))))
+                    for paper, x in done:
+                        if x is None:  # no answer: nothing stored, the next run asks again
+                            counts["errors"] += 1
+                            continue
+                        if uuid.UUID(paper["id"]) not in alive:
+                            continue
+                        try:
+                            with s.begin_nested():  # a paper regrouped away meanwhile fails alone, not the batch
+                                funnel.save_value(s, project_id, column_id, uuid.UUID(paper["id"]), x)
+                        except IntegrityError:
+                            continue
+                        counts["filled"] += 1
+                        counts["fulltext"] += x.source == "fulltext"
+                        counts["not_stated"] += x.value == extraction.NOT_STATED
+                    s.commit()
+        values = {"status": "done", "error": None, "result": counts}
+    except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the action
+        values = {"status": "failed", "error": short_error(exc, state.settings), "result": counts}
     with state.sessions() as s:
         s.execute(update(db.PendingAction).where(db.PendingAction.id == action_id).values(**values))
         s.commit()

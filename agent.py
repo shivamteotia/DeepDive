@@ -11,11 +11,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 from openai.lib._pydantic import to_strict_json_schema
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import db
+import extraction
 import funnel
 import screening as sc
 
@@ -35,7 +36,10 @@ Properties with a few known values (study design, age group, setting) are best s
 "extract": the model reports the value, the user's exclude_values filter decides). Report their value counts from
 get_funnel_status ("18 retrospective cohort, 2 prospective cohort"). When the user says what to drop ("drop the
 prospectives"), call update_criteria with the same criteria and the new exclude_values; re-screening then reuses the
-stored values and costs nothing. Answer briefly and plainly."""
+stored values and costs nothing.
+To extract data for an evidence table ("extract sample size and country for the included papers"), create one column per
+item with add_column, then propose_action extract_column for each; values come from the full text when the PDF is
+ingested, else the abstract. Answer briefly and plainly."""
 
 
 class _Args(BaseModel):
@@ -55,7 +59,22 @@ class CriteriaArgs(_Args):
 
 
 class ActionArgs(_Args):
-    tool: Literal["screen_all", "fetch_full_text"]
+    tool: Literal["screen_all", "fetch_full_text", "extract_column"]
+    column_id: str | None = Field(description="extract_column: the column's id (from add_column / get_funnel_status)")
+    tab: Literal[funnel.TABS] | None = Field(description="extract_column: which papers (default included)")
+
+    _fill = model_validator(mode="before")(lambda d: {"column_id": None, "tab": None} | d if isinstance(d, dict) else d)
+
+
+class ColumnArgs(_Args):
+    name: str = Field(description="Short column name, e.g. 'Sample size'")
+    instruction: str = Field(description="What to extract, precise enough to find it in a paper")
+    kind: Literal["category", "number", "text"]
+    options: list[str] | None = Field(description="category only: the possible values; otherwise null")
+
+
+class ColumnIdArgs(_Args):
+    column_id: str
 
 
 class PapersArgs(_Args):
@@ -112,6 +131,7 @@ def _status(ctx: ToolContext, _a) -> dict:
                                                        db.PendingAction.status.in_(("pending", "confirmed", "running"))))
     return {"references": _count(s, db.Reference, db.Reference.project_id == pid), **listing["counts"],
             "extracted": funnel.extracted_counts(s, pid),
+            "columns": [{k: c[k] for k in ("id", "name", "kind", "filled")} for c in funnel.list_columns(s, pid)],
             "papers": listing["counts"]["all"], "criteria_version": listing["criteria_version"], "full_text": fulltext,
             "open_actions": [{"id": str(a.id), "tool": a.tool, "status": a.status} for a in pending]}
 
@@ -133,10 +153,30 @@ def _test(ctx: ToolContext, _a) -> dict:
 
 
 def _propose(ctx: ToolContext, a: ActionArgs) -> dict:
+    args = {"column_id": a.column_id, "tab": a.tab} if a.tool == "extract_column" else None
     try:
-        return funnel.propose(ctx.s, ctx.project_id, a.tool)
+        return funnel.propose(ctx.s, ctx.project_id, a.tool, args)
+    except (funnel.Conflict, funnel.NotFound, funnel.Invalid) as e:
+        return {"error": str(e)}
+
+
+def _add_column(ctx: ToolContext, a: ColumnArgs) -> dict:
+    col = extraction.Column(name=a.name, instruction=a.instruction, kind=a.kind, options=a.options)
+    problem = extraction.validate(col)
+    if problem:
+        return {"error": problem}
+    try:
+        return funnel.add_column(ctx.s, ctx.project_id, col)
     except funnel.Conflict as e:
         return {"error": str(e)}
+
+
+def _get_column(ctx: ToolContext, a: ColumnIdArgs) -> dict:
+    col = funnel.project_column(ctx.s, ctx.project_id, a.column_id)
+    if col is None:
+        return {"error": "column not found in this project"}
+    out = funnel.column_values(ctx.s, col)
+    return out | {"values": out["values"][:PAPERS_LIMIT], "total_values": len(out["values"])}
 
 
 def _papers(ctx: ToolContext, a: PapersArgs) -> dict:
@@ -147,6 +187,7 @@ def _papers(ctx: ToolContext, a: PapersArgs) -> dict:
         b = {"id": p["id"], "title": p["title"], "year": p.get("year"), "journal": p.get("journal"),
              "abstract": abstract[:ABSTRACT_CHARS] + ("…" if len(abstract) > ABSTRACT_CHARS else ""),
              "decision": p.get("decision"), "fulltext_status": p.get("fulltext_status"),
+             "columns": {k: v["value"] for k, v in (p.get("columns") or {}).items()},
              "verdicts": [{"criterion_id": v["criterion_id"], "verdict": v["verdict"], **({"value": v["value"]} if v.get("value") else {})}
                           for v in p.get("verdicts") or []]}
         if "possible_duplicate" in p:
@@ -176,9 +217,14 @@ TOOLS: dict[str, Tool] = {
                             CriteriaArgs, _update),
     "test_screen": Tool("Screen a 20-paper sample with the current criteria (a test; nothing is decided) and estimate the "
                         "full run.", NoArgs, _test),
-    "propose_action": Tool("Propose screening every paper (screen_all) or fetching free full text for included papers "
-                           "(fetch_full_text). Creates a pending action with its estimate; it runs only after the user "
-                           "presses Confirm.", ActionArgs, _propose),
+    "propose_action": Tool("Propose screening every paper (screen_all), fetching free full text for included papers "
+                           "(fetch_full_text), or filling an extraction column for a tab (extract_column, with column_id "
+                           "and tab). Creates a pending action with its estimate; it runs only after the user presses "
+                           "Confirm.", ActionArgs, _propose),
+    "add_column": Tool("Create a data extraction column (free): category with options, number, or text. Fill it with "
+                       "propose_action('extract_column', column_id, tab).", ColumnArgs, _add_column),
+    "get_column": Tool("A column's extracted values (paper, value, quote, source) and value counts.", ColumnIdArgs,
+                       _get_column),
     "get_papers": Tool("Papers in a tab (all, included, review, excluded, duplicates, fulltext) with their decisions.",
                        PapersArgs, _papers),
     "ask_research_question": Tool("Ask a research question answered from this project's ingested full-text PDFs, with "
