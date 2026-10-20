@@ -76,6 +76,7 @@ class ResearchRun(Base):
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"),
                                                                index=True)
     web_search: Mapped[bool] = mapped_column(Boolean, default=False)
+    pubmed: Mapped[bool] = mapped_column(Boolean, default=False)  # evidence = latest PubMed abstracts, not the PDFs
     standalone_question: Mapped[str | None] = mapped_column(Text)
 
 
@@ -235,6 +236,7 @@ ADDED_COLUMNS = [
     "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS standalone_question TEXT",
     "CREATE INDEX IF NOT EXISTS ix_research_runs_conversation_id ON research_runs (conversation_id)",
     "ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_type VARCHAR(20)",
+    "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS pubmed BOOLEAN NOT NULL DEFAULT FALSE",
 ]
 
 

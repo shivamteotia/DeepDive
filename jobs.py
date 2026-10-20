@@ -22,6 +22,7 @@ import db
 import extraction
 import fulltext
 import funnel
+import pubmed
 import rails
 import research
 import screening
@@ -142,7 +143,7 @@ class IngestRunner:
 def short_error(exc: Exception, settings: Settings) -> str:
     msg = str(exc) if isinstance(exc, IngestFailed) else f"{type(exc).__name__}: {exc}"
     for secret in (settings.openai_api_key, settings.qdrant_api_key, settings.jena_ai_api_key, settings.jwt_secret,
-                   settings.tavily_api_key, settings.firecrawl_api_key):
+                   settings.tavily_api_key, settings.firecrawl_api_key, settings.pubmed_api_key):
         if secret:
             msg = msg.replace(secret, "***")
     return msg[:500]
@@ -181,15 +182,20 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
             return
         run = s.get(db.ResearchRun, run_id)
         project_id, question, max_iterations = str(run.project_id), run.question, run.max_iterations
-        use_web = run.web_search
+        use_web, use_pubmed = run.web_search, run.pubmed
         ready = list(s.scalars(select(db.Document.sha256).where(db.Document.project_id == run.project_id,
                                                                   db.Document.status == "ready")))
         history = conversation_history(s, run)
     cfg = state.settings
 
-    web_cache: dict[str, list[dict]] = {}
+    web_cache: dict = {}
+    topic = {"q": question}  # the follow-up-resolved question, set before research.run
 
     def search_fn(q: str) -> list[dict]:  # project and ready-document filters are fixed here, server-side
+        if use_pubmed:  # one PubMed search for the topic (the 20 latest papers), whatever sub-question asks: the
+            if "pubmed" not in web_cache:  # planner's generic sub-questions ("AUROC values?") match unrelated papers
+                web_cache["pubmed"] = pubmed.search(topic["q"], api_key=cfg.pubmed_api_key, project_id=project_id)
+            return list(web_cache["pubmed"])
         hits = ask.search(state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
                           project_id=project_id, question=q, k=RESEARCH_K, rerank_model=cfg.reranker_model,
                           rerank_api_key=cfg.jena_ai_api_key, sha256_in=ready, hybrid=cfg.hybrid_search)
@@ -208,9 +214,11 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
             values = {"status": "completed", "result": blocked(refusal), "error": None, "standalone_question": None}
         else:
             standalone = research.rewrite_followup(state.openai, cfg.openai_fast_model, history, question)
+            topic["q"] = standalone
             result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
                                   fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model,
-                                  question=standalone, max_iterations=max_iterations)
+                                  question=pubmed.review_question(standalone) if use_pubmed else standalone,
+                                  max_iterations=max_iterations)
             answer = "\n".join([c["text"] for c in result.get("claims") or []] + [result.get("gaps") or ""])
             if replaced := rails.check_output(state.openai, cfg.openai_guard_model, question, answer):
                 result = blocked(replaced)

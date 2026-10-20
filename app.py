@@ -100,6 +100,7 @@ class RunIn(BaseModel):
     max_iterations: int = Field(3, ge=1, le=5)
     conversation_id: uuid.UUID | None = None
     web_search: bool = False
+    pubmed: bool = False  # answer from the latest PubMed abstracts instead of the project's PDFs
 
 
 class DuplicateAction(BaseModel):
@@ -161,7 +162,7 @@ def run_out(run: db.ResearchRun) -> dict:
     r = run.result
     return {"id": run.id, "project_id": run.project_id, "question": run.question, "max_iterations": run.max_iterations,
             "status": run.status, "error": run.error, "created_at": run.created_at, "finished_at": run.finished_at,
-            "conversation_id": run.conversation_id, "web_search": bool(run.web_search),
+            "conversation_id": run.conversation_id, "web_search": bool(run.web_search), "pubmed": bool(run.pubmed),
             "standalone_question": run.standalone_question,
             "result": {k: r[k] for k in ("status", "claims", "gaps")} if r else None}
 
@@ -368,10 +369,11 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             raise HTTPException(400, "Web search is not enabled on this server")
         ready = s.scalar(select(db.Document.id).where(db.Document.project_id == project.id,
                                                        db.Document.status == "ready").limit(1))
-        if ready is None and not body.web_search:  # web-only chat needs no papers; papers added later join later turns
+        if ready is None and not (body.web_search or body.pubmed):  # web/PubMed runs need no uploaded papers
             raise HTTPException(409, "No indexed documents yet — upload a paper or turn on web search")
         run = db.ResearchRun(project_id=project.id, question=body.question, max_iterations=body.max_iterations,
-                             conversation_id=convo.id if convo else None, web_search=body.web_search)
+                             conversation_id=convo.id if convo else None, web_search=body.web_search,
+                             pubmed=body.pubmed)
         s.add(run)
         if convo is not None:
             if convo.title == db.Conversation.title.default.arg:  # first question names the chat
@@ -431,9 +433,9 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
                    if m["role"] in ("user", "assistant") and m["content"].get("text")
                    and not m["content"].get("blocked")]  # a blocked message never reaches the model later
 
-        def ask_research(question: str) -> dict:
+        def ask_research(question: str, pubmed: bool = False) -> dict:
             try:
-                return start_research_run(RunIn(question=question, conversation_id=c.id), project, s)
+                return start_research_run(RunIn(question=question, conversation_id=c.id, pubmed=pubmed), project, s)
             except HTTPException as e:
                 return {"error": e.detail}
             except ValueError as e:  # RunIn validation (e.g. a too-short question)

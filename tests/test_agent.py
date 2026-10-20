@@ -272,3 +272,14 @@ def test_web_search_tool_asks_for_search_results_only(api, signup, monkeypatch):
     monkeypatch.setattr(web, "firecrawl", fake)
     chat(api, h, pid, Script([call("web_search", {"query": "q"})], say("ok")))
     assert seen == {"api_key": "fc", "scrape": False}
+
+
+def test_search_pubmed_tool_starts_a_pubmed_research_run(api, signup, monkeypatch):
+    import jobs
+    h, pid, _ = setup(api, signup)
+    monkeypatch.setattr(jobs, "run_research", lambda *a: None)  # stays queued; the run itself is tested elsewhere
+    script = Script([call("search_pubmed", {"question": "machine learning for early ICU mortality prediction"})],
+                    say("Searching PubMed."))
+    chat(api, h, pid, script)
+    out = outputs(script.requests[1])[0]
+    assert out["pubmed"] is True and out["status"] == "queued" and out["question"].startswith("machine learning")

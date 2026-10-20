@@ -357,7 +357,7 @@ function fillTurn(turn) {
   if (run.status === "queued" || run.status === "running") {
     parts.push(h("div", { class: "card" },
       h("div", { class: "progress" }, h("span", { class: "spinner" }),
-        run.status === "queued" ? "Queued…" : `${!run.web_search ? "Reading your papers" : hasReadyPapers() ? "Reading your papers and the web" : "Searching the web"}, then verifying each claim…`),
+        run.status === "queued" ? "Queued…" : run.pubmed ? "Searching PubMed, then verifying each claim…" : `${!run.web_search ? "Reading your papers" : hasReadyPapers() ? "Reading your papers and the web" : "Searching the web"}, then verifying each claim…`),
       h("div", { class: "skeleton", style: "width:92%" }), h("div", { class: "skeleton", style: "width:76%" }),
       h("div", { class: "skeleton", style: "width:84%" })));
   } else if (run.status === "failed") {
@@ -396,7 +396,7 @@ function answerCards(turn) {
   const verified = res.status === "verified";
   const meta = h("div", { class: "meta" },
     h("span", { class: `badge ${verified ? "ok" : "review"}` }, verified ? "✓ Verified" : "Needs review"),
-    run.web_search ? h("span", { class: "badge web" }, evidence?.length && !evidence.some((e) => e.source_type !== "web") ? "Web only" : "Web + papers")
+    run.pubmed ? h("span", { class: "badge web" }, "PubMed (latest 20)") : run.web_search ? h("span", { class: "badge web" }, evidence?.length && !evidence.some((e) => e.source_type !== "web") ? "Web only" : "Web + papers")
       : h("span", { class: "badge neutral" }, "Papers only"),
     h("span", { class: "muted small" }, `${res.claims.length} finding${res.claims.length === 1 ? "" : "s"} · ${order.length} source${order.length === 1 ? "" : "s"}`));
 
@@ -441,8 +441,8 @@ function sourceCard(s, n, id) {
   const e = s.e;
   if (!e) return h("div", { class: "source", id }, h("div", { class: "s-head" }, h("span", { class: "s-num" }, `[${n}]`),
     h("span", { class: "s-title" }, "Source unavailable")));
-  const isWeb = e.source_type === "web";
-  const url = isWeb ? safeUrl(e.url) : null;
+  const isWeb = e.source_type === "web", isPubmed = e.source_type === "pubmed";
+  const url = isWeb || isPubmed ? safeUrl(e.url) : null;
   let host = "";
   if (url) { try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* ignore */ } }
   const pages = (e.page_numbers || []).length ? `p. ${e.page_numbers.join(", ")}` : "";
@@ -451,7 +451,8 @@ function sourceCard(s, n, id) {
     h("div", { class: "s-head" }, h("span", { class: "s-num" }, `[${n}]`),
       url ? h("a", { class: "s-title", href: url, target: "_blank", rel: "noopener noreferrer" }, e.title || e.source_filename)
         : h("span", { class: "s-title" }, e.source_filename)),
-    h("div", { class: "s-meta" }, isWeb ? `🌐 ${host || "web"}` : `📄 PDF${pages ? ` · ${pages}` : ""}${section ? ` · ${section}` : ""}`),
+    h("div", { class: "s-meta" }, isPubmed ? `🔬 PubMed · ${e.source_filename}` : isWeb ? `🌐 ${host || "web"}`
+      : `📄 PDF${pages ? ` · ${pages}` : ""}${section ? ` · ${section}` : ""}`),
     h("div", { class: "s-text" }, e.text));
   if ((e.text || "").length > 260) {
     const more = h("button", { class: "btn link more", type: "button" }, "Show more");

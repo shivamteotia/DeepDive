@@ -537,7 +537,7 @@ const TOOL_LABEL = {
   draft_criteria: "Drafted criteria", update_criteria: "Saved criteria", test_screen: "Tested on 20 papers",
   propose_action: "Proposed a step", get_papers: "Read papers", ask_research_question: "Asked your papers",
   add_column: "Added a column", get_column: "Read a column", export_table: "Built a table",
-  count_papers: "Counted papers", web_search: "Searched the web",
+  count_papers: "Counted papers", web_search: "Searched the web", search_pubmed: "Asked PubMed",
 };
 
 async function scDownload(tab, format) {

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     web_search_enabled: bool = False  # per-run opt-in still required (RunIn.web_search)
     tavily_api_key: str = ""
     firecrawl_api_key: str = ""  # preferred over Tavily when set (web.searcher)
+    pubmed_api_key: str = ""  # NCBI E-utilities key: 10 requests/s instead of 3; PubMed works without it
     web_search_timeout_seconds: float = 20
     qdrant_cluster_endpoint: str
     qdrant_api_key: str

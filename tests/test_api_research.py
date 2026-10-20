@@ -42,7 +42,7 @@ def fake_research(monkeypatch):
         if question.startswith("fail"):
             raise RuntimeError("model exploded")
         hits = search_fn(question)
-        seen.update(project_id=project_id, hits=hits, max_iterations=max_iterations)
+        seen.update(project_id=project_id, hits=hits, max_iterations=max_iterations, question=question)
         return {"question": question, "status": "verified", "gaps": "", "evidence": hits,
                 "claims": [{"text": "c", "evidence_ids": ["E1"], "verdict": "SUPPORTED", "rationale": "r"}],
                 "log": [{"step": "plan", "sub_questions": [question]},
@@ -140,3 +140,36 @@ def test_api_research_uses_hybrid_search_when_enabled(tmp_path, runner, monkeypa
         assert api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()["status"] == "completed"
     assert calls and all(kw["hybrid"] is True for kw in calls)
     assert {x["source_filename"] for x in fake_research["hits"]} == {"a.pdf"}  # isolation holds with hybrid on
+
+
+def test_a_pubmed_run_needs_no_papers_and_searches_pubmed(api, signup, fake_research, monkeypatch):
+    import pubmed
+    h = signup()
+    pid = project(api, h, "A")  # no documents at all
+    seen = []
+
+    def fake_pubmed(query, *, api_key, project_id, transport=None):
+        seen.append((query, project_id))
+        return [{"point_id": "pubmed:1", "project_id": project_id, "source_type": "pubmed", "pmid": "1",
+                 "url": "https://pubmed.ncbi.nlm.nih.gov/1/", "title": "T", "source_filename": "Smith 2025, J (PMID 1)",
+                 "page_numbers": [], "section_headings": [], "text": "abstract", "score": 1.0}]
+    monkeypatch.setattr(pubmed, "search", fake_pubmed)
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "ML for ICU mortality?", "pubmed": True})
+    assert r.status_code == 202, r.text
+    run = api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()
+    assert run["status"] == "completed" and run["pubmed"] is True
+    assert seen == [("ML for ICU mortality?", pid)]  # one search, for the topic, never a sub-question
+    assert fake_research["hits"][0]["source_type"] == "pubmed"
+
+
+def test_a_pubmed_run_asks_for_a_literature_summary(api, signup, fake_research, monkeypatch):
+    import pubmed
+    h = signup()
+    pid = project(api, h, "A")
+    monkeypatch.setattr(pubmed, "search", lambda *a, **k: [])
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h,
+                 json={"question": "ML for early ICU mortality", "pubmed": True})
+    run = api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()
+    assert fake_research["question"] == pubmed.review_question("ML for early ICU mortality")
+    assert "ML for early ICU mortality" in fake_research["question"] and "found" in fake_research["question"]
+    assert run["question"] == "ML for early ICU mortality"  # the user's words are what the chat shows
