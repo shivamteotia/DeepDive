@@ -3,6 +3,7 @@ import json
 import pytest
 
 import chunking
+import sections
 from chunking import Piece
 
 
@@ -216,10 +217,32 @@ def test_build_chunks_keeps_context_out_of_the_evidence_text():
         assert "abstract heading" in r["doc_type_reasons"]
 
 
-def test_build_chunks_without_context_makes_no_llm_calls():
+def test_build_chunks_without_context_makes_only_the_outline_call():
     parse = FakeParse({})
     _, records = chunking.build_chunks(ARTICLE, page_count=11, title="T", count_tokens=words, parse=parse, contextual=False)
-    assert parse.calls == [] and all(r["context"] == "" for r in records)
+    assert [fmt for _, _, fmt in parse.calls] == [sections.Outline] and all(r["context"] == "" for r in records)
+
+
+def test_build_chunks_outline_off_makes_no_calls():
+    parse = FakeParse({})
+    chunking.build_chunks(ARTICLE, page_count=11, title="T", count_tokens=words, parse=parse, contextual=False, outline=False)
+    assert parse.calls == []
+
+
+def test_build_chunks_records_carry_the_outline_path_and_section():
+    pieces = [P("Title"), P("Background " + LONG, "Abstract"), P(LONG, "Study design", pages=(3,)),
+              P(LONG, "Statistical analysis", pages=(3,)), P("1. Ref", "References", pages=(9,))]
+    outline = sections.Outline(headings=[
+        sections.HeadingInfo(index=0, is_heading=True, level=1, parent=None, section="abstract"),
+        sections.HeadingInfo(index=1, is_heading=True, level=1, parent=None, section="methods"),
+        sections.HeadingInfo(index=2, is_heading=True, level=2, parent=1, section="methods"),
+        sections.HeadingInfo(index=3, is_heading=True, level=1, parent=None, section="references")])
+    parse = FakeParse({sections.Outline: outline})
+    _, records = chunking.build_chunks(pieces, page_count=9, title="T", count_tokens=words, parse=parse, contextual=False)
+    stat = next(r for r in records if "Statistical analysis" in r["section_headings"])
+    assert stat["section_headings"] == ["Methods", "Study design", "Statistical analysis"] and stat["section"] == "methods"
+    assert "Section: Methods > Study design > Statistical analysis\n" in stat["text"]
+    assert records[0]["chunker_version"] == 3
 
 
 # --- fixes from code-checker (real journal heading styles) ---
@@ -270,7 +293,7 @@ def test_received_published_text_lines_join_the_declarations():
 def test_tiny_piece_merged_forward_keeps_the_larger_sections_label():
     pieces = [P("Background " + LONG, "Abstract"), P("tiny", "Results", "A"), P(LONG, "Results", "B")]
     out = chunking.regroup(pieces, "generic", words)
-    assert heads(out)[-1] == ["Results", "B"] and out[-1].body.startswith("tiny")
+    assert heads(out)[-1] == ["Results", "B"] and out[-1].body.startswith("A: tiny")  # its own heading stays inline
 
 
 def test_captions_inheriting_the_references_heading_are_kept():
@@ -301,3 +324,37 @@ def test_unheaded_abstract_before_a_numbered_introduction_stays_searchable():
     front = next(c for c in out if c.headings == ["Front matter"])
     assert "Title of the paper" in front.body and "Jane Doe" in front.body and "We aimed" not in front.body
     assert any(c.body.startswith("We aimed to predict mortality") for c in out if c.headings != ["Front matter"])
+
+
+def _outline(*entries):  # (level, parent, section) per heading occurrence
+    return sections.Outline(headings=[sections.HeadingInfo(index=i, is_heading=True, level=lv, parent=par, section=sec)
+                                      for i, (lv, par, sec) in enumerate(entries)])
+
+
+def test_tiny_subsection_does_not_merge_into_its_sibling():
+    pieces = [P("Background " + LONG, "Abstract"), P(LONG, "2. Methods"), P(LONG, "2.1 Study design"),
+              P("Logistic regression.", "2.2 Statistical analysis"), P("1. Ref", "References")]
+    _, records = chunking.build_chunks(pieces, page_count=9, title="T", count_tokens=words, parse=None, contextual=False)
+    stat = [r for r in records if "Logistic regression." in r["text"]]
+    assert len(stat) == 1 and "Statistical analysis" in stat[0]["text"]
+
+
+def test_model_section_labels_never_move_or_drop_pieces():
+    pieces = [P("Background " + LONG, "Abstract"), P("We studied doi 10.1000/abc " + LONG, "Methods"),
+              P(LONG, "Ethical considerations"), P(LONG, "Abbreviations"), P("1. Ref", "References")]
+    parse = FakeParse({sections.Outline: _outline((1, None, "abstract"), (1, None, "methods"), (1, None, "declarations"),
+                                                  (1, None, "references"), (1, None, "references"))})
+    doc_type, records = chunking.build_chunks(pieces, page_count=9, title="T", count_tokens=words, parse=parse,
+                                              contextual=False)
+    assert doc_type == "research_article"
+    ethics = next(r for r in records if "Ethical considerations" in r["section_headings"])
+    assert ethics["section_headings"] == ["Declarations", "Ethical considerations"]  # labelled, but still its own chunk
+    assert any("Abbreviations" in r["section_headings"] for r in records)  # not dropped as References
+
+
+def test_captions_rescued_from_references_are_not_labelled_references():
+    pieces = [P("Background " + LONG, "Abstract"), P("We studied doi 10.1000/abc " + LONG, "Methods"),
+              P("1. Smith J.", "References"), P("Table 1 Baseline characteristics " + LONG, "References")]
+    _, records = chunking.build_chunks(pieces, page_count=9, title="T", count_tokens=words, parse=None, contextual=False)
+    table = next(r for r in records if "Table 1 Baseline" in r["text"])
+    assert table["section_headings"] == [] and table["section"] == "" and "Section: References" not in table["text"]

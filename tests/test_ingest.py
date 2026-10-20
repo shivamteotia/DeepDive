@@ -404,3 +404,12 @@ def test_prepared_result_survives_the_crash_isolating_child():
         assert runner.run("x") == make_prepared("x")
     finally:
         runner.shutdown()
+
+
+def test_new_collection_indexes_the_section_field(monkeypatch):
+    q = QdrantClient(":memory:")
+    fields = []
+    real = q.create_payload_index
+    monkeypatch.setattr(q, "create_payload_index", lambda coll, field, schema: fields.append(field) or real(coll, field, schema))
+    ingest.ensure_collection(q, "c", 3)
+    assert "section" in fields
