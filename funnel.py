@@ -22,6 +22,7 @@ TABS = ("all", "included", "review", "excluded", "duplicates", "fulltext")
 _TAB_DECISION = {"included": "include", "review": "review", "excluded": "exclude"}
 SCREEN_BATCH = 50  # papers written per commit during screen-all
 AI_FIELDS = ("verdicts", "ai_decision", "decision", "decided_by", "disagrees", "human_reason")
+FULLTEXT_FIELDS = ("fulltext_status", "fulltext_url", "fulltext_license", "document_id")  # only included papers get one
 CLIP = {"doi": 255, "pmid": 20, "pmcid": 20, "first_author": 200, "language": 100}  # String(n) columns on Paper
 
 
@@ -205,7 +206,9 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
     tab_counts = {"all": counts["papers"], "duplicates": counts["possible_duplicates"],
                   "fulltext": s.scalar(select(func.count()).select_from(db.Paper).where(
                       db.Paper.project_id == project_id, db.Paper.fulltext_status != "not_tried"))}
-    if not blind:
+    if blind:
+        tab_counts.pop("fulltext")
+    else:
         by = dict(s.execute(_decision_join(select(_final(), func.count()).select_from(db.Paper), version)
                             .where(db.Paper.project_id == project_id).group_by(_final())).all())
         tab_counts |= {t: by.get(d, 0) for t, d in _TAB_DECISION.items()}
@@ -215,7 +218,8 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
             .order_by(db.PossibleDuplicate.similarity.desc(), db.PossibleDuplicate.id).offset(offset).limit(limit)))
         items = [{**paper_out(s.get(db.Paper, d.paper_a)), "possible_duplicate": {
             "id": str(d.id), "other": paper_out(s.get(db.Paper, d.paper_b)), "similarity": d.similarity}} for d in rows]
-        return {"total": tab_counts["duplicates"], "counts": tab_counts, "items": items}
+        return {"total": tab_counts["duplicates"], "counts": tab_counts, "criteria_version": version,
+                "references": counts["references"], "items": items}
     q = select(db.Paper).where(db.Paper.project_id == project_id)
     if tab == "fulltext":
         q = q.where(db.Paper.fulltext_status != "not_tried")
@@ -223,8 +227,13 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
         q = _decision_join(q, version).where(_final() == _TAB_DECISION[tab])
     rows = list(s.scalars(q.order_by(db.Paper.created_at, db.Paper.id).offset(offset).limit(limit)))
     dec = _decisions(s, version, [p.id for p in rows])
-    return {"total": tab_counts[tab], "counts": tab_counts, "criteria_version": version,
-            "items": [paper_out(p) | decision_fields(dec.get(p.id), blind) for p in rows]}
+    return {"total": tab_counts[tab], "counts": tab_counts, "criteria_version": version, "references": counts["references"],
+            "items": [_blinded(paper_out(p), blind) | decision_fields(dec.get(p.id), blind) for p in rows]}
+
+
+def _blinded(paper: dict, blind: bool) -> dict:
+    """Blind mode: full-text fields go too (a fetched PDF means the paper was included)."""
+    return {k: v for k, v in paper.items() if k not in FULLTEXT_FIELDS} if blind else paper
 
 
 def _paper_in(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID) -> db.Paper | None:

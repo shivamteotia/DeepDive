@@ -477,7 +477,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
     def list_papers(project: OwnedProject, s: DB, tab: Literal[funnel.TABS] = "all",
                     offset: Annotated[int, Field(ge=0)] = 0, limit: Annotated[int, Field(ge=1, le=500)] = 50,
                     blind: bool = False):
-        if blind and tab in ("included", "review", "excluded"):
+        if blind and tab in ("included", "review", "excluded", "fulltext"):
             raise HTTPException(422, "Blind mode lists papers without the AI's decisions; use tab=all")
         return funnel.list_papers(s, project.id, tab, offset, limit, blind)
 
@@ -570,6 +570,13 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
 
     @app.get("/api/v1/actions/{action_id}")
     def get_action(a: OwnedAction):
+        return funnel.action_out(a)
+
+    @app.post("/api/v1/actions/{action_id}/cancel")
+    def cancel_action(a: OwnedAction, s: DB):
+        if not jobs.claim(s, db.PendingAction, a.id, "pending", "cancelled"):
+            raise HTTPException(409, f"This action is {a.status}")
+        s.refresh(a)
         return funnel.action_out(a)
 
     @app.post("/api/v1/actions/{action_id}/confirm")

@@ -214,7 +214,8 @@ def test_blind_mode_hides_ai_fields_and_stores_labels(api, signup):
     blind = all_papers(api, h, pid, blind=1)
     assert blind["items"] and not any(k in item for item in blind["items"]
                                       for k in ("verdicts", "ai_decision", "decision", "decided_by", "disagrees"))
-    assert set(blind["counts"]) == {"all", "duplicates", "fulltext"}  # decision counts would leak the AI's answers
+    assert set(blind["counts"]) == {"all", "duplicates"}  # decision (and full-text) counts would leak the AI's answers
+    assert api.get(f"/api/v1/projects/{pid}/papers", headers=h, params={"blind": 1, "tab": "fulltext"}).status_code == 422
     assert api.get(f"/api/v1/projects/{pid}/papers", headers=h, params={"blind": 1, "tab": "included"}).status_code == 422
     pid0 = blind["items"][0]["id"]
     assert api.patch(f"/api/v1/projects/{pid}/papers/{pid0}/decision", headers=h,
@@ -302,3 +303,28 @@ def test_queued_run_for_old_criteria_does_not_start(api, signup):
     assert fn is jobs.screen_all
     fn(*args)
     assert llm.screen_calls == [] and api.get(f"/api/v1/actions/{a['id']}", headers=h).json()["status"] == "expired"
+
+
+def test_a_pending_action_can_be_cancelled_and_then_never_runs(api, signup):
+    h, pid, llm = setup(api, signup)
+    draft(api, h, pid)
+    a = api.post(f"/api/v1/projects/{pid}/actions", headers=h, json={"tool": "screen_all"}).json()
+    r = api.post(f"/api/v1/actions/{a['id']}/cancel", headers=h)
+    assert r.status_code == 200 and r.json()["status"] == "cancelled"
+    assert api.post(f"/api/v1/actions/{a['id']}/confirm", headers=h).status_code == 409 and llm.screen_calls == []
+    assert api.post(f"/api/v1/actions/{a['id']}/cancel", headers=h).status_code == 409
+    assert api.post(f"/api/v1/actions/{a['id']}/cancel", headers=signup("b@example.com")).status_code == 404
+
+
+def test_listing_reports_imported_references_for_the_funnel(api, signup):
+    h, pid, _ = setup(api, signup)
+    assert all_papers(api, h, pid)["references"] == 30
+
+
+def test_blind_listing_hides_full_text_fields_too(api, signup):
+    h, pid, _ = setup(api, signup)
+    draft(api, h, pid)
+    blind = all_papers(api, h, pid, blind=1)
+    leaks = {"fulltext_status", "fulltext_url", "fulltext_license", "document_id"}  # only included papers get full text
+    assert blind["items"] and not any(leaks & set(p) for p in blind["items"]) and "fulltext" not in blind["counts"]
+

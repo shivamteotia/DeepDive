@@ -233,6 +233,7 @@ async function openConversation(id) {
     return;
   }
   if (view !== state.view) return;  // the user opened another chat meanwhile
+  window.screening?.onConversation();
   state.turns = convo.runs.map((run) => ({ run, evidence: null }));
   renderThread();
   for (const t of state.turns) {
@@ -254,6 +255,7 @@ function newChat() {
   renderConversations();
   renderThread();
   closeSidebar();
+  window.screening?.onConversation();
   $("#question").focus();
 }
 
@@ -333,6 +335,7 @@ function renderThread() {
     fillTurn(t);
     return t.el;
   }));
+  window.screening?.onThreadRender();
   scrollToEnd();
 }
 
@@ -485,6 +488,7 @@ async function openProject() {
   renderThread();
   renderDocuments();
   await Promise.all([loadDocuments(), loadConversations()]);
+  window.screening?.onProject();
 }
 
 async function boot() {

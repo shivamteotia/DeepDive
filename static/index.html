@@ -64,6 +64,39 @@
         <div class="brand"><span class="logo">M</span> MaxRIM</div>
       </header>
 
+      <nav class="views" aria-label="View">
+        <button class="view-btn active" id="view-chat" type="button">Ask papers</button>
+        <button class="view-btn" id="view-screening" type="button">Screening</button>
+      </nav>
+
+      <!-- Screening funnel: references -> papers -> criteria -> table / review queue; agent chat beside it -->
+      <section id="screening" class="screening" hidden>
+        <div class="sc-main">
+          <div class="sc-head">
+            <div id="funnel" class="funnel" aria-live="polite"></div>
+            <label class="btn small" title="Import PubMed (.nbib) or BibTeX (.bib) exports">Import references
+              <input id="ref-upload" type="file" accept=".nbib,.bib,.txt" multiple hidden></label>
+          </div>
+          <div id="criteria" class="card criteria"></div>
+          <div id="test-run" class="card" hidden></div>
+          <div id="sc-actions" class="sc-actions"><span id="sc-buttons" class="sc-actions"></span></div>
+          <div class="sc-toolbar">
+            <div id="sc-tabs" class="tabs" role="tablist"></div>
+            <label class="toggle small" title="Label papers without seeing the AI's verdicts (for the screening gold set)">
+              <input type="checkbox" id="blind-toggle"> <span class="track"></span> Blind labelling</label>
+          </div>
+          <div id="sc-body" class="sc-body"></div>
+        </div>
+        <aside class="sc-chat card">
+          <h3>Screening assistant</h3>
+          <div id="agent-log" class="agent-log" aria-live="polite"></div>
+          <form id="agent-form" class="agent-form">
+            <textarea id="agent-input" rows="2" maxlength="4000" placeholder="e.g. Screen for retrospective studies of adults with PCOS since 2015" required></textarea>
+            <button type="submit" class="btn primary small" id="agent-send">Send</button>
+          </form>
+        </aside>
+      </section>
+
       <!-- Empty state: a search engine for your papers -->
       <section id="hero" class="hero">
         <h1>Ask your research papers</h1>
@@ -91,5 +124,6 @@
 
   <div id="toast" class="toast" hidden></div>
   <script src="/static/app.js"></script>
+  <script src="/static/screening.js"></script>
 </body>
 </html>

@@ -210,7 +210,11 @@ ADDED_COLUMNS = [
 def make_sessions(database_url: str) -> sessionmaker:
     """Create missing tables and return a session factory.
     ponytail: create_all, no migrations; add Alembic at the first schema change on data that must be kept."""
-    kw = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool} if database_url.startswith("sqlite") else {}
+    kw = {}
+    if database_url.startswith("sqlite"):
+        kw = {"connect_args": {"check_same_thread": False}}
+        if database_url in ("sqlite://", "sqlite:///:memory:"):  # in-memory: one shared connection or the tables vanish
+            kw["poolclass"] = StaticPool  # (a file database gets a connection per thread: shared, sqlite3 can crash)
     engine = create_engine(database_url, **kw)
     Base.metadata.create_all(engine)
     if engine.dialect.name == "postgresql":
