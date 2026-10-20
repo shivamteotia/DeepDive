@@ -239,3 +239,117 @@ def test_quotes_wrapped_in_quote_marks_or_with_an_ellipsis_still_match():
     assert sc.screen_paper(ai_out(v("c3", "yes", "had a diagnosis … Sixty females")), paper, [POP])[0].verdict == "unclear"  # order
     assert sc.screen_paper(ai_out(v("c3", "yes", "sixty females ... were rats")), paper, [POP])[0].verdict == "unclear"
 
+
+
+# --- Task 10: extracted columns + filters ---
+
+DESIGNS = ["retrospective cohort", "prospective cohort", "RCT", "case-control", "cross-sectional"]
+
+
+def ext(cid="c5", exclude=("prospective cohort", "RCT")):
+    return sc.Criterion(id=cid, name="Study design", kind="exclude_if", definition="The study design as stated",
+                        check="extract", field=None, value=None, options=DESIGNS, exclude_values=list(exclude))
+
+
+def xv(cid, value, quote, reason="r"):
+    return sc.Verdict(criterion_id=cid, verdict="unclear", quote=quote, reason=reason, value=value)
+
+
+DESIGN_PAPER = {**PAPER, "abstract": "In this prospective cohort study we followed 200 women with PCOS for five years."}
+
+
+def test_extracted_value_in_the_filter_excludes_and_other_values_pass():
+    out = sc.screen_paper(ai_out(xv("c5", "prospective cohort", "In this prospective cohort study")), DESIGN_PAPER, [ext()])
+    assert (out[0].verdict, out[0].value) == ("yes", "prospective cohort") and sc.decide([ext()], out, True) == "exclude"
+    keep = sc.screen_paper(ai_out(xv("c5", "prospective cohort", "In this prospective cohort study")), DESIGN_PAPER,
+                           [ext(exclude=["RCT"])])
+    assert keep[0].verdict == "no" and sc.decide([ext(exclude=["RCT"])], keep, True) == "include"
+
+
+def test_not_stated_unknown_values_and_bad_quotes_go_to_review():
+    for x in (xv("c5", sc.NOT_STATED, ""), xv("c5", "case series", "In this prospective cohort study"),
+              xv("c5", "prospective cohort", "a quote that is not there"), xv("c5", "prospective cohort", "prospective")):
+        out = sc.screen_paper(ai_out(x), DESIGN_PAPER, [ext()])
+        assert out[0].verdict == "unclear" and sc.decide([ext()], out, True) == "review", x
+
+
+def test_the_model_sees_options_only_for_extract_criteria():
+    parse = ai_out(xv("c5", sc.NOT_STATED, ""), v("c3", "yes", "women with PCOS"))
+    sc.screen_paper(parse, DESIGN_PAPER, [POP, ext()])
+    sent = {c["id"]: c for c in json.loads(parse.calls[0][1])["criteria"]}
+    assert sent["c5"]["options"] == DESIGNS + [sc.NOT_STATED] and "options" not in sent["c3"]
+    assert "exclude_values" not in sent["c5"]  # the model reports; the user's filter never reaches it
+
+
+def test_apply_extract_recomputes_a_stored_value_under_a_new_filter():
+    stored = sc.Verdict(criterion_id="c5", verdict="yes", quote="In this prospective cohort study", reason="r",
+                        value="prospective cohort")
+    assert sc.apply_extract(ext(exclude=["RCT"]), stored).verdict == "no"
+    assert sc.apply_extract(ext(), stored).verdict == "yes"
+
+
+def test_validate_extract_criteria():
+    assert sc.validate_criteria([ext()]) is None
+    assert "options" in sc.validate_criteria([ext().model_copy(update={"options": ["only one"]})])
+    assert "not one of" in sc.validate_criteria([ext(exclude=["case series"])])
+
+
+def test_stored_criteria_without_the_new_keys_still_load():
+    old = {k: v for k, v in POP.model_dump().items() if k not in ("options", "exclude_values")}
+    assert sc.Criterion(**old).options is None
+    assert sc.Verdict(criterion_id="c1", verdict="yes", quote="q", reason="r").value is None
+
+
+def test_estimate_counts_extract_criteria_as_model_work():
+    assert sc.estimate([{"title": "t", "abstract": "a" * 400}], [ext()])["calls"] == 1
+
+
+def test_an_extract_field_can_only_drop_papers_never_flip(  # checker HIGH: include_if reversed the filter
+):
+    flipped = ext().model_copy(update={"kind": "include_if"})
+    assert "exclude_if" in sc.validate_criteria([flipped])
+    out = sc.screen_paper(ai_out(xv("c5", "retrospective cohort", "In this prospective cohort study")),
+                          {**DESIGN_PAPER, "abstract": "In this prospective cohort study of women"}, [flipped])
+    assert sc.decide([flipped], out, True) != "exclude"  # even if one is stored, a passing value never excludes
+    draft = sc.CriteriaDraft(criteria=[flipped])
+    assert sc.draft_criteria(FakeParse({sc.CriteriaDraft: draft}), "x")[0].kind == "exclude_if"
+
+
+def test_not_stated_can_never_exclude():
+    assert "not stated" in sc.validate_criteria([ext().model_copy(update={"options": DESIGNS + ["Not stated"]})])
+    stored = sc.Verdict(criterion_id="c5", verdict="unclear", quote="", reason="r", value=sc.NOT_STATED)
+    sneaky = ext().model_copy(update={"options": DESIGNS + [sc.NOT_STATED], "exclude_values": [sc.NOT_STATED]})
+    assert sc.apply_extract(sneaky, stored).verdict == "unclear"
+
+
+def test_values_match_options_ignoring_case_and_spaces():
+    out = sc.screen_paper(ai_out(xv("c5", " Prospective Cohort ", "In this prospective cohort study")), DESIGN_PAPER, [ext()])
+    assert (out[0].value, out[0].verdict) == ("prospective cohort", "yes")
+
+
+def test_a_value_whose_quote_failed_is_asked_again_later():
+    out = sc.screen_paper(ai_out(xv("c5", "prospective cohort", "words not in the abstract")), DESIGN_PAPER, [ext()])
+    assert out[0].verdict == "unclear" and out[0].value is None  # no stored answer: the next version asks again
+
+
+def test_reapplying_a_filter_needs_an_excluding_quote_long_enough():
+    stored = sc.Verdict(criterion_id="c5", verdict="no", quote="RCT", reason="r", value="RCT")
+    assert sc.reapply_extract(ext(), stored) is None  # would now exclude on one word: ask the model again
+    ok = stored.model_copy(update={"quote": "a randomized controlled trial"})
+    assert sc.reapply_extract(ext(), ok).verdict == "yes"
+
+
+def test_drafted_filters_use_the_options_spelling_and_survive_a_resave():
+    raw = ext().model_copy(update={"options": ["RCT", "Retrospective cohort"], "exclude_values": ["rct"]})
+    drafted = sc.draft_criteria(FakeParse({sc.CriteriaDraft: sc.CriteriaDraft(criteria=[raw])}), "x")[0]
+    assert drafted.exclude_values == ["RCT"] and sc.validate_criteria([drafted]) is None
+    assert sc.validate_criteria([raw]) is None  # a case-only difference is not a stray value
+
+
+def test_extraction_rules_come_first_and_the_schema_explains_value_and_quote():
+    p = sc.SCREEN_PROMPT
+    assert p.index('"options"') < p.index("yes/no")  # extraction is not read under the "value = null" rule
+    assert "never the option" in p.lower() and "worded differently" in p.lower()
+    from openai.lib._pydantic import to_strict_json_schema
+    props = to_strict_json_schema(sc.AiScreen)["$defs"]["Verdict"]["properties"]
+    assert "description" in props["value"] and "description" in props["quote"]

@@ -59,7 +59,7 @@ def test_propose_action_creates_a_pending_action_and_screens_nothing(api, signup
     script = Script([call("propose_action", {"tool": "screen_all"})], say("Confirm to screen 30 papers."))
     _, r = chat(api, h, pid, script)
     action = outputs(script.requests[1])[0]
-    assert action["status"] == "pending" and action["estimate"]["calls"] == 30
+    assert action["status"] == "pending" and action["estimate"]["calls"] == 29  # 2010 paper: free year exclusion
     assert any(m["content"].get("action", {}).get("id") == action["id"] for m in r.json()["messages"])
     assert llm.screen_calls == [] and all(p["decision"] is None for p in all_papers(api, h, pid)["items"])
     assert api.get(f"/api/v1/actions/{action['id']}", headers=h).json()["status"] == "pending"

@@ -42,7 +42,11 @@ class FakeLLM:
         retro = "retrospective" in data["abstract"]
         verdicts = []
         for c in data["criteria"]:
-            if c["id"] == "c3":
+            if "options" in c:  # an extracted field: report the stated design
+                verdicts.append(sc.Verdict(criterion_id=c["id"], verdict="unclear", reason="r",
+                                           value="retrospective cohort" if retro else "RCT",
+                                           quote="retrospective chart review" if retro else "randomized controlled trial"))
+            elif c["id"] == "c3":
                 verdicts.append(sc.Verdict(criterion_id="c3", verdict="yes", quote="women", reason="r"))
             else:
                 verdicts.append(sc.Verdict(criterion_id=c["id"], verdict="yes" if retro else "no",
@@ -131,7 +135,7 @@ def test_actions_need_criteria_and_start_pending(api, signup):
     assert api.post(f"/api/v1/projects/{pid}/actions", headers=h, json={"tool": "screen_all"}).status_code == 409
     draft(api, h, pid)
     a = api.post(f"/api/v1/projects/{pid}/actions", headers=h, json={"tool": "screen_all"}).json()
-    assert a["status"] == "pending" and a["criteria_version"] == 1 and a["estimate"]["calls"] == 30
+    assert a["status"] == "pending" and a["criteria_version"] == 1 and a["estimate"]["calls"] == 29  # the 2010 paper is excluded free by the year check
     assert llm.screen_calls == [] and all(p["decision"] is None for p in all_papers(api, h, pid)["items"])
     assert api.get(f"/api/v1/actions/{a['id']}", headers=h).json()["status"] == "pending"
 
@@ -328,3 +332,38 @@ def test_blind_listing_hides_full_text_fields_too(api, signup):
     leaks = {"fulltext_status", "fulltext_url", "fulltext_license", "document_id"}  # only included papers get full text
     assert blind["items"] and not any(leaks & set(p) for p in blind["items"]) and "fulltext" not in blind["counts"]
 
+
+
+DESIGN_FIELD = {"id": "c6", "name": "Study design", "kind": "exclude_if", "definition": "The study design as stated",
+                "check": "extract", "field": None, "value": None,
+                "options": ["retrospective cohort", "prospective cohort", "RCT", "case-control"], "exclude_values": ["RCT"]}
+
+
+def test_changing_only_the_filter_of_an_extracted_field_costs_nothing(api, signup):
+    h, pid, llm = setup(api, signup)
+    api.put(f"/api/v1/projects/{pid}/criteria", headers=h, json={"criteria": [YEAR, DESIGN_FIELD]})
+    screen(api, h, pid)
+    got = by_pmid(all_papers(api, h, pid))
+    assert got["1000"]["decision"] == "include" and got["1004"]["decision"] == "exclude"
+    assert next(v for v in got["1004"]["verdicts"] if v["criterion_id"] == "c6")["value"] == "RCT"
+    llm.screen_calls.clear()
+    keep_rcts = {**DESIGN_FIELD, "exclude_values": ["retrospective cohort"]}
+    api.put(f"/api/v1/projects/{pid}/criteria", headers=h, json={"criteria": [YEAR, keep_rcts]})
+    a = api.post(f"/api/v1/projects/{pid}/actions", headers=h, json={"tool": "screen_all"}).json()
+    assert a["estimate"]["calls"] == 1  # only the paper whose earlier call failed is asked again
+    api.post(f"/api/v1/actions/{a['id']}/confirm", headers=h)
+    assert [c["title"] for c in llm.screen_calls] == ["Study 2 of PCOS FAIL"]
+    now = by_pmid(all_papers(api, h, pid))
+    assert now["1000"]["decision"] == "exclude" and now["1004"]["decision"] == "include"
+
+
+def test_extracted_values_are_counted_for_the_agent(api, signup):
+    import uuid
+
+    import agent
+    h, pid, _ = setup(api, signup)
+    api.put(f"/api/v1/projects/{pid}/criteria", headers=h, json={"criteria": [YEAR, DESIGN_FIELD]})
+    screen(api, h, pid)
+    with api.maxrim.sessions() as s:
+        out = agent._status(agent.ToolContext(s=s, project_id=uuid.UUID(pid), parse=None, ask_research=None), None)
+    assert out["extracted"]["Study design (c6)"] == {"retrospective cohort": 10, "RCT": 18, "no answer": 1}

@@ -23,7 +23,24 @@ const sc = {
 // A verdict "yes" means the criterion's condition holds; whether that is good depends on the criterion's kind.
 function verdictIcon(c, v) {
   if (!v) return "–";
+  if (c.check === "extract") return `${ICON[v.verdict] || "❔"} ${v.value || "no answer"}`;  // the extracted value itself
   return ICON[v.verdict] || "❔";
+}
+
+function checkLabel(c) {
+  if (c.check === "metadata") return `metadata · ${c.field} ${c.value}`;
+  if (c.check === "extract") return `AI extracts · dropping ${(c.exclude_values || []).join(", ") || "nothing"}`;
+  return "AI reads abstract";
+}
+
+// "Study design: 9 cross-sectional, 4 retrospective cohort, …" over a list of papers' verdicts.
+function valueCounts(c, verdictLists) {
+  const n = new Map();
+  for (const vs of verdictLists) {
+    const v = (vs || []).find((x) => x.criterion_id === c.id);
+    if (v) n.set(v.value || "no answer", (n.get(v.value || "no answer") || 0) + 1);
+  }
+  return [...n].sort((a, b) => b[1] - a[1]).map(([k, x]) => `${x} ${k}`).join(", ");
 }
 
 function decisionLabel(p) {
@@ -114,10 +131,11 @@ function scRenderCriteria() {
     h("div", { class: "crit-head" },
       h("span", { class: "crit-kind" }, c.kind === "include_if" ? "Include if" : "Exclude if"),
       h("strong", {}, c.name),
-      h("span", { class: "badge neutral" }, c.check === "metadata" ? `metadata · ${c.field} ${c.value}` : "AI reads abstract"),
+      h("span", { class: "badge neutral" }, checkLabel(c)),
       h("button", { class: "del", type: "button", title: "Delete criterion", "aria-label": `Delete ${c.name}`,
         onclick: () => scDeleteCriterion(c.id) }, "✕")),
-    h("div", { class: "muted small" }, c.definition)));
+    h("div", { class: "muted small" }, c.definition,
+      c.check === "extract" ? ` Options: ${(c.options || []).join(", ")}.` : "")));
   box.replaceChildren(h("div", { class: "row between" }, h("h3", {}, `Criteria · version ${sc.criteria.version}`),
     sc.blind ? null : h("button", { class: "btn small", type: "button", disabled: sc.testing, onclick: () => scTest() },
       sc.testing ? "Testing…" : "Test on 20 papers")), ...cards);
@@ -184,6 +202,8 @@ function scRenderTest() {
       `${t.seconds != null ? `Took ${t.seconds} s. ` : ""}Screening all papers would take about ${est.calls.toLocaleString()} model calls `
       + `(~${Math.round((est.input_tokens + est.output_tokens) / 1000).toLocaleString()}k tokens). `
       + "Thumbs down where the AI got it wrong, then refine the criteria in chat."),
+    ...sc.criteria.criteria.filter((c) => c.check === "extract").map((c) => h("p", { class: "small" },
+      h("strong", {}, `${c.name}: `), valueCounts(c, t.items.map((it) => it.verdicts)))),
     h("div", { class: "table-wrap" }, h("table", { class: "sc-table" },
       h("thead", {}, h("tr", {}, h("th", {}, "Paper"), ...sc.criteria.criteria.map((c) => h("th", {}, c.name)),
         h("th", {}, "AI decision"), h("th", {}, "Right?"))),
@@ -230,7 +250,7 @@ function verdictCell(c, v) {
 function showPopover(anchor, c, v) {
   document.querySelector(".popover")?.remove();
   const pop = h("div", { class: "popover", role: "dialog" },
-    h("strong", {}, `${c.name}: ${v.verdict}`),
+    h("strong", {}, `${c.name}: ${c.check === "extract" ? `${v.value || "no answer"} (${v.verdict})` : v.verdict}`),
     v.quote ? h("blockquote", {}, `“${v.quote}”`) : null,
     h("div", { class: "muted small" }, v.reason));
   document.body.append(pop);
@@ -387,7 +407,7 @@ function renderQueue() {
     h("p", { class: "abstract" }, ...(p.abstract ? highlighted(p.abstract, quotes) : [h("em", {}, "No abstract")])),
     crit.length ? h("ul", { class: "verdicts" }, crit.map((c) => {
       const v = (p.verdicts || []).find((x) => x.criterion_id === c.id);
-      return h("li", {}, `${verdictIcon(c, v)} `, h("strong", {}, c.name),
+      return h("li", {}, `${verdictIcon(c, v)} · `, h("strong", {}, c.name),
         v?.quote ? ` — “${v.quote}”` : "", v ? h("span", { class: "muted small" }, ` ${v.reason}`) : " not checked");
     })) : null,
     !sc.blind && p.decision ? h("p", { class: "small" }, `Current: ${decisionLabel(p)}`) : null,

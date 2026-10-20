@@ -438,7 +438,9 @@ def set_decision(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID, changes
 
 
 def _same(a: sc.Criterion, b: dict) -> bool:
-    return all(getattr(a, k) == b.get(k) for k in ("id", "kind", "check", "definition", "field", "value"))
+    """Same question to the model. An extracted field's exclude_values is the user's filter, not part of the question:
+    changing only that re-applies the stored values."""
+    return all(getattr(a, k) == b.get(k) for k in ("id", "kind", "check", "definition", "field", "value", "options"))
 
 
 def _screen_plan(s: Session, project_id: uuid.UUID, version: int) -> tuple[list[sc.Criterion], list[tuple]]:
@@ -454,7 +456,7 @@ def _screen_plan(s: Session, project_id: uuid.UUID, version: int) -> tuple[list[
     def same_since(v: int) -> set[str]:
         if v not in unchanged:
             old = {c["id"]: c for c in criteria_set(s, project_id, v).criteria}
-            unchanged[v] = {c.id for c in criteria if c.check == "ai" and c.id in old and _same(c, old[c.id])}
+            unchanged[v] = {c.id for c in criteria if c.check in ("ai", "extract") and c.id in old and _same(c, old[c.id])}
         return unchanged[v]
 
     todo = []
@@ -464,8 +466,17 @@ def _screen_plan(s: Session, project_id: uuid.UUID, version: int) -> tuple[list[
             continue
         src = next((d for d in reversed(rows) if d.criteria_version < version and d.ai_decision is not None), None)
         keep = same_since(src.criteria_version) if src else set()
-        copied = {v["criterion_id"]: sc.Verdict(**v) for v in (src.verdicts if src else [])
-                  if v["criterion_id"] in keep and v["verdict"] != "unclear"}
+        copied = {}
+        for v in src.verdicts if src else []:
+            c = by_id.get(v["criterion_id"])
+            if c is None or c.id not in keep:
+                continue
+            if c.check == "extract" and v.get("value"):  # the model answered (even "not stated"): re-apply the filter
+                again = sc.reapply_extract(c, sc.Verdict(**v))
+                if again is not None:
+                    copied[c.id] = again
+            elif c.check == "ai" and v["verdict"] != "unclear":  # unclear is asked again: it may have been a failure
+                copied[c.id] = sc.Verdict(**v)
         excluded = any(sc.excludes(by_id[k], v) for k, v in copied.items())  # still excluded: nothing to pay for
         todo.append((paper_out(p), copied, [] if excluded else [c for c in criteria if c.id not in copied]))
     return criteria, todo
@@ -473,7 +484,10 @@ def _screen_plan(s: Session, project_id: uuid.UUID, version: int) -> tuple[list[
 
 def screen_estimate(s: Session, project_id: uuid.UUID, version: int) -> dict:
     _, todo = _screen_plan(s, project_id, version)
-    parts = [sc.estimate([p], ask) for p, _, ask in todo]
+    def free_exclusion(p: dict, ask: list[sc.Criterion]) -> bool:  # metadata excludes it before any model call
+        return any(c.check == "metadata" and (v := sc._meta_or_error(c, p)) is not None and sc.excludes(c, v) for c in ask)
+
+    parts = [sc.estimate([p], [] if free_exclusion(p, ask) else ask) for p, _, ask in todo]
     return {"papers": len(todo), **{k: sum(e[k] for e in parts) for k in ("calls", "input_tokens", "output_tokens")}}
 
 
@@ -576,3 +590,21 @@ def match_document(s: Session, project_id: uuid.UUID, doc_id: uuid.UUID, first_p
     link_document(paper, doc_id, "uploaded")
     s.commit()
     return paper.id
+
+
+def extracted_counts(s: Session, project_id: uuid.UUID) -> dict[str, dict[str, int]]:
+    """For each extracted field of the latest criteria: how many screened papers have each value ("18 retrospective
+    cohort, 2 prospective cohort"); "no answer" = a failed call or an unverified value."""
+    cs = criteria_set(s, project_id)
+    fields = {c["id"]: f'{c["name"]} ({c["id"]})' for c in (cs.criteria if cs else []) if c.get("check") == "extract"}
+    if not fields:
+        return {}
+    out = {name: Counter() for name in fields.values()}
+    rows = s.scalars(select(db.ScreeningDecision.verdicts).where(
+        db.ScreeningDecision.project_id == project_id, db.ScreeningDecision.criteria_version == cs.version,
+        db.ScreeningDecision.test.is_(False)))
+    for verdicts in rows:
+        for v in verdicts or []:
+            if v["criterion_id"] in fields:
+                out[fields[v["criterion_id"]]][v.get("value") or "no answer"] += 1
+    return {name: dict(c.most_common()) for name, c in out.items()}
