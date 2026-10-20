@@ -41,11 +41,33 @@ def test_latest_papers_become_cited_evidence():
     assert "BACKGROUND: Early warning matters." in h["text"] and "AUROC of 0.89" in h["text"]
 
 
-def test_failures_and_no_results_are_empty():
+def test_no_results_are_empty_but_failures_raise():
+    import pytest
     assert pubmed.search("q", api_key="", project_id="p", transport=transport([], search={"esearchresult": {"idlist": []}})) == []
-    assert pubmed.search("q", api_key="", project_id="p", transport=transport([], fetch="<not xml")) == []
-    boom = httpx.MockTransport(lambda r: httpx.Response(429))
-    assert pubmed.search("q", api_key="", project_id="p", transport=boom) == []
+    for bad in (transport([], fetch="<not xml"), httpx.MockTransport(lambda r: httpx.Response(429)),
+                httpx.MockTransport(lambda r: httpx.Response(200, json=["not", "a", "dict"]))):
+        with pytest.raises(pubmed.PubMedError):
+            pubmed.search("q", api_key="secret-key", project_id="p", transport=bad)
+
+
+def test_a_consortium_first_author_is_named():
+    xml = EFETCH.replace("<Author><LastName>Smith</LastName><Initials>J</Initials></Author>",
+                         "<Author><CollectiveName>ICU Study Group</CollectiveName></Author>")
+    hit = pubmed.search("q", api_key="", project_id="p", transport=transport([], fetch=xml))[0]
+    assert hit["source_filename"].startswith("ICU Study Group 2025")
+
+
+def test_a_question_becomes_a_keyword_query():
+    calls = []
+
+    def parse(instructions, input, fmt):
+        calls.append(input)
+        return fmt(query="deep learning sepsis prediction ICU")
+    q = "What do recent studies report about the AUROC of deep learning models for sepsis prediction in the ICU?"
+    assert pubmed.keyword_query(parse, q) == "deep learning sepsis prediction ICU" and q in calls[0]
+    assert pubmed.keyword_query(lambda *a: None, q) == q  # no answer: the question itself
+    assert pubmed.keyword_query(lambda *a: (_ for _ in ()).throw(RuntimeError("down")), q) == q
+    assert pubmed.keyword_query(lambda i, inp, fmt: fmt(query="  "), q) == q
 
 
 def test_no_key_still_works_and_sends_no_key():

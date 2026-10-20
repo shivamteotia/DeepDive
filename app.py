@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -101,6 +101,12 @@ class RunIn(BaseModel):
     conversation_id: uuid.UUID | None = None
     web_search: bool = False
     pubmed: bool = False  # answer from the latest PubMed abstracts instead of the project's PDFs
+
+    @model_validator(mode="after")
+    def _one_outside_source(self):
+        if self.pubmed and self.web_search:
+            raise ValueError("Choose PubMed or web search for a run, not both")
+        return self
 
 
 class DuplicateAction(BaseModel):

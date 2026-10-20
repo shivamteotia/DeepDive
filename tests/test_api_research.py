@@ -173,3 +173,20 @@ def test_a_pubmed_run_asks_for_a_literature_summary(api, signup, fake_research, 
     assert fake_research["question"] == pubmed.review_question("ML for early ICU mortality")
     assert "ML for early ICU mortality" in fake_research["question"] and "found" in fake_research["question"]
     assert run["question"] == "ML for early ICU mortality"  # the user's words are what the chat shows
+
+
+def test_a_pubmed_run_rejects_web_too_and_reports_pubmed_failures(api, signup, fake_research, monkeypatch):
+    import pubmed
+    h = signup()
+    pid = project(api, h, "A")
+    both = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h,
+                    json={"question": "ML for ICU mortality?", "pubmed": True, "web_search": True})
+    assert both.status_code == 422
+
+    def down(*a, **k):
+        raise pubmed.PubMedError("PubMed search failed (HTTPStatusError)")
+    monkeypatch.setattr(pubmed, "search", down)
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "ML for ICU mortality?", "pubmed": True})
+    run = api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()
+    assert run["status"] == "failed" and "PubMed search failed" in run["error"]
+    assert fake_research.get("max_iterations") is None  # research never started on an empty, wrong evidence set

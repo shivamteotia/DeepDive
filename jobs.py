@@ -194,7 +194,8 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
     def search_fn(q: str) -> list[dict]:  # project and ready-document filters are fixed here, server-side
         if use_pubmed:  # one PubMed search for the topic (the 20 latest papers), whatever sub-question asks: the
             if "pubmed" not in web_cache:  # planner's generic sub-questions ("AUROC values?") match unrelated papers
-                web_cache["pubmed"] = pubmed.search(topic["q"], api_key=cfg.pubmed_api_key, project_id=project_id)
+                terms = pubmed.keyword_query(screen_parse(state), topic["q"])  # PubMed ANDs every word of a sentence
+                web_cache["pubmed"] = pubmed.search(terms, api_key=cfg.pubmed_api_key, project_id=project_id)
             return list(web_cache["pubmed"])
         hits = ask.search(state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
                           project_id=project_id, question=q, k=RESEARCH_K, rerank_model=cfg.reranker_model,
@@ -215,6 +216,9 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
         else:
             standalone = research.rewrite_followup(state.openai, cfg.openai_fast_model, history, question)
             topic["q"] = standalone
+            if use_pubmed:  # search first: an unreachable PubMed fails the run instead of answering "no sources"
+                search_fn(standalone)
+                max_iterations = min(max_iterations, 2)  # a fixed set of 20 abstracts: re-searching adds nothing
             result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
                                   fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model,
                                   question=pubmed.review_question(standalone) if use_pubmed else standalone,
