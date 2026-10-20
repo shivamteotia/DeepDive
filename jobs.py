@@ -291,12 +291,12 @@ def extract_column(state: State, action_id: uuid.UUID) -> None:
                             continue
                         try:
                             with s.begin_nested():  # a paper regrouped away meanwhile fails alone, not the batch
-                                funnel.save_value(s, project_id, column_id, uuid.UUID(paper["id"]), x)
+                                v = funnel.save_value(s, project_id, column_id, uuid.UUID(paper["id"]), x)
                         except IntegrityError:
                             continue
-                        counts["filled"] += 1
-                        counts["fulltext"] += x.source == "fulltext"
-                        counts["not_stated"] += x.value == extraction.NOT_STATED
+                        counts["filled"] += 1  # what is stored, not what the model said
+                        counts["fulltext"] += v.source == "fulltext"
+                        counts["not_stated"] += v.value == extraction.NOT_STATED
                     s.commit()
         values = {"status": "done", "error": None, "result": counts}
     except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the action

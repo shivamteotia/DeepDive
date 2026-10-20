@@ -199,3 +199,34 @@ def test_a_reread_with_the_same_answer_is_not_billed_a_third_time(api, signup, m
     assert extract(api, h, pid, col["id"])["estimate"]["calls"] == 1  # one upgrade attempt, same answer
     calls.clear()
     assert extract(api, h, pid, col["id"])["estimate"]["calls"] == 0 and calls == []
+
+
+def test_a_full_text_not_stated_keeps_the_value_found_in_the_abstract(api, signup, monkeypatch):
+    import uuid
+
+    import db
+    h, pid, llm = screened(api, signup)
+    with_extraction(api, llm)
+    col = add(api, h, pid).json()
+    extract(api, h, pid, col["id"])  # retrospective cohort, from the abstract
+    target = by_pmid(all_papers(api, h, pid))["1003"]
+    with api.maxrim.sessions() as s:
+        doc = db.Document(project_id=uuid.UUID(pid), filename="x.pdf", sha256="12" * 32, status="ready")
+        s.add(doc)
+        s.flush()
+        s.get(db.Paper, uuid.UUID(target["id"])).document_id = doc.id
+        s.commit()
+    monkeypatch.setattr(jobs, "passages_for", lambda *a: ["Methods were as described before."])
+    real = api.maxrim.openai.responses.parse
+
+    def silent(model, instructions, input, text_format):  # the full-text read misses what the abstract says
+        if text_format is ex.Answer:
+            return SimpleNamespace(output_parsed=ex.Answer(value="not stated", quote="", reason="not stated"))
+        return real(model, instructions, input, text_format)
+
+    api.maxrim.openai.responses = SimpleNamespace(parse=silent)
+    run = extract(api, h, pid, col["id"])
+    assert run["estimate"]["calls"] == 1 and run["result"]["fulltext"] == 0 and run["result"]["not_stated"] == 0
+    value = by_pmid(all_papers(api, h, pid))["1003"]["columns"]["Study design"]
+    assert value["value"] == "retrospective cohort"
+    assert extract(api, h, pid, col["id"])["estimate"]["calls"] == 0  # and it is not billed again

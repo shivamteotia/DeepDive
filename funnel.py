@@ -725,13 +725,16 @@ def extract_targets(s: Session, project_id: uuid.UUID, column_id: uuid.UUID, tab
 
 
 def save_value(s: Session, project_id: uuid.UUID, column_id: uuid.UUID, paper_id: uuid.UUID,
-               x: extraction.Extracted) -> None:
+               x: extraction.Extracted) -> db.ExtractValue:
+    """The stored row: a new "not stated" never replaces a value already found (e.g. from the abstract)."""
     v = s.scalar(select(db.ExtractValue).where(db.ExtractValue.column_id == column_id, db.ExtractValue.paper_id == paper_id))
     if v is None:
         v = db.ExtractValue(project_id=project_id, column_id=column_id, paper_id=paper_id)
         s.add(v)
-    v.value, v.quote, v.reason, v.source = x.value, x.quote, x.reason, x.source
+    if not (x.value == extraction.NOT_STATED and v.value not in (None, extraction.NOT_STATED)):  # never lose a value
+        v.value, v.quote, v.reason, v.source = x.value, x.quote, x.reason, x.source
     v.updated_at = db.utcnow()  # even when nothing changed: the upgrade rule compares it with the document
+    return v
 
 
 def paper_columns(s: Session, project_id: uuid.UUID, paper_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict]:

@@ -73,3 +73,17 @@ def test_a_number_must_appear_in_its_quote():
 def test_column_limits():
     assert ex.validate(DESIGN.model_copy(update={"options": [f"o{i}" for i in range(31)]})) is not None
     assert ex.validate(COUNTRY.model_copy(update={"instruction": "x" * 2001})) is not None
+
+
+def test_a_text_value_must_be_in_its_quote():
+    paper = {**PAPER, "abstract": "All participants were Chinese. Recruited at a university hospital in 2015."}
+    assert ex.extract_one(answer("Turkey", "a university hospital"), COUNTRY, paper, []).value == ex.NOT_STATED
+    assert ex.extract_one(answer("China", "All participants were Chinese"), COUNTRY, paper, []).value == ex.NOT_STATED
+    assert ex.extract_one(answer("China", "Shanghai, China"), COUNTRY, PAPER, []).value == "China"
+
+
+def test_text_values_match_whole_words_ignoring_case_and_accents():
+    assert not ex._in_quote("UK", "Ukrainian refugees") and not ex._in_quote("US", "we used registry data")
+    assert not ex._in_quote("India", "Indiana") and not ex._in_quote("United States", "in the US")
+    assert ex._in_quote("Sao Paulo", "patients in São Paulo, Brazil") and ex._in_quote("united states", "the United States.")
+    assert not ex._in_quote("-", "any quote") and not ex._in_quote("", "any quote")
