@@ -22,7 +22,7 @@ Structure (JPan2023 dry run): better than Docling + outline — Abstract and Res
 Methods — but chart titles become headings (4 Discussion chunks filed under "Decision curve analysis…"); title still
 falls back to the filename. Decision: keep Docling; revisit only with tables flattened to row sentences.
 
-## 2026-10-20: run 12 (candidate, not promoted): section outline (chunker v3)
+## 2026-10-20: run 12 (current baseline): section outline (chunker v3)
 
 Change: one outline call per document (`OPENAI_CONTEXT_MODEL`) turns Docling's flat headings into a heading tree with
 canonical sections; every chunk carries its path ("Methods > Statistical analysis") and section. Branch
@@ -44,8 +44,11 @@ compare vs run 8: **REVIEW** (5 improved, 14 flat, 1 regressed). Report: `runs/2
 Dry run on JPan2023 (no Methods/Results headings in the paper): paths are mostly right ("Methods > Data collection",
 "Declarations > Abbreviations"), but "Study design" sits under Introduction and the results subsections are labelled
 Methods. Section labels are search context only, so mislabels cost ranking, not correctness.
+Promoted to baseline and shipped on 2026-10-20 at the user's request: merged to main, QDRANT_COLLECTION switched to the
+_v3 collection (4 older-project copies of EA2022/JPan2023 had no stored PDF; restored from the identical files and
+re-indexed, so all 10 ready documents are in _v3), --sync-counts run (10 documents).
 
-## 2026-10-16: run 8 (current baseline): smart parsing and chunking + contextual retrieval
+## 2026-10-16: run 8 (superseded): smart parsing and chunking + contextual retrieval
 
 Change: document-type classification (heuristics + LLM tie-break), front matter / declarations merged, references
 dropped, tiny fragments merged, `Paper:`/`Document:` + section label on every chunk, and an LLM-written search

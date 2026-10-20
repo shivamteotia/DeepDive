@@ -17,8 +17,8 @@ API ingestion runs in a 1-worker child process (`jobs.IngestRunner`) so a native
 After step 5: web UI (`static/`, served at `/`), chat memory (conversations; follow-ups rewritten to a standalone question by
 the fast model) and opt-in per-run web search (Tavily, `WEB_SEARCH_ENABLED` + `TAVILY_API_KEY`). Spec:
 `docs/superpowers/specs/2026-10-15-frontend-chat-web-design.md`. E2E eval: `evals/` (results log `evals/baselines/RESULTS.md`).
-Eval baseline (eval/gold.json v1, DRAFT, k=6, HYBRID_SEARCH=true, smart chunking): recall@k 0.95, MRR 0.85, catch rate 1.00, true rejection 0.00
-(before smart chunking 0.95 / 0.73; dense only 0.90 / 0.71). E2E baseline: run 8 (`evals/baselines/baseline.json`).
+Eval baseline (eval/gold.json v1, DRAFT, k=6, HYBRID_SEARCH=true, smart chunking + section outline): recall@k 1.00, MRR 0.86, catch rate 1.00,
+true rejection 0.00 (smart chunking alone 0.95 / 0.85; before it 0.95 / 0.73; dense only 0.90 / 0.71). E2E baseline: run 12 (`evals/baselines/baseline.json`).
 Run `evaluate.py` before and after any change to chunking, retrieval, prompts, or models; don't merge a regression.
 Reranker (`RERANKER_MODEL`, off by default) measured 2026-10-15: ms-marco-MiniLM-L-6-v2 recall 0.80 / MRR 0.78 (worse);
 bge-reranker-base recall 0.90 / MRR 0.77 but ~30 s per search on CPU; jina:jina-reranker-v2-base-multilingual
@@ -34,7 +34,7 @@ Re-chunk with `ingest.py --reindex-to <new>`; after switching `QDRANT_COLLECTION
 Rerankers re-tested on it: none beat no-reranker.
 Section outline (2026-10-20, chunker v3, `sections.py`): one context-model call per document builds the heading tree +
 canonical section per chunk. Run 12 on `<collection>_v3`: recall 1.00 / MRR 0.86, e2e REVIEW (one noisy premise case,
-passes on re-run). Not yet the baseline: switch `QDRANT_COLLECTION` to the _v3 collection, run `--sync-counts`, then promote.
+passes on re-run). Shipped 2026-10-20: `QDRANT_COLLECTION` = the _v3 collection, `--sync-counts` run, run 12 promoted.
 LlamaParse (agentic) tested once as the parser (run 13): recall 0.95 / MRR 0.81, a wrong-paper answer — keep Docling.
 
 **Deferred until needed:** Celery/Redis (use FastAPI `BackgroundTasks`), S3 (local `data/`), MLflow (JSON results), Alembic (db.ADDED_COLUMNS for now).
