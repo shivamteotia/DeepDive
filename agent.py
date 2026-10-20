@@ -301,7 +301,7 @@ def _latest_answer(ctx: ToolContext) -> db.ResearchRun | None:
         return None
     runs = ctx.s.scalars(select(db.ResearchRun).where(db.ResearchRun.conversation_id == ctx.conversation_id,
                                                       db.ResearchRun.status == "completed")
-                         .order_by(db.ResearchRun.created_at.desc(), db.ResearchRun.id.desc()))
+                         .order_by(db.ResearchRun.created_at.desc(), db.ResearchRun.finished_at.desc()))
     return next((r for r in runs if (r.result or {}).get("claims") and r.result.get("status") != "blocked"), None)
 
 

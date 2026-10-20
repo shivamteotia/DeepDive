@@ -602,7 +602,8 @@ function barChart(chart) {
 
 function chartCard(chart) {
   const svg = barChart(chart);
-  const csv = ["label,value,finding", ...chart.points.map((p) => `"${p.label.replace(/"/g, '""')}",${p.value},${p.finding}`)].join("\n");
+  const cell = (t) => `"${(/^[=+\-@\t\r]/.test(t) ? "'" : "") + t.replace(/"/g, '""')}"`;  // never a formula
+  const csv = ["label,value,finding", ...chart.points.map((p) => `${cell(p.label)},${p.value},${p.finding}`)].join("\n");
   return h("div", { class: "card chart" }, svg,
     chart.dropped ? h("p", { class: "muted small" }, `${chart.dropped} value(s) left out: their finding does not state them.`) : null,
     h("div", { class: "row" },
