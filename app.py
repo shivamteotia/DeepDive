@@ -443,7 +443,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         find = web.searcher(cfg)
 
         def web_search(query: str) -> list[dict]:  # the project id is the server's, never the model's
-            return find(query, project_id=str(c.project_id))
+            return find(query, project_id=str(c.project_id), scrape=False)  # snippets: search results only
 
         ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state), ask_research=ask_research,
                                 web_search=web_search if find else None)

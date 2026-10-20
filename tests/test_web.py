@@ -74,3 +74,14 @@ def test_searcher_prefers_firecrawl_then_tavily_and_is_off_when_disabled():
     tv = web.searcher(make_settings(web_search_enabled=True, tavily_api_key="tv"))
     assert fc.func is web.firecrawl and fc.keywords["api_key"] == "fc"
     assert tv.func is web.search and tv.keywords["api_key"] == "tv"
+
+
+def test_firecrawl_without_scrape_is_search_only():
+    import json
+    seen = []
+    body = {"success": True, "data": {"web": [{"url": "https://who.int/p", "title": "WHO", "description": "The fact sheet."}]}}
+    hits = web.firecrawl("q", api_key="k", project_id="p", timeout=5, scrape=False,
+                         transport=transport(lambda r: httpx.Response(200, json=body), seen))
+    assert "scrapeOptions" not in json.loads(seen[0].content) and hits[0]["text"] == "The fact sheet."
+    assert web.search("q", api_key="k", project_id="p", timeout=1, scrape=False,  # Tavily accepts and ignores it
+                      transport=transport(lambda r: httpx.Response(200, json={"results": []}), [])) == []

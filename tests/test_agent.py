@@ -240,7 +240,7 @@ def test_web_search_tool_returns_quoted_results_when_enabled(api, signup, monkey
     api.maxrim.settings = api.maxrim.settings.model_copy(update={"web_search_enabled": True, "tavily_api_key": "tv"})
     seen = {}
 
-    def fake_search(query, *, api_key, project_id, timeout, max_results=5, transport=None):
+    def fake_search(query, *, api_key, project_id, timeout, max_results=5, scrape=True, transport=None):
         seen.update(query=query, project_id=project_id)
         return [{"url": "https://who.int/pcos", "title": "WHO PCOS", "text": "x" * 2000, "source_type": "web"}]
     monkeypatch.setattr(web, "search", fake_search)
@@ -258,3 +258,17 @@ def test_web_search_tool_is_off_unless_enabled(api, signup, monkeypatch):
     script = Script([call("web_search", {"query": "anything"})], say("ok"))
     chat(api, h, pid, script)
     assert "WEB_SEARCH_ENABLED" in outputs(script.requests[1])[0]["error"]
+
+
+def test_web_search_tool_asks_for_search_results_only(api, signup, monkeypatch):
+    import web
+    h, pid, _ = setup(api, signup)
+    api.maxrim.settings = api.maxrim.settings.model_copy(update={"web_search_enabled": True, "firecrawl_api_key": "fc"})
+    seen = {}
+
+    def fake(query, *, api_key, project_id, timeout, max_results=5, scrape=True, transport=None):
+        seen.update(api_key=api_key, scrape=scrape)
+        return []
+    monkeypatch.setattr(web, "firecrawl", fake)
+    chat(api, h, pid, Script([call("web_search", {"query": "q"})], say("ok")))
+    assert seen == {"api_key": "fc", "scrape": False}

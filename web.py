@@ -30,10 +30,10 @@ def _post(url: str, api_key: str, body: dict, timeout: float, transport) -> dict
     return data if isinstance(data, dict) else None
 
 
-def search(query: str, *, api_key: str, project_id: str, timeout: float, max_results: int = 5,
+def search(query: str, *, api_key: str, project_id: str, timeout: float, max_results: int = 5, scrape: bool = True,
            transport: httpx.BaseTransport | None = None) -> list[dict]:
-    """Tavily: top web results as evidence hits for this run's project. Any failure returns []: research falls back
-    to papers."""
+    """Tavily: top web results as evidence hits for this run's project (its results always carry content, so `scrape`
+    is ignored). Any failure returns []: research falls back to papers."""
     data = _post(TAVILY_URL, api_key, {"query": query, "max_results": max_results, "search_depth": "basic"}, timeout,
                  transport) or {}
     results = data.get("results")
@@ -52,12 +52,14 @@ def search(query: str, *, api_key: str, project_id: str, timeout: float, max_res
     return hits
 
 
-def firecrawl(query: str, *, api_key: str, project_id: str, timeout: float, max_results: int = 5,
+def firecrawl(query: str, *, api_key: str, project_id: str, timeout: float, max_results: int = 5, scrape: bool = True,
               transport: httpx.BaseTransport | None = None) -> list[dict]:
-    """Firecrawl v2: the same evidence hits. Each result's main content as markdown (~1 credit per page on top of 2
-    per search), else its description; ranked by position. Any failure returns []."""
-    body = {"query": query, "limit": max_results, "timeout": int(timeout * 1000),
-            "scrapeOptions": {"formats": ["markdown"], "onlyMainContent": True}}
+    """Firecrawl v2: the same evidence hits, ranked by position. scrape=True (research evidence): each result's main
+    content as markdown, 2 credits per search + ~1 per page; scrape=False (snippets): its description only, 2 credits.
+    Any failure returns []."""
+    body = {"query": query, "limit": max_results, "timeout": int(timeout * 1000)}
+    if scrape:
+        body["scrapeOptions"] = {"formats": ["markdown"], "onlyMainContent": True}
     data = _post(FIRECRAWL_URL, api_key, body, timeout + 5, transport) or {}
     results = (data.get("data") or {}).get("web") if isinstance(data.get("data"), dict) else None
     hits = []
