@@ -32,6 +32,10 @@ Smart chunking (2026-10-16, branch smart-chunking): `chunking.py` classifies doc
 LLM search context (`CONTEXTUAL_CHUNKS`, `OPENAI_CONTEXT_MODEL`). Run 8: recall 0.95 / MRR 0.85, e2e PASS vs run 7.
 Re-chunk with `ingest.py --reindex-to <new>`; after switching `QDRANT_COLLECTION` run `ingest.py --sync-counts`.
 Rerankers re-tested on it: none beat no-reranker.
+Section outline (2026-10-20, chunker v3, `sections.py`): one context-model call per document builds the heading tree +
+canonical section per chunk. Run 12 on `<collection>_v3`: recall 1.00 / MRR 0.86, e2e REVIEW (one noisy premise case,
+passes on re-run). Not yet the baseline: switch `QDRANT_COLLECTION` to the _v3 collection, run `--sync-counts`, then promote.
+LlamaParse (agentic) tested once as the parser (run 13): recall 0.95 / MRR 0.81, a wrong-paper answer — keep Docling.
 
 **Deferred until needed:** Celery/Redis (use FastAPI `BackgroundTasks`), S3 (local `data/`), MLflow (JSON results), Alembic (db.ADDED_COLUMNS for now).
 
