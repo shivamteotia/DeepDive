@@ -190,3 +190,13 @@ def test_a_pubmed_run_rejects_web_too_and_reports_pubmed_failures(api, signup, f
     run = api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()
     assert run["status"] == "failed" and "PubMed search failed" in run["error"]
     assert fake_research.get("max_iterations") is None  # research never started on an empty, wrong evidence set
+
+
+def test_a_pubmed_run_has_at_most_two_rounds(api, signup, fake_research, monkeypatch):
+    import pubmed
+    h = signup()
+    pid = project(api, h, "A")
+    monkeypatch.setattr(pubmed, "search", lambda *a, **k: [])
+    api.post(f"/api/v1/projects/{pid}/research-runs", headers=h,
+             json={"question": "ML for ICU mortality?", "pubmed": True, "max_iterations": 5})
+    assert fake_research["max_iterations"] == 2

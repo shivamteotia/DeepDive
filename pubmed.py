@@ -86,7 +86,8 @@ def search(query: str, *, api_key: str, project_id: str, transport: httpx.BaseTr
                                                               "sort": "pub_date", "retmode": "json", "tool": "maxrim", **key})
             r.raise_for_status()
             data = r.json()
-            if not isinstance(data, dict) or not isinstance(data.get("esearchresult"), dict):
+            if not isinstance(data, dict) or not isinstance(data.get("esearchresult"), dict) \
+                    or data["esearchresult"].get("ERROR"):  # NCBI reports some errors inside a 200
                 raise PubMedError("PubMed search failed (unexpected response)")  # not "no papers"
             ids = data["esearchresult"].get("idlist") or []
             if not ids:

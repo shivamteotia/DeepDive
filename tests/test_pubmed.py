@@ -80,3 +80,10 @@ def test_the_summary_framing_never_reaches_pubmed():
     seen = []
     pubmed.search(pubmed.review_question("ML for early ICU mortality"), api_key="", project_id="p", transport=transport(seen))
     assert dict(seen[0].url.params)["term"] == "ML for early ICU mortality"
+
+
+def test_an_esearch_error_inside_a_200_is_a_failure():
+    import pytest
+    with pytest.raises(pubmed.PubMedError):
+        pubmed.search("q", api_key="", project_id="p",
+                      transport=transport([], search={"esearchresult": {"ERROR": "Empty term and query_key"}}))
