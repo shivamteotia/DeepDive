@@ -221,7 +221,7 @@ def test_blind_mode_hides_ai_fields_and_stores_labels(api, signup):
     blind = all_papers(api, h, pid, blind=1)
     assert blind["items"] and not any(k in item for item in blind["items"]
                                       for k in ("verdicts", "ai_decision", "decision", "decided_by", "disagrees"))
-    assert set(blind["counts"]) == {"all", "duplicates"}  # decision (and full-text) counts would leak the AI's answers
+    assert set(blind["counts"]) == {"all", "duplicates", "sample"}  # decision and full-text counts would leak the AI answers
     assert api.get(f"/api/v1/projects/{pid}/papers", headers=h, params={"blind": 1, "tab": "fulltext"}).status_code == 422
     assert api.get(f"/api/v1/projects/{pid}/papers", headers=h, params={"blind": 1, "tab": "included"}).status_code == 422
     pid0 = blind["items"][0]["id"]

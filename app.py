@@ -109,6 +109,10 @@ class RunIn(BaseModel):
         return self
 
 
+class SampleIn(BaseModel):
+    size: int = Field(150, ge=10, le=2000)
+
+
 class DuplicateAction(BaseModel):
     action: Literal["merge", "dismiss", "keep_article"]
 
@@ -574,6 +578,14 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         if out is None:
             raise HTTPException(404, "That paper is not in the test run of the current criteria")
         return out
+
+    @app.post("/api/v1/projects/{project_id}/label-sample", status_code=201)
+    def make_label_sample(body: SampleIn, project: OwnedProject, s: DB):
+        """The fixed, stratified sample to blind-label for the screening recall eval (made once per project)."""
+        try:
+            return funnel.make_label_sample(s, project.id, body.size)
+        except funnel.Conflict as e:
+            raise HTTPException(409, str(e)) from None
 
     @app.patch("/api/v1/projects/{project_id}/papers/{paper_id}/decision")
     def set_decision(paper_id: uuid.UUID, body: DecisionIn, project: OwnedProject, s: DB):

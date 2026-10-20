@@ -35,14 +35,26 @@ def export(sessions, project_id: uuid.UUID) -> dict:
             db.ScreeningDecision.project_id == project_id, db.ScreeningDecision.test.is_(False))
             .order_by(db.ScreeningDecision.criteria_version))
         newest = {d.paper_id: d.blind_label for d in rows}  # each paper's newest row wins, even when it cleared the label
+        sample = {x.paper_id: x for x in s.scalars(select(db.LabelSample).where(db.LabelSample.project_id == project_id))}
         papers = []
         for pid, label in newest.items():
             p = s.get(db.Paper, pid) if label else None
             if p is not None and p.superseded_by is None:  # screening skips preprints replaced by their article
                 out = funnel.paper_out(p)
-                papers.append({**{k: out[k] for k in PAPER_FIELDS}, "label": label})
+                x = sample.get(pid)  # sampled papers stand for their whole pile; others count once
+                papers.append({**{k: out[k] for k in PAPER_FIELDS}, "label": label, "stratum": x.stratum if x else None,
+                               "weight": round(x.stratum_size / x.stratum_sampled, 4) if x else 1.0})
         return {"project_id": str(project_id), "criteria_version": cs.version if cs else None,
                 "criteria": cs.criteria if cs else [], "exported_at": datetime.now(UTC).isoformat(), "papers": papers}
+
+
+def weighted_recall(papers: list[dict], decisions: list[str]) -> float | None:
+    """Recall on includes with each labelled paper standing for its sampled pile (weight = pile size / sampled), so a
+    stratified sample estimates the whole project's recall."""
+    w = [p.get("weight", 1.0) for p in papers]
+    inc = [i for i, p in enumerate(papers) if p["label"] == "include"]
+    total = sum(w[i] for i in inc)
+    return round(sum(w[i] for i in inc if decisions[i] != "exclude") / total, 3) if total else None
 
 
 def evaluate(gold: dict, parse: sc.Parse) -> dict:
@@ -58,6 +70,7 @@ def evaluate(gold: dict, parse: sc.Parse) -> dict:
     metrics = {
         "n": n, "includes": len(includes), "includes_kept": len(kept),
         "recall_includes": round(len(kept) / len(includes), 3) if includes else None,
+        "recall_includes_weighted": weighted_recall(papers, decisions),  # the project-wide estimate from a sample
         "ai_include": len(ai_inc),
         "precision_include": round(sum(papers[i]["label"] == "include" for i in ai_inc) / len(ai_inc), 3) if ai_inc else None,
         "review_share": round(decisions.count("review") / n, 3) if n else None,

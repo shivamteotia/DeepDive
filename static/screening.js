@@ -84,8 +84,20 @@ async function scLoad() {
   scRender();
 }
 
+// Blind labelling shows only the labelling sample or all papers, never a tab that reveals the AI's decisions.
+const scTab = () => (sc.blind ? sc.blindTab || "sample" : sc.tab);
+
+async function scMakeSample() {
+  try {
+    const out = await api("POST", `/api/v1/projects/${state.projectId}/label-sample`, { size: 150 });
+    toast(`Labelling sample ready: ${out.size} papers, shuffled. Label them blind with I / E.`);
+    sc.blindTab = "sample";
+    await scLoad();
+  } catch (ex) { toast(ex.message); }
+}
+
 function scFetch(offset) {
-  const tab = sc.blind ? "all" : sc.tab;
+  const tab = scTab();
   const q = new URLSearchParams({ tab, offset, limit: SC_PAGE });
   if (sc.blind) q.set("blind", "1");
   return api("GET", `/api/v1/projects/${state.projectId}/papers?${q}`);
@@ -231,11 +243,14 @@ async function scPropose(tool) {
 
 function scRenderTabs() {
   const counts = sc.listing?.counts || {};
-  const tabs = sc.blind ? [["all", "All"]] : SC_TABS;
+  const tabs = sc.blind ? [["sample", "Labelling sample"], ["all", "All"]] : SC_TABS;
   $("#sc-tabs").replaceChildren(...tabs.map(([key, label]) => h("button", {
-    class: `tab${(sc.blind ? "all" : sc.tab) === key ? " active" : ""}`, type: "button", role: "tab",
-    onclick: () => { sc.tab = key; sc.queue = null; scLoad().catch((ex) => toast(ex.message)); },
-  }, label, counts[key] != null ? h("span", { class: "count" }, Number(counts[key]).toLocaleString()) : null)));
+    class: `tab${scTab() === key ? " active" : ""}`, type: "button", role: "tab",
+    onclick: () => { if (sc.blind) sc.blindTab = key; else sc.tab = key; sc.queue = null; scLoad().catch((ex) => toast(ex.message)); },
+  }, label, counts[key] != null ? h("span", { class: "count" }, Number(counts[key]).toLocaleString()) : null)),
+  sc.blind && !counts.sample ? h("button", { class: "btn small primary", type: "button", onclick: () => scMakeSample(),
+    title: "150 papers drawn from the AI's include, review and exclude piles, shuffled, for the screening recall eval" },
+  "Create labelling sample (150)") : null);
 }
 
 function verdictCell(c, v) {
@@ -269,7 +284,7 @@ function scRenderBody() {
       sc.listing?.counts?.all ? "Nothing in this tab." : "Import a reference export (PubMed .nbib, BibTeX .bib, RIS, CSV or Excel) to start."));
     return;
   }
-  const tab = sc.blind ? "all" : sc.tab;
+  const tab = scTab();
   const head = h("div", { class: "row between" },
     h("span", { class: "muted small" }, `${sc.items.length.toLocaleString()} of ${total.toLocaleString()}`),
     tab !== "duplicates" ? h("button", { class: "btn primary small", type: "button", onclick: openQueue },

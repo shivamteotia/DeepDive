@@ -2,6 +2,7 @@
 split and merge. Every function takes the server-checked project id; nothing here trusts a client-supplied project."""
 
 import hashlib
+import random
 import threading
 import time
 import uuid
@@ -20,7 +21,7 @@ import fulltext
 import references
 import screening as sc
 
-TABS = ("all", "included", "review", "excluded", "duplicates", "fulltext")
+TABS = ("all", "included", "review", "excluded", "duplicates", "fulltext", "sample")
 _TAB_DECISION = {"included": "include", "review": "review", "excluded": "exclude"}
 SCREEN_BATCH = 50  # papers written per commit during screen-all
 AI_FIELDS = ("verdicts", "ai_decision", "decision", "decided_by", "disagrees", "human_reason")
@@ -267,6 +268,8 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
     tab_counts = {"all": counts["papers"], "duplicates": counts["possible_duplicates"],
                   "fulltext": s.scalar(select(func.count()).select_from(db.Paper).where(
                       db.Paper.project_id == project_id, db.Paper.fulltext_status != "not_tried"))}
+    tab_counts["sample"] = s.scalar(select(func.count()).select_from(db.LabelSample).where(
+        db.LabelSample.project_id == project_id))
     if blind:
         tab_counts.pop("fulltext")
     else:
@@ -286,7 +289,11 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
         q = q.where(db.Paper.fulltext_status != "not_tried")
     if tab in _TAB_DECISION:
         q = _decision_join(q, version).where(_final() == _TAB_DECISION[tab])
-    rows = list(s.scalars(q.order_by(db.Paper.created_at, db.Paper.id).offset(offset).limit(limit)))
+    if tab == "sample":  # the labelling sample, in its fixed shuffled order
+        q = q.join(db.LabelSample, db.LabelSample.paper_id == db.Paper.id).order_by(db.LabelSample.position)
+    else:
+        q = q.order_by(db.Paper.created_at, db.Paper.id)
+    rows = list(s.scalars(q.offset(offset).limit(limit)))
     dec = _decisions(s, version, [p.id for p in rows])
     cols = {} if blind else paper_columns(s, project_id, [p.id for p in rows])  # extracted values hint at decisions
     return {"total": tab_counts[tab], "counts": tab_counts, "criteria_version": version, "references": counts["references"],
@@ -924,3 +931,40 @@ def export_table(s: Session, project_id: uuid.UUID, tab: str) -> tuple[list[str]
             row += [v.get("value"), v.get("quote"), v.get("source")]
         rows.append(row)
     return headers, rows
+
+
+# --- the labelling sample (screening recall eval) ---
+
+def make_label_sample(s: Session, project_id: uuid.UUID, size: int = 150) -> dict:
+    """Draw the fixed, stratified sample to blind-label: up to a third from the AI's includes, a third of the rest from
+    review, the rest from excluded (where a missed include hides); a small pile's share goes to the others. Shuffled
+    together so a paper's position never hints at its pile. Conflict without screening decisions, or when the
+    project already has a sample (it must stay fixed while labelling)."""
+    lock(s, project_id)
+    if s.scalar(select(db.LabelSample.id).where(db.LabelSample.project_id == project_id).limit(1)) is not None:
+        raise Conflict("This project already has a labelling sample")
+    version = latest_version(s, project_id)
+    rows = s.execute(_decision_join(select(db.Paper.id, _final()), version).where(
+        db.Paper.project_id == project_id, db.Paper.superseded_by.is_(None)).order_by(db.Paper.id)).all() \
+        if version is not None else []
+    piles: dict[str, list[uuid.UUID]] = {"include": [], "review": [], "exclude": []}
+    for pid, decision in rows:
+        if decision in piles:
+            piles[decision].append(pid)
+    if not any(piles.values()):
+        raise Conflict("Screen the papers first: the sample is drawn from the AI's include, review and exclude piles")
+    rng = random.Random(str(project_id))  # reproducible for this project
+    want = {"include": size // 3}
+    want["review"] = (size - min(want["include"], len(piles["include"]))) // 3
+    want["exclude"] = size - min(want["include"], len(piles["include"])) - min(want["review"], len(piles["review"]))
+    take = {k: min(want[k], len(v)) for k, v in piles.items()}
+    for k in ("exclude", "review", "include"):  # top up from the larger piles when one is short
+        take[k] = min(len(piles[k]), take[k] + (size - sum(take.values())))
+    chosen = [(pid, k) for k, v in piles.items() for pid in rng.sample(v, take[k])]
+    rng.shuffle(chosen)
+    for pos, (pid, k) in enumerate(chosen):
+        s.add(db.LabelSample(project_id=project_id, paper_id=pid, position=pos, stratum=k,
+                             stratum_size=len(piles[k]), stratum_sampled=take[k]))
+    s.commit()
+    return {"size": len(chosen), "criteria_version": version,
+            "strata": {k: {"sampled": take[k], "total": len(v)} for k, v in piles.items()}}

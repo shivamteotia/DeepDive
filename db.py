@@ -213,6 +213,21 @@ class ExtractValue(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class LabelSample(Base):
+    """The fixed, stratified sample a researcher blind-labels for the screening recall eval: one row per paper, in a
+    shuffled order, with the AI pile it was drawn from and that pile's size when the sample was made (the weights)."""
+    __tablename__ = "label_samples"
+    __table_args__ = (UniqueConstraint("project_id", "paper_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    paper_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    stratum: Mapped[str] = mapped_column(String(10))  # the AI's decision when sampled: include | review | exclude
+    stratum_size: Mapped[int] = mapped_column(Integer)  # papers in that pile when sampled
+    stratum_sampled: Mapped[int] = mapped_column(Integer)  # papers drawn from it
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class PendingAction(Base):
     """A paid step proposed by the agent or the UI; it runs only once its owner confirms it through the API."""
     __tablename__ = "pending_actions"
