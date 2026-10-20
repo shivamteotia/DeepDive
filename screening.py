@@ -139,13 +139,22 @@ def _norm(s: str) -> str:
     return " ".join(s.lower().split())
 
 
+_QUOTE_MARKS = " .,;:\"'“”‘’«»"
+
+
 def _quote_ok(v: Verdict, c: Criterion, text: str) -> bool:
-    """The quote is whole words of the title/abstract; a verdict that would exclude needs a few of them."""
-    q = _norm(v.quote).strip(" .,;:")
-    if not q or not re.search(rf"(?<![\w-]){re.escape(q)}(?![\w-])", text):
-        return False
-    excluding = excludes(c, v)
-    return not excluding or len(q.split()) >= MIN_EXCLUDING_QUOTE_WORDS
+    """The quote is whole words of the title/abstract (wrapping quote marks ignored; parts around an ellipsis must
+    appear in order); a verdict that would exclude needs a few words."""
+    parts = [x.strip(_QUOTE_MARKS) for x in re.split(r"\.{3,}|…", _norm(v.quote))]
+    parts = [x for x in parts if x]
+    pos = 0
+    for part in parts:
+        m = re.compile(rf"(?<![\w-]){re.escape(part)}(?![\w-])").search(text, pos)
+        if m is None:
+            return False
+        pos = m.end()
+    words = sum(len(x.split()) for x in parts)
+    return bool(parts) and (not excludes(c, v) or words >= MIN_EXCLUDING_QUOTE_WORDS)
 
 
 def _meta_or_error(c: Criterion, paper: dict) -> Verdict | None:

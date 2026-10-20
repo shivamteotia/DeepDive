@@ -227,3 +227,15 @@ def test_validate_criteria():
     assert "duplicate" in sc.validate_criteria([POP, POP])
     assert "c1" in sc.validate_criteria([crit("c1", "years", check="metadata", field="year", value="2020-2015")])
     assert sc.validate_criteria([]) is not None
+
+
+# --- live 20-paper test findings ---
+
+def test_quotes_wrapped_in_quote_marks_or_with_an_ellipsis_still_match():
+    paper = {**PAPER, "abstract": "Sixty females attending the clinic had a diagnosis of PCOS and were aged 18-40."}
+    assert sc.screen_paper(ai_out(v("c3", "yes", '"sixty females attending the clinic"')), paper, [POP])[0].verdict == "yes"
+    assert sc.screen_paper(ai_out(v("c3", "yes", "“Sixty females”")), paper, [POP])[0].verdict == "yes"
+    assert sc.screen_paper(ai_out(v("c3", "yes", "sixty females...had a diagnosis of PCOS")), paper, [POP])[0].verdict == "yes"
+    assert sc.screen_paper(ai_out(v("c3", "yes", "had a diagnosis … Sixty females")), paper, [POP])[0].verdict == "unclear"  # order
+    assert sc.screen_paper(ai_out(v("c3", "yes", "sixty females ... were rats")), paper, [POP])[0].verdict == "unclear"
+
