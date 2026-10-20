@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import agent
+import answers
 import auth
 import db
 import extraction
@@ -458,7 +459,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             return find(query, project_id=str(c.project_id), scrape=False)  # snippets: search results only
 
         ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state), ask_research=ask_research,
-                                web_search=web_search if find else None)
+                                web_search=web_search if find else None, conversation_id=c.id)
         turn = agent.run_turn(state.openai, settings.openai_model, history, body.message, ctx,
                               guard_model=settings.openai_guard_model)  # rails are nodes of the graph
         new, refusal = turn["messages"], turn["blocked"]
@@ -483,6 +484,21 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         s.delete(c)
         s.commit()
         return Response(status_code=204)
+
+    @app.get("/api/v1/research-runs/{run_id}/export")
+    def export_answer(run: OwnedRun, format: Literal["csv", "docx"] = "csv"):
+        """A finished answer as CSV (one row per finding) or a Word report (findings, gaps, references)."""
+        r = run.result or {}
+        if run.status != "completed" or not r.get("claims") or r.get("status") == "blocked":
+            raise HTTPException(409, "This run has no finished answer with findings to save")
+        if format == "csv":
+            data, media = answers.to_csv(r), "text/csv"
+        else:
+            data = answers.to_docx(run.question, r, run.finished_at)
+            media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        stamp = f"{(run.finished_at or run.created_at):%Y-%m-%d}"
+        return Response(data, media_type=media,
+                        headers={"Content-Disposition": f'attachment; filename="maxrim-answer-{stamp}.{format}"'})
 
     @app.get("/api/v1/research-runs/{run_id}/evidence")
     def get_research_evidence(run: OwnedRun):

@@ -553,7 +553,64 @@ const TOOL_LABEL = {
   propose_action: "Proposed a step", get_papers: "Read papers", ask_research_question: "Asked your papers",
   add_column: "Added a column", get_column: "Read a column", export_table: "Built a table",
   count_papers: "Counted papers", web_search: "Searched the web", search_pubmed: "Asked PubMed",
+  export_answer: "Saved the answer", chart_answer: "Built a chart",
 };
+
+async function downloadFrom(path, fallback) {
+  const res = await fetch(path, { headers: { Authorization: `Bearer ${state.token}` } });
+  if (!res.ok) {
+    const d = (await res.json().catch(() => ({}))).detail;
+    throw new Error(typeof d === "string" ? d : `Download failed (${res.status})`);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || fallback;
+  saveBlob(await res.blob(), name);
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = h("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, text) {  // attributes via setAttribute and text via textContent: no HTML injection
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  if (text != null) el.textContent = text;
+  return el;
+}
+
+function barChart(chart) {
+  const pts = chart.points, W = 640, rowH = 26, left = 210, top = 34, H = top + pts.length * rowH + 30;
+  const max = Math.max(...pts.map((p) => p.value), 0) || 1;
+  const svg = svgEl("svg", { xmlns: SVG_NS, viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": chart.title,
+    "font-family": "system-ui, sans-serif", "font-size": 12 });
+  svg.append(svgEl("rect", { x: 0, y: 0, width: W, height: H, fill: "#ffffff" }));
+  svg.append(svgEl("text", { x: 8, y: 20, "font-size": 14, "font-weight": 600, fill: "#111" }, chart.title));
+  pts.forEach((p, i) => {
+    const y = top + i * rowH, w = ((W - left - 70) * p.value) / max;
+    svg.append(svgEl("text", { x: left - 8, y: y + 15, "text-anchor": "end", fill: "#333" }, p.label));
+    svg.append(svgEl("rect", { x: left, y: y + 3, width: Math.max(w, 1), height: rowH - 8, fill: "#3b6fd8", rx: 2 }));
+    svg.append(svgEl("text", { x: left + w + 6, y: y + 15, fill: "#111" }, `${p.value} [${p.finding}]`));
+  });
+  svg.append(svgEl("text", { x: left, y: H - 8, fill: "#555" }, `${chart.y_label} · [n] = finding number in the answer`));
+  return svg;
+}
+
+function chartCard(chart) {
+  const svg = barChart(chart);
+  const csv = ["label,value,finding", ...chart.points.map((p) => `"${p.label.replace(/"/g, '""')}",${p.value},${p.finding}`)].join("\n");
+  return h("div", { class: "card chart" }, svg,
+    chart.dropped ? h("p", { class: "muted small" }, `${chart.dropped} value(s) left out: their finding does not state them.`) : null,
+    h("div", { class: "row" },
+      h("button", { class: "btn small", type: "button",
+        onclick: () => saveBlob(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }), "maxrim-chart.svg") }, "Download SVG"),
+      h("button", { class: "btn small", type: "button",
+        onclick: () => saveBlob(new Blob(["\ufeff" + csv], { type: "text/csv" }), "maxrim-chart-data.csv") }, "Download data (CSV)")));
+}
 
 async function scDownload(tab, format) {
   const res = await fetch(`/api/v1/projects/${state.projectId}/export?tab=${encodeURIComponent(tab)}&format=${format}`,
@@ -583,6 +640,12 @@ function renderAgent() {
     if (m.role === "assistant") return h("div", { class: "msg bot" }, m.content.text);
     const c = m.content;
     if (c.action) return actionCard(c.action);
+    const ans = c.result && c.result.answer_export;
+    if (ans) return h("div", { class: "tool-line" }, `✓ Answer: ${ans.findings} findings `,
+      h("button", { class: "btn small", type: "button",
+        onclick: () => downloadFrom(`/api/v1/research-runs/${ans.run_id}/export?format=${ans.format}`, `answer.${ans.format}`)
+          .catch((err) => toast(err.message)) }, `Download ${ans.format === "docx" ? "Word" : "CSV"}`));
+    if (c.result && c.result.chart) return chartCard(c.result.chart);
     const ex = c.result && c.result.export;
     if (ex) return h("div", { class: "tool-line" }, `✓ Table: ${ex.papers} ${ex.tab} papers, ${ex.columns.length} columns `,
       h("button", { class: "btn small", type: "button",
