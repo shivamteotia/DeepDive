@@ -211,3 +211,20 @@ Snapshot: `baseline.json`. Full answers and judge reasons: `runs/20261015T163155
 - Synthesizer prompt: answer only the question asked; when the evidence covers a nearby topic, say what is
   missing instead of answering it; explicitly correct false premises (items 4 and 5).
 - Hybrid keyword+vector retrieval (item 6; same idea as gold.json r19).
+
+## Screening funnel — first live runs (2026-10-20, branch screening-funnel)
+
+Project: both bibliography/ exports (PubMed .nbib 1,650 + Europe PMC .bib 1,798 = 3,448 records → 1,845 papers, 35
+possible duplicates). Screening model: OPENAI_SCREEN_MODEL (set by the user; the fast model was weaker, see tests 1–2).
+Criteria: 2015 or later (metadata), not a review/SR/meta-analysis (PubMed type, AI fallback), adults with PCOS (ai),
+study design (extracted column, filter).
+
+| Run | Criteria | Model calls | Tokens in / out | Time | Include | Review | Exclude |
+|---|---|---|---|---|---|---|---|
+| v3 full | design drops prospective cohort + RCT | 1,586 | 1.72M / 0.18M | 14 min | 445 | 577 | 823 |
+| v4 re-screen | design keeps only retrospective cohort + chart review; adults reworded ("assume adults unless stated") | 651 | 0.66M / 0.05M | 5 min | **38** | 468 | 1,339 |
+
+v4 review pile: 388 design not stated (only reason), 47 design + adults, 20 design + "not a review" (Europe PMC records
+without PubMed types), 9 adults only, 4 no abstract. Design values (all papers): not stated 495, cross-sectional 235,
+animal/lab 183, RCT 182, other 139, case-control 139, no answer 58, prospective cohort 55, retrospective cohort 47,
+review/MA 37, chart review 13. Recall not yet measured: needs the user's blind-labelled gold set (evaluate_screening.py).
