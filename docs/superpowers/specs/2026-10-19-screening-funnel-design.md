@@ -204,3 +204,21 @@ duplicates to check". Any merge can be split from the table.
 
 - Exact table/endpoint names, the UI component split, keyword pre-check for the test sample, prompt wording, batching
   limits, how the agent shows tool progress in chat.
+
+## Addendum (2026-10-20): extracted columns, then filters
+
+Found in the live 20-paper tests: a yes/no criterion like "Retrospective" makes the model both read the design and apply
+the user's definition, and that judgement is where it fails (nested case-control called "not retrospective"; "not stated"
+answered as "no"). Decision (user): **extract a column, then filter on it** — as Elicit does.
+
+- New criterion check **`extract`**: a field the model fills from a fixed list of `options` (e.g. study design:
+  retrospective cohort, prospective cohort, RCT, case-control, nested case-control, cross-sectional, chart review,
+  animal/lab, review, other) or **"not stated"**, with a verbatim quote. The model reports; it does not judge.
+- The user's filter is `exclude_values` (kind `exclude_if`): a paper whose value is in it is excluded. Any other stated
+  value passes. "not stated", a failed call or an unverifiable quote → `unclear` → Needs review (fail-safe unchanged).
+- Same single model call per paper (extract fields ride along with the yes/no criteria).
+- **Changing only the filter is free:** a new criteria version whose extract field differs only in `exclude_values`
+  re-applies the stored values; no model call.
+- The agent reports value counts ("18 retrospective cohort, 2 prospective cohort") and turns "drop the prospectives" into
+  `exclude_values`. Table and test panel show the value per paper (click → quote + reason).
+- Yes/no `ai` criteria and `metadata` checks stay as they are. This is the start of the `extract_evidence` tool.

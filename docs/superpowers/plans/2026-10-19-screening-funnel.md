@@ -205,3 +205,9 @@ Sources: Europe PMC `https://www.ebi.ac.uk/europepmc/webservices/rest/search?que
 - [ ] **Step 2 (paid, ask first):** start the API, upload both `bibliography/` files to a new project, run the agent through dedup → draft criteria (spec's default protocol) → test 20 → confirm screen-all → confirm fetch → one research question on a fetched paper; record counts, cost and time.
 - [ ] **Step 3:** when the user has labelled ~150 papers blind: run `evaluate_screening.py`, log the result, set the recall gate in `CLAUDE.md`.
 - [ ] **Step 4:** commit `"Screening eval and first live funnel run"`.
+
+### Task 10: extracted columns + filters (spec addendum 2026-10-20)
+
+**Files:** Modify `screening.py`, `funnel.py`, `agent.py`, `static/screening.js`; Test `tests/test_screening.py`, `tests/test_api_screening.py`, `tests/test_agent.py`.
+**Interfaces — Produces:** `Criterion.check` gains `"extract"`; `Criterion.options: list[str] | None`, `Criterion.exclude_values: list[str] | None` (missing keys in stored criteria read as None); `Verdict.value: str | None`; `NOT_STATED = "not stated"`; `apply_extract(c, value, quote_ok) -> Verdict`; `validate_criteria` checks extract (≥2 options, exclude_values ⊆ options); `funnel` copies extract values across versions when only `exclude_values` changed and recomputes the verdict; `get_funnel_status` gains `extracted: {criterion name: {value: count}}`.
+- [ ] Step 1: failing tests — extract value in exclude_values → exclude; other value → passes; not stated / invalid option / bad quote → unclear → review; the model sees options for extract criteria only; changing only exclude_values re-screens with 0 calls and new decisions; funnel status counts values; stored criteria without the new keys still load. Step 2: FAIL. Step 3: implement. Step 4: PASS + code-checker. Step 5: commit; re-run the 20-paper test with a Study design column (paid, user-approved).
