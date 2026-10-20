@@ -225,3 +225,10 @@ def test_as_utc_converts_aware_times_and_labels_naive_ones():
     import db
     assert db.as_utc(datetime(2026, 1, 1, 12, tzinfo=timezone(timedelta(hours=2)))) == datetime(2026, 1, 1, 10, tzinfo=UTC)
     assert db.as_utc(datetime(2026, 1, 1, 12)) == datetime(2026, 1, 1, 12, tzinfo=UTC)
+
+
+def test_each_turn_reports_the_graph_steps_it_ran(api, signup):
+    h, pid, _ = setup(api, signup)
+    script = Script([call("get_funnel_status", {})], say("You have 30 papers."))
+    out = chat(api, h, pid, script, "how many papers?")[1].json()
+    assert out["trace"] == ["Input checked", "Model", "Tool: get_funnel_status", "Model", "Answer checked"]

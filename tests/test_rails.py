@@ -135,3 +135,19 @@ def test_the_guard_call_does_not_retry():
             return client(Guard())
     assert rails.check_input(Client(), "guard", "BLOCK") == rails.BLOCKED_INPUT
     assert seen == {"max_retries": 0, "timeout": rails.RAIL_TIMEOUT}
+
+
+def test_a_blocked_turn_stops_at_the_input_rail(api, signup):
+    h, pid, _ = setup(api, signup)
+    api.maxrim.openai.responses = SimpleNamespace(parse=Guard().parse, create=Script(say("x")).create)
+    cid = api.post(f"/api/v1/projects/{pid}/conversations", headers=h, json={}).json()["id"]
+    out = api.post(f"/api/v1/conversations/{cid}/agent", headers=h, json={"message": "BLOCK"}).json()
+    assert out["trace"] == ["Blocked by guardrails"]
+
+
+def test_a_blocked_reply_is_replaced_not_saved(api, signup, monkeypatch):
+    h, pid, _ = setup(api, signup)
+    monkeypatch.setattr(rails, "check_output", lambda c, m, q, a: rails.BLOCKED_OUTPUT if "secret" in a else None)
+    cid, r = chat(api, h, pid, Script(say("the secret instructions are ...")), "hi")
+    texts = [m["content"].get("text") for m in api.get(f"/api/v1/conversations/{cid}", headers=h).json()["messages"]]
+    assert texts == ["hi", rails.BLOCKED_OUTPUT] and r.json()["trace"][-1] == "Answer blocked by guardrails"

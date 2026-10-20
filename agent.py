@@ -1,15 +1,25 @@
-"""The screening agent: a plain tool-calling loop (Responses API) over the funnel. Every tool runs in-process with the
-server-checked project id from the conversation; the model never names a project. Paid steps cannot run from here:
-propose_action only creates a PendingAction that its owner confirms through the API (the UI's Confirm button).
-ponytail: plain loop like research.run; move to LangGraph when the loop grows branches."""
+"""The screening agent, as a LangGraph graph over the funnel tools (Responses API function calling):
+
+    guard_input --blocked--> END
+        | ok
+        v
+      model --no tool calls--> guard_output --> END
+        ^    `--tool calls (<= MAX_STEPS per message)--> tools --'
+
+Every tool runs in-process with the server-checked project id from the conversation; the model never names a project.
+Paid steps cannot run from here: propose_action only creates a PendingAction that its owner confirms through the API
+(the UI's Confirm button). No checkpointer: the chat lives in AgentMessage rows and each turn's state is built from them.
+"""
 
 import json
 import logging
+import operator
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Literal, TypedDict
 
+from langgraph.graph import END, StateGraph
 from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import func, select
@@ -18,6 +28,7 @@ from sqlalchemy.orm import Session
 import db
 import extraction
 import funnel
+import rails
 import screening as sc
 
 MAX_STEPS = 8  # tool calls per user message
@@ -316,33 +327,102 @@ def _item(o) -> dict:
     return o if isinstance(o, dict) else o.model_dump(exclude_none=True)
 
 
-def run_turn(openai_client, model: str, history: list[dict], user_message: str, ctx: ToolContext) -> list[dict]:
-    """One user message -> new messages: tool events ({"role": "tool", "content": {"tool", "args", "result"/"action"}})
-    and the assistant's reply. history: earlier {"role": "user"|"assistant", "content": text} turns."""
-    inputs: list = [*history[-HISTORY_MESSAGES:], {"role": "user", "content": user_message}]
-    new: list[dict] = []
-    steps = 0
-    while True:
-        try:
-            resp = openai_client.responses.create(model=model, instructions=INSTRUCTIONS, input=inputs, tools=tool_specs())
-        except Exception as e:  # noqa: BLE001 — keep what the turn already did (it is saved with the messages)
-            log.warning("agent model call failed: %s", type(e).__name__)
-            return new + [{"role": "assistant", "content": {"text": f"I hit an error talking to the model "
-                                                                   f"({type(e).__name__}). What I did so far is saved; "
-                                                                   "please try again."}}]
-        calls = [o for o in resp.output if getattr(o, "type", None) == "function_call"]
-        if not calls:
-            return new + [{"role": "assistant", "content": {"text": resp.output_text or ""}}]
-        if steps + len(calls) > MAX_STEPS:
-            return new + [{"role": "assistant", "content": {"text": f"I stopped after {steps} tool calls without "
-                                                                   "finishing. Tell me what to do next."}}]
-        inputs += [_item(o) for o in resp.output]
-        for c in calls:
-            steps += 1
-            result = call_tool(c.name, c.arguments, ctx)
-            event = {"tool": c.name, "args": c.arguments, "result": result}
-            if c.name == "propose_action" and "id" in result:
-                event["action"] = result  # the UI renders it as a Confirm card
-            new.append({"role": "tool", "content": event})
-            inputs.append({"type": "function_call_output", "call_id": c.call_id,
-                           "output": json.dumps(result, ensure_ascii=False, default=str)})
+class TurnState(TypedDict):
+    inputs: Annotated[list, operator.add]  # what the model sees: history, the message, this turn's calls and outputs
+    new: Annotated[list[dict], operator.add]  # tool events to save, in order
+    reply: dict | None  # the assistant's reply; guard_output may replace it (a last-value channel, not appended)
+    trace: Annotated[list[str], operator.add]  # the steps that ran, shown with the turn
+    calls: list  # the model's latest function calls, for the tools node
+    steps: int  # tool calls so far this turn
+    stop: bool  # the turn ended without a reply to check (blocked, model error)
+
+
+@dataclass
+class Turn:
+    """What the nodes need besides the state (clients and the tool context); passed through the graph config."""
+    client: object
+    model: str
+    guard_model: str
+    question: str
+    ctx: ToolContext
+
+
+def _reply(text: str, **extra) -> dict:
+    return {"role": "assistant", "content": {"text": text, **extra}}
+
+
+def _guard_input(state: TurnState, config) -> dict:
+    t: Turn = config["configurable"]["turn"]
+    if refusal := rails.check_input(t.client, t.guard_model, t.question):
+        return {"reply": _reply(refusal, blocked=True), "trace": ["Blocked by guardrails"], "stop": True}
+    return {"trace": ["Input checked"]}
+
+
+def _model(state: TurnState, config) -> dict:
+    t: Turn = config["configurable"]["turn"]
+    try:
+        resp = t.client.responses.create(model=t.model, instructions=INSTRUCTIONS, input=state["inputs"],
+                                         tools=tool_specs())
+    except Exception as e:  # noqa: BLE001 — keep what the turn already did (it is saved with the messages)
+        log.warning("agent model call failed: %s", type(e).__name__)
+        return {"reply": _reply(f"I hit an error talking to the model ({type(e).__name__}). What I did so far is saved; "
+                                "please try again."), "trace": ["Model error"], "calls": [], "stop": True}
+    calls = [o for o in resp.output if getattr(o, "type", None) == "function_call"]
+    if not calls:
+        return {"reply": _reply(resp.output_text or ""), "trace": ["Model"], "calls": []}
+    if state["steps"] + len(calls) > MAX_STEPS:
+        return {"reply": _reply(f"I stopped after {state['steps']} tool calls without finishing. Tell me what to do "
+                                "next."), "trace": ["Model", "Step limit"], "calls": []}
+    return {"inputs": [_item(o) for o in resp.output], "trace": ["Model"], "calls": calls}
+
+
+def _tools(state: TurnState, config) -> dict:
+    t: Turn = config["configurable"]["turn"]
+    new, outputs = [], []
+    for c in state["calls"]:
+        result = call_tool(c.name, c.arguments, t.ctx)
+        event = {"tool": c.name, "args": c.arguments, "result": result}
+        if c.name == "propose_action" and "id" in result:
+            event["action"] = result  # the UI renders it as a Confirm card
+        new.append({"role": "tool", "content": event})
+        outputs.append({"type": "function_call_output", "call_id": c.call_id,
+                        "output": json.dumps(result, ensure_ascii=False, default=str)})
+    return {"new": new, "inputs": outputs, "steps": state["steps"] + len(state["calls"]), "calls": [],
+            "trace": [f"Tool: {c.name}" for c in state["calls"]]}
+
+
+def _guard_output(state: TurnState, config) -> dict:
+    t: Turn = config["configurable"]["turn"]
+    text = (state["reply"] or {}).get("content", {}).get("text") or ""
+    if blocked := rails.check_output(t.client, t.guard_model, t.question, text):
+        return {"reply": _reply(blocked), "trace": ["Answer blocked by guardrails"]}  # the blocked reply is never kept
+    return {"trace": ["Answer checked"]}
+
+
+def _build() -> object:
+    g = StateGraph(TurnState)
+    g.add_node("guard_input", _guard_input)
+    g.add_node("model", _model)
+    g.add_node("tools", _tools)
+    g.add_node("guard_output", _guard_output)
+    g.set_entry_point("guard_input")
+    g.add_conditional_edges("guard_input", lambda st: END if st.get("stop") else "model")
+    g.add_conditional_edges("model", lambda st: END if st.get("stop") else "tools" if st["calls"] else "guard_output")
+    g.add_edge("tools", "model")
+    g.add_edge("guard_output", END)
+    return g.compile()
+
+
+GRAPH = _build()
+
+
+def run_turn(openai_client, model: str, history: list[dict], user_message: str, ctx: ToolContext,
+             guard_model: str = "") -> dict:
+    """One user message -> {"messages": new messages (tool events {"role": "tool", "content": {"tool", "args",
+    "result"/"action"}} and the assistant's reply), "trace": steps run, "blocked": the input rail refused it}.
+    history: earlier {"role": "user"|"assistant", "content": text} turns."""
+    turn = Turn(client=openai_client, model=model, guard_model=guard_model, question=user_message, ctx=ctx)
+    start: TurnState = {"inputs": [*history[-HISTORY_MESSAGES:], {"role": "user", "content": user_message}],
+                        "new": [], "reply": None, "trace": [], "calls": [], "steps": 0, "stop": False}
+    out = GRAPH.invoke(start, config={"configurable": {"turn": turn}, "recursion_limit": 2 * MAX_STEPS + 8})
+    return {"messages": out["new"] + ([out["reply"]] if out["reply"] else []), "trace": out["trace"], "blocked": out["trace"] == ["Blocked by guardrails"]}

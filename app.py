@@ -31,7 +31,6 @@ import extraction
 import funnel
 import jobs
 import outputs
-import rails
 import screening
 from config import Settings
 
@@ -439,17 +438,10 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             except ValueError as e:  # RunIn validation (e.g. a too-short question)
                 return {"error": str(e)[:300]}
 
-        refusal = rails.check_input(state.openai, settings.openai_guard_model, body.message)
-        if refusal:  # blocked before any tool or model call
-            new = [{"role": "assistant", "content": {"text": refusal, "blocked": True}}]
-        else:
-            ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state),
-                                    ask_research=ask_research)
-            new = agent.run_turn(state.openai, settings.openai_model, history, body.message, ctx)
-            reply = next((m for m in reversed(new) if m["role"] == "assistant" and m["content"].get("text")), None)
-            if reply and (blocked := rails.check_output(state.openai, settings.openai_guard_model, body.message,
-                                                        reply["content"]["text"])):
-                reply["content"] = {"text": blocked}
+        ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state), ask_research=ask_research)
+        turn = agent.run_turn(state.openai, settings.openai_model, history, body.message, ctx,
+                              guard_model=settings.openai_guard_model)  # rails are nodes of the graph
+        new, refusal = turn["messages"], turn["blocked"]
         rows = [db.AgentMessage(conversation_id=c.id, role="user",
                                 content={"text": body.message} | ({"blocked": True} if refusal else {}))]
         rows += [db.AgentMessage(conversation_id=c.id, role=m["role"],
@@ -463,7 +455,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         s.add_all(rows)
         c.updated_at = db.utcnow()
         s.commit()
-        return {"messages": agent_messages(s, c.id)[-len(rows):]}
+        return {"messages": agent_messages(s, c.id)[-len(rows):], "trace": turn["trace"]}
 
     @app.delete("/api/v1/conversations/{conversation_id}", status_code=204)
     def delete_conversation(c: OwnedConversation, s: DB):
