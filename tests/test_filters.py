@@ -2,9 +2,10 @@
 import json
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 import agent
+import db
 from tests.test_agent import Script, call, chat, say
 from tests.test_api_extraction import add, extract, screened, with_extraction
 
@@ -92,3 +93,42 @@ def test_truncated_counts_say_so_and_add_up(api, signup, monkeypatch):
     out = tool(api, pid, "count_papers", {"tab": "all", "by": "year", **NO_FILTER})
     assert out["counts"] == {"2019": 29} and out["other"] == 1 and out["distinct"] == 2
     assert sum(out["counts"].values()) + out["other"] == out["total"]
+
+
+def _supersede(api, pid):
+    with api.maxrim.sessions() as s:
+        a, b = s.scalars(select(db.Paper).where(db.Paper.project_id == uuid.UUID(pid)).order_by(db.Paper.pmid).limit(2))
+        a.superseded_by = b.id
+        s.commit()
+        return a.title, b.doi or b.title
+
+
+def test_export_marks_superseded_rows(api, signup):
+    import csv
+    import io
+    h, pid = with_design(api, signup)
+    pre, article = _supersede(api, pid)
+    r = api.get(f"/api/v1/projects/{pid}/export", headers=h, params={"tab": "all", "format": "csv"})
+    rows = {x["Title"]: x for x in csv.DictReader(io.StringIO(r.content.decode("utf-8-sig")))}
+    assert rows[pre]["Superseded by"] == article and sum(1 for x in rows.values() if x["Superseded by"]) == 1
+
+
+def test_superseded_papers_count_as_superseded_not_unextracted(api, signup):
+    _, pid = with_design(api, signup)
+    _supersede(api, pid)
+    with api.maxrim.sessions() as s:  # extraction never fills a superseded paper
+        s.execute(delete(db.ExtractValue).where(db.ExtractValue.paper_id.in_(
+            select(db.Paper.id).where(db.Paper.superseded_by.is_not(None)))))
+        s.commit()
+    counts = tool(api, pid, "count_papers", {"tab": "all", "by": "column", **NO_FILTER, "column": "Study design"})["counts"]
+    assert counts.get("superseded") == 1 and "not extracted" not in counts
+
+
+def test_a_known_database_with_none_in_the_tab_is_zero_not_an_error(api, signup):
+    _, pid = with_design(api, signup)
+    with api.maxrim.sessions() as s:  # a Europe PMC-only paper, not screened: in "all", not in "included"
+        s.add(db.Paper(project_id=uuid.UUID(pid), title="Only in Europe PMC", sources=["europepmc"]))
+        s.commit()
+    out = tool(api, pid, "count_papers", {"tab": "included", "by": "year", **NO_FILTER, "database": "Europe PMC"})
+    assert out.get("total") == 0, out
+    assert "error" in tool(api, pid, "count_papers", {"tab": "included", "by": "year", **NO_FILTER, "database": "Scopus"})

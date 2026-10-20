@@ -852,10 +852,11 @@ def _filtered(s: Session, project_id: uuid.UUID, tab: str, f: dict) -> tuple[lis
         raise Invalid("A value filter needs the column it belongs to")
     db_name, value = "", (f.get("value") or "").casefold()
     if f.get("database"):
-        present = sorted({x for p in papers for x in p.sources or []})
+        present = sorted({x for srcs in s.scalars(select(db.Paper.sources).where(db.Paper.project_id == project_id))
+                          for x in srcs or []})
         db_name = references.database_code(f["database"]) or ""
-        if db_name not in present:  # never a silent 0 for a name we don't store
-            raise Invalid(f"No papers from {f['database']!r} in this tab; its databases: {', '.join(present) or 'none'}")
+        if db_name not in present:  # never a silent 0 for a name the project doesn't have; a real 0 stays 0
+            raise Invalid(f"No papers from {f['database']!r} in this project; its databases: {', '.join(present) or 'none'}")
 
     def keep(p):
         return ((f.get("year_from") is None or (p.year or 0) >= f["year_from"])
@@ -889,7 +890,8 @@ def count_papers(s: Session, project_id: uuid.UUID, tab: str, by: str, f: dict) 
         else:
             counts[{"year": p.year, "decision": (d.human_decision or d.ai_decision) if d else None,
                     "journal": p.journal, "column": (vals.get(p.id, {}).get(column) or {}).get("value")}[by]
-                   or ("not extracted" if by == "column" else "unknown")] += 1
+                   or ("superseded" if by == "column" and p.superseded_by else  # extraction skips these
+                       "not extracted" if by == "column" else "unknown")] += 1
     top = counts.most_common(MAX_COUNTS)
     out = {"tab": tab, "by": by, "total": len(papers), "counts": {str(k): n for k, n in top}}
     if len(counts) > len(top):
@@ -903,14 +905,20 @@ def export_table(s: Session, project_id: uuid.UUID, tab: str) -> tuple[list[str]
     papers, dec, vals = _tab_data(s, project_id, tab)
     names = [c["name"] for c in list_columns(s, project_id)]
     headers = ["Title", "Authors", "Year", "Journal", "DOI", "PMID", "PMCID", "Databases", "Decision", "Decided by",
-               "Reason", "Full text"]
+               "Reason", "Full text", "Superseded by"]
+    by_id = {p.id: p for p in papers}
+
+    def article(pid):  # the journal article that replaced a preprint: its DOI, else its title
+        a = by_id.get(pid) or s.get(db.Paper, pid)
+        return (a.doi or a.title) if a else None
     headers += [h for n in names for h in (n, f"{n} (quote)", f"{n} (source)")]
     rows = []
     for p in papers:
         d = dec.get(p.id)
         row = [p.title, "; ".join(p.authors or []), p.year, p.journal, p.doi, p.pmid, p.pmcid,
                ", ".join(p.sources or []), (d.human_decision or d.ai_decision) if d else None,
-               d.decided_by if d else None, d.human_reason if d else None, p.fulltext_status]
+               d.decided_by if d else None, d.human_reason if d else None, p.fulltext_status,
+               article(p.superseded_by) if p.superseded_by else None]
         for n in names:
             v = vals.get(p.id, {}).get(n) or {}
             row += [v.get("value"), v.get("quote"), v.get("source")]
