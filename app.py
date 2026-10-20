@@ -31,6 +31,7 @@ import extraction
 import funnel
 import jobs
 import outputs
+import rails
 import screening
 from config import Settings
 
@@ -427,7 +428,8 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         # ponytail: loads the whole chat and holds a DB connection for the turn (model calls included); fine for a
         # few users, move the loop to a background job + polling if many chat at once.
         history = [{"role": m["role"], "content": m["content"]["text"]} for m in agent_messages(s, c.id)
-                   if m["role"] in ("user", "assistant") and m["content"].get("text")]
+                   if m["role"] in ("user", "assistant") and m["content"].get("text")
+                   and not m["content"].get("blocked")]  # a blocked message never reaches the model later
 
         def ask_research(question: str) -> dict:
             try:
@@ -437,9 +439,19 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             except ValueError as e:  # RunIn validation (e.g. a too-short question)
                 return {"error": str(e)[:300]}
 
-        ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state), ask_research=ask_research)
-        new = agent.run_turn(state.openai, settings.openai_model, history, body.message, ctx)
-        rows = [db.AgentMessage(conversation_id=c.id, role="user", content={"text": body.message})]
+        refusal = rails.check_input(state.openai, settings.openai_guard_model, body.message)
+        if refusal:  # blocked before any tool or model call
+            new = [{"role": "assistant", "content": {"text": refusal, "blocked": True}}]
+        else:
+            ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state),
+                                    ask_research=ask_research)
+            new = agent.run_turn(state.openai, settings.openai_model, history, body.message, ctx)
+            reply = next((m for m in reversed(new) if m["role"] == "assistant" and m["content"].get("text")), None)
+            if reply and (blocked := rails.check_output(state.openai, settings.openai_guard_model, body.message,
+                                                        reply["content"]["text"])):
+                reply["content"] = {"text": blocked}
+        rows = [db.AgentMessage(conversation_id=c.id, role="user",
+                                content={"text": body.message} | ({"blocked": True} if refusal else {}))]
         rows += [db.AgentMessage(conversation_id=c.id, role=m["role"],
                                  content=json.loads(json.dumps(m["content"], default=str))) for m in new]
         last = s.scalar(select(func.max(db.AgentMessage.created_at)).where(db.AgentMessage.conversation_id == c.id))

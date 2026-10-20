@@ -22,6 +22,7 @@ import db
 import extraction
 import fulltext
 import funnel
+import rails
 import research
 import screening
 import web
@@ -195,13 +196,23 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
                                timeout=cfg.web_search_timeout_seconds, max_results=WEB_RESULTS)
         return hits
 
+    def blocked(message: str) -> dict:  # a refused run: no claims, no evidence, the refusal as its gap
+        return {"question": question, "status": "blocked", "claims": [], "gaps": message, "evidence": [],
+                "log": [{"step": "guardrail", "message": message}], "removed_claims": []}
+
     try:
-        standalone = research.rewrite_followup(state.openai, cfg.openai_fast_model, history, question)
-        result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
-                              fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model, question=standalone,
-                              max_iterations=max_iterations)
-        values = {"status": "completed", "result": research.audit_record(result), "error": None,
-                  "standalone_question": standalone if standalone != question else None}
+        if refusal := rails.check_input(state.openai, cfg.openai_guard_model, question):
+            values = {"status": "completed", "result": blocked(refusal), "error": None, "standalone_question": None}
+        else:
+            standalone = research.rewrite_followup(state.openai, cfg.openai_fast_model, history, question)
+            result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
+                                  fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model,
+                                  question=standalone, max_iterations=max_iterations)
+            answer = "\n".join([c["text"] for c in result.get("claims") or []] + [result.get("gaps") or ""])
+            if replaced := rails.check_output(state.openai, cfg.openai_guard_model, question, answer):
+                result = blocked(replaced)
+            values = {"status": "completed", "result": research.audit_record(result), "error": None,
+                      "standalone_question": standalone if standalone != question else None}
     except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the run
         values = {"status": "failed", "error": short_error(exc, cfg)}
     with state.sessions() as s:
@@ -405,7 +416,8 @@ def conversation_history(s: Session, run: db.ResearchRun) -> list[dict]:
                                                      db.ResearchRun.id != run.id)  # not created_at <: clocks tie
                         .order_by(db.ResearchRun.created_at))
     return [{"question": r.standalone_question or r.question,
-             "answer": [c["text"] for c in (r.result or {}).get("claims", [])]} for r in earlier]
+             "answer": [c["text"] for c in (r.result or {}).get("claims", [])]} for r in earlier
+            if (r.result or {}).get("status") != "blocked"]  # a refused question never reaches the model later
 
 
 def recover_interrupted(sessions: sessionmaker) -> None:

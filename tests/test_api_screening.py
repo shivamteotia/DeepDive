@@ -2,6 +2,7 @@ import json
 import threading
 from types import SimpleNamespace
 
+import rails
 import screening as sc
 from tests.test_api_references import project, upload
 
@@ -35,6 +36,8 @@ class FakeLLM:
     def parse(self, model, instructions, input, text_format):
         if text_format is sc.CriteriaDraft:
             return SimpleNamespace(output_parsed=sc.CriteriaDraft(criteria=[sc.Criterion(**c) for c in self.draft]))
+        if text_format is rails.Check:  # guardrails: let everything through
+            return SimpleNamespace(output_parsed=rails.Check(block=False, reason="ok"))
         data = json.loads(input)
         self.screen_calls.append(data)
         if "FAIL" in data["title"]:

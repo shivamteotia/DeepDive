@@ -376,6 +376,7 @@ function sourceKey(e) {
 function answerCards(turn) {
   const { run, evidence } = turn;
   const res = run.result;
+  if (res.status === "blocked") return [h("div", { class: "card" }, h("p", { style: "margin:0" }, res.gaps))];  // a guardrail
   const byEid = new Map((evidence || []).map((e) => [e.eid, e]));
   // Number sources in order of first citation, merging passages from the same page/URL.
   const order = [];
