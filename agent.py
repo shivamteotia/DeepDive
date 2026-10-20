@@ -40,7 +40,10 @@ stored values and costs nothing.
 To extract data for an evidence table ("extract sample size and country for the included papers"), create one column per
 item with add_column, then propose_action extract_column for each; values come from the full text when the PDF is
 ingested, else the abstract. For a table or spreadsheet of the papers ("export the included papers to Excel"), call
-export_table; the user gets a download button, so don't paste the table into the chat. Answer briefly and plainly."""
+export_table; the user gets a download button, so don't paste the table into the chat. For "how many" questions use
+count_papers (and get_papers with the same filters to show examples); never count by reading pages. Filters only look:
+to drop papers from the funnel ("only 2000 to 2026"), add a criterion with update_criteria (year '2000-2026').
+Answer briefly and plainly."""
 
 
 class _Args(BaseModel):
@@ -78,9 +81,31 @@ class ColumnIdArgs(_Args):
     column_id: str
 
 
-class PapersArgs(_Args):
+FILTER_KEYS = ("year_from", "year_to", "database", "column", "value")
+
+
+class _Filtered(_Args):
+    """Optional filters (null = none); the strict schema needs every key, so missing ones are filled with null."""
+    year_from: int | None = Field(description="only papers published in or after this year")
+    year_to: int | None = Field(description="only papers published in or before this year")
+    database: str | None = Field(description="only papers found in this database, e.g. pubmed, scopus, embase, wos")
+    column: str | None = Field(description="an extraction column's name: the value filter's column, or what to count")
+    value: str | None = Field(description="only papers whose extracted value in `column` is this")
+
+    _fill = model_validator(mode="before")(lambda d: dict.fromkeys(FILTER_KEYS) | d if isinstance(d, dict) else d)
+
+    def filters(self) -> dict:
+        return {k: getattr(self, k) for k in FILTER_KEYS}
+
+
+class PapersArgs(_Filtered):
     tab: Literal[funnel.TABS]
     limit: int = Field(description=f"1-{PAPERS_LIMIT}")
+
+
+class CountArgs(_Filtered):
+    tab: Literal[funnel.EXTRACT_TABS]
+    by: Literal[funnel.COUNT_BY] = Field(description="year, database, decision, journal, or column (set `column`)")
 
 
 class ExportArgs(_Args):
@@ -186,7 +211,15 @@ def _get_column(ctx: ToolContext, a: ColumnIdArgs) -> dict:
 
 
 def _papers(ctx: ToolContext, a: PapersArgs) -> dict:
-    out = funnel.list_papers(ctx.s, ctx.project_id, a.tab, 0, max(1, min(a.limit, PAPERS_LIMIT)))
+    limit = max(1, min(a.limit, PAPERS_LIMIT))
+    if any(v is not None for v in a.filters().values()):
+        try:
+            items = funnel.find_papers(ctx.s, ctx.project_id, a.tab, a.filters())
+        except funnel.Invalid as e:
+            return {"error": str(e)}
+        out = {"total": len(items), "items": items[:limit]}
+    else:
+        out = funnel.list_papers(ctx.s, ctx.project_id, a.tab, 0, limit)
 
     def brief(p: dict) -> dict:
         abstract = p.get("abstract") or ""
@@ -203,6 +236,13 @@ def _papers(ctx: ToolContext, a: PapersArgs) -> dict:
         return b
 
     return {"total": out["total"], "items": [brief(p) for p in out["items"]]}
+
+
+def _count_papers(ctx: ToolContext, a: CountArgs) -> dict:
+    try:
+        return funnel.count_papers(ctx.s, ctx.project_id, a.tab, a.by, a.filters())
+    except funnel.Invalid as e:
+        return {"error": str(e)}
 
 
 def _export(ctx: ToolContext, a: ExportArgs) -> dict:
@@ -237,8 +277,10 @@ TOOLS: dict[str, Tool] = {
                        "propose_action('extract_column', column_id, tab).", ColumnArgs, _add_column),
     "get_column": Tool("A column's extracted values (paper, value, quote, source) and value counts.", ColumnIdArgs,
                        _get_column),
-    "get_papers": Tool("Papers in a tab (all, included, review, excluded, duplicates, fulltext) with their decisions.",
-                       PapersArgs, _papers),
+    "get_papers": Tool("Papers in a tab (all, included, review, excluded, duplicates, fulltext) with their decisions; "
+                       "optionally filtered by year range, database, or an extracted column's value.", PapersArgs, _papers),
+    "count_papers": Tool("Count a tab's papers by year, database, decision, journal, or an extraction column's values, "
+                         "with the same optional filters. Free; use it for every 'how many' question.", CountArgs, _count_papers),
     "export_table": Tool("Export a tab's papers (citation, decision, reason, full-text status, and every extraction "
                          "column's value, quote and source) as csv or xlsx; the user gets a download button.",
                          ExportArgs, _export),

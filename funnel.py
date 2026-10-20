@@ -810,22 +810,84 @@ def paper_columns(s: Session, project_id: uuid.UUID, paper_ids: list[uuid.UUID])
     return out
 
 
-# --- outputs ---
+# --- outputs: filtered lists, counts, exports ---
 
 EXPORT_CHUNK = 5000
+COUNT_BY = ("year", "database", "decision", "journal", "column")
+MAX_COUNTS = 50
 
-def export_table(s: Session, project_id: uuid.UUID, tab: str) -> tuple[list[str], list[list]]:
-    """(headers, rows): one row per paper in the tab — citation, final decision, full-text status, and per extraction
-    column its value, quote and source. Invalid for a tab that is not a paper list (duplicates).
-    ponytail: whole tab in memory; stream it if projects reach tens of thousands of papers."""
+
+def _tab_data(s: Session, project_id: uuid.UUID, tab: str) -> tuple[list[db.Paper], dict, dict]:
+    """(papers in the tab, their decisions, their extracted values). Invalid for a tab that is not a paper list."""
     if tab not in EXTRACT_TABS:
-        raise Invalid(f"Export one of: {', '.join(EXTRACT_TABS)}")
+        raise Invalid(f"Use one of the tabs: {', '.join(EXTRACT_TABS)}")
     papers = _papers_in_tab(s, project_id, tab)
     ids, version = [p.id for p in papers], latest_version(s, project_id)
     dec, vals = {}, {}
     for i in range(0, len(ids), EXPORT_CHUNK):  # bounded IN lists (Postgres/SQLite bind-parameter limits)
         dec |= _decisions(s, version, ids[i:i + EXPORT_CHUNK])
         vals |= paper_columns(s, project_id, ids[i:i + EXPORT_CHUNK])
+    return papers, dec, vals
+
+
+def _column_name(s: Session, project_id: uuid.UUID, column: str) -> str:
+    names = [c["name"] for c in list_columns(s, project_id)]
+    found = next((n for n in names if n.casefold() == column.strip().casefold()), None)
+    if found is None:
+        raise Invalid(f"No column named {column!r}; columns: {', '.join(names) or 'none yet'}")
+    return found
+
+
+def _filtered(s: Session, project_id: uuid.UUID, tab: str, f: dict) -> tuple[list[db.Paper], dict, dict]:
+    """The tab's papers matching f: year_from / year_to (inclusive), database (one of the paper's sources), and
+    column + value (its extracted value, case-insensitive). None = no filter.
+    ponytail: filters in Python over the whole tab; push into SQL if projects reach tens of thousands of papers."""
+    papers, dec, vals = _tab_data(s, project_id, tab)
+    column = _column_name(s, project_id, f["column"]) if f.get("column") else None
+    if f.get("value") and not column:
+        raise Invalid("A value filter needs the column it belongs to")
+    db_name, value = (f.get("database") or "").casefold(), (f.get("value") or "").casefold()
+
+    def keep(p):
+        return ((f.get("year_from") is None or (p.year or 0) >= f["year_from"])
+                and (f.get("year_to") is None or (p.year is not None and p.year <= f["year_to"]))
+                and (not db_name or db_name in {x.casefold() for x in p.sources or []})
+                and (not value or (vals.get(p.id, {}).get(column) or {}).get("value", "").casefold() == value))
+    return [p for p in papers if keep(p)], dec, vals
+
+
+def find_papers(s: Session, project_id: uuid.UUID, tab: str, f: dict) -> list[dict]:
+    """Filtered papers as listing items (paper, decision, extracted values)."""
+    papers, dec, vals = _filtered(s, project_id, tab, f)
+    return [paper_out(p) | decision_fields(dec.get(p.id)) | {"columns": vals.get(p.id, {})} for p in papers]
+
+
+def count_papers(s: Session, project_id: uuid.UUID, tab: str, by: str, f: dict) -> dict:
+    """Counts of the (filtered) tab's papers by year, database (a paper in two databases counts in both), decision,
+    journal, or an extracted column's value (f["column"]); the most common MAX_COUNTS values."""
+    if by not in COUNT_BY:
+        raise Invalid(f"Count by one of: {', '.join(COUNT_BY)}")
+    if by == "column" and not f.get("column"):
+        raise Invalid("Counting by column needs the column's name")
+    papers, dec, vals = _filtered(s, project_id, tab, f)
+    column = _column_name(s, project_id, f["column"]) if by == "column" else None
+    counts: Counter = Counter()
+    for p in papers:
+        d = dec.get(p.id)
+        if by == "database":
+            counts.update(p.sources or ["unknown"])
+        else:
+            counts[{"year": p.year, "decision": (d.human_decision or d.ai_decision) if d else None,
+                    "journal": p.journal, "column": (vals.get(p.id, {}).get(column) or {}).get("value")}[by]
+                   or ("not extracted" if by == "column" else "unknown")] += 1
+    return {"tab": tab, "by": by, "total": len(papers),
+            "counts": {str(k): n for k, n in counts.most_common(MAX_COUNTS)}}
+
+def export_table(s: Session, project_id: uuid.UUID, tab: str) -> tuple[list[str], list[list]]:
+    """(headers, rows): one row per paper in the tab — citation, final decision, full-text status, and per extraction
+    column its value, quote and source. Invalid for a tab that is not a paper list (duplicates).
+    ponytail: whole tab in memory; stream it if projects reach tens of thousands of papers."""
+    papers, dec, vals = _tab_data(s, project_id, tab)
     names = [c["name"] for c in list_columns(s, project_id)]
     headers = ["Title", "Authors", "Year", "Journal", "DOI", "PMID", "PMCID", "Databases", "Decision", "Decided by",
                "Reason", "Full text"]
