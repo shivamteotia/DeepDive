@@ -1,5 +1,27 @@
 # Eval results
 
+## 2026-10-20: run 13 (one-off comparison, rejected): LlamaParse instead of Docling
+
+Change: parser only. LlamaParse v2 REST (`/api/v2/parse/upload`, tier `agentic`, 10 credits/page; 390 credits ≈ $0.49
+for the 3 files) -> pieces under LlamaParse's heading levels, tables as Markdown pieces; then the same chunker v3
+(outline + contextual chunks) and embeddings as run 12, into `<collection>_llama` (6 app documents, 186 points; `demo`
+26 + 31 chunks). Throwaway script, not product code (scratchpad `llama_spike.py`).
+
+evaluate.py: recall@k **0.95**, MRR **0.81** (run 12: 1.00 / 0.86; run 8: 0.95 / 0.85). r09 missed: the figure is in
+the chunk, but as a raw Markdown table row (`| Hospital Mortality*b* | 501(1.8%) |`) where Docling writes a sentence
+("Hospital Mortality b, Data = 501(1.8%)"); r04 1 -> 2, r19 2 -> 4; r10 6 -> 4 (better).
+
+compare vs run 8: **REVIEW** (5 regressed, 5 improved, 10 flat). Report: `runs/20261020T131259Z.json`.
+- Regressed: correctness 0.977 -> 0.923, faithfulness 1.00 -> 0.92, contextual_precision 1.00 -> 0.92,
+  evidence_hit 1.00 -> 0.92, premise 1.0 -> 0.9. Worst: a05 (Criticality Index limitations) answered with JPan2023's
+  limitations (two hospitals, short follow-up) — wrong paper, each claim supported by its cited chunk so the verifier
+  passed it (correctness 1.0 -> 0.1).
+- Improved: contextual_relevancy 0.50 -> 0.55, scope, abstention, latency.
+
+Structure (JPan2023 dry run): better than Docling + outline — Abstract and Results detected, "Study design" under
+Methods — but chart titles become headings (4 Discussion chunks filed under "Decision curve analysis…"); title still
+falls back to the filename. Decision: keep Docling; revisit only with tables flattened to row sentences.
+
 ## 2026-10-20: run 12 (candidate, not promoted): section outline (chunker v3)
 
 Change: one outline call per document (`OPENAI_CONTEXT_MODEL`) turns Docling's flat headings into a heading tree with
