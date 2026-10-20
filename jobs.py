@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import ask
 import db
+import funnel
 import research
 import web
 from config import Settings
@@ -196,6 +197,33 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
         s.commit()
 
 
+def screen_parse(state: State):
+    """screening.Parse on the screening model (OPENAI_SCREEN_MODEL, default the fast model)."""
+    model = state.settings.openai_screen_model or state.settings.openai_fast_model
+    return lambda instructions, input, fmt: ask.parse_llm(state.openai, model, instructions, input, fmt)
+
+
+def screen_all(state: State, action_id: uuid.UUID) -> None:
+    """Runs a confirmed screen_all PendingAction."""
+    with state.sessions() as s:
+        if not claim(s, db.PendingAction, action_id, "confirmed", "running"):
+            return
+        a = s.get(db.PendingAction, action_id)
+        project_id, version = a.project_id, a.criteria_version
+        if version != funnel.latest_version(s, project_id):  # criteria edited while this run waited in the queue
+            a.status = "expired"
+            s.commit()
+            return
+    try:
+        values = {"status": "done", "error": None,
+                  "result": funnel.screen_all(state.sessions, project_id, version, screen_parse(state))}
+    except Exception as exc:  # noqa: BLE001 — job boundary: any failure is recorded on the action
+        values = {"status": "failed", "error": short_error(exc, state.settings)}
+    with state.sessions() as s:
+        s.execute(update(db.PendingAction).where(db.PendingAction.id == action_id).values(**values))
+        s.commit()
+
+
 def conversation_history(s: Session, run: db.ResearchRun) -> list[dict]:
     """Earlier completed turns of the run's conversation: their questions and verified claim texts."""
     if run.conversation_id is None:
@@ -215,4 +243,6 @@ def recover_interrupted(sessions: sessionmaker) -> None:
                   .values(status="failed", error=RESTART_ERROR))
         s.execute(update(db.ResearchRun).where(db.ResearchRun.status.in_(("queued", "running")))
                   .values(status="failed", error=RESTART_ERROR, finished_at=db.utcnow()))
+        s.execute(update(db.PendingAction).where(db.PendingAction.status.in_(("confirmed", "running")))
+                  .values(status="failed", error=RESTART_ERROR))  # re-confirming a new action continues the run
         s.commit()

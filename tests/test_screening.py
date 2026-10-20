@@ -211,3 +211,19 @@ def test_one_bad_record_does_not_fail_the_batch():
 @pytest.mark.parametrize("lang", ["und", "n/a", "xyz"])
 def test_unknown_language_codes_go_to_the_ai(lang):
     assert sc.check_metadata(ENGLISH, {**PAPER, "language": lang}) is None
+
+
+# --- Task 5 ---
+
+def test_paper_excluded_by_metadata_is_not_sent_to_the_model():
+    parse = ai_out(v("c3", "yes", "women with PCOS aged 18-40"))
+    out = sc.screen_paper(parse, {**PAPER, "year": 2010}, [YEAR_2015, POP])
+    assert parse.calls == [] and [x.criterion_id for x in out] == ["c1"]  # unchecked criteria get no verdict
+    assert sc.decide([YEAR_2015, POP], out, True) == "exclude"
+
+
+def test_validate_criteria():
+    assert sc.validate_criteria([YEAR_2015, POP]) is None
+    assert "duplicate" in sc.validate_criteria([POP, POP])
+    assert "c1" in sc.validate_criteria([crit("c1", "years", check="metadata", field="year", value="2020-2015")])
+    assert sc.validate_criteria([]) is not None

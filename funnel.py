@@ -2,17 +2,25 @@
 split and merge. Every function takes the server-checked project id; nothing here trusts a client-supplied project."""
 
 import hashlib
+import time
 import uuid
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 from sqlalchemy import delete, func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
 import db
 import dedup
 import references
+import screening as sc
 
-TABS = ("all", "duplicates", "fulltext")
+TABS = ("all", "included", "review", "excluded", "duplicates", "fulltext")
+_TAB_DECISION = {"included": "include", "review": "review", "excluded": "exclude"}
+SCREEN_BATCH = 50  # papers written per commit during screen-all
+AI_FIELDS = ("verdicts", "ai_decision", "decision", "decided_by", "disagrees", "human_reason")
 CLIP = {"doi": 255, "pmid": 20, "pmcid": 20, "first_author": 200, "language": 100}  # String(n) columns on Paper
 
 
@@ -20,7 +28,7 @@ class Conflict(ValueError):
     """The request is valid but the data says no (e.g. keep_article on a pair with no preprint)."""
 
 
-def _lock(s: Session, project_id: uuid.UUID) -> None:
+def lock(s: Session, project_id: uuid.UUID) -> None:
     """Serialise imports/splits/merges of one project (Postgres row lock; SQLite has one writer anyway)."""
     s.execute(select(db.Project.id).where(db.Project.id == project_id).with_for_update())
 
@@ -150,7 +158,7 @@ def import_summary(s: Session, imp: db.ReferenceImport, already: bool) -> dict:
 def import_file(s: Session, project_id: uuid.UUID, filename: str, data: bytes) -> tuple[dict, bool]:
     """(summary, created). Raises ValueError when nothing in the file can be read."""
     sha = hashlib.sha256(data).hexdigest()
-    _lock(s, project_id)
+    lock(s, project_id)
     existing = s.scalar(select(db.ReferenceImport).where(db.ReferenceImport.project_id == project_id,
                                                          db.ReferenceImport.sha256 == sha))
     if existing is not None:
@@ -171,11 +179,35 @@ def import_file(s: Session, project_id: uuid.UUID, filename: str, data: bytes) -
     return import_summary(s, imp, False), True
 
 
-def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit: int) -> dict:
+def _final():
+    return func.coalesce(db.ScreeningDecision.human_decision, db.ScreeningDecision.ai_decision)
+
+
+def _decision_join(q, version: int | None):
+    """Join each paper's real (non-test) decision under this criteria version."""
+    return q.join(db.ScreeningDecision, (db.ScreeningDecision.paper_id == db.Paper.id)
+                  & (db.ScreeningDecision.criteria_version == version) & db.ScreeningDecision.test.is_(False))
+
+
+def decision_fields(d: db.ScreeningDecision | None, blind: bool = False) -> dict:
+    out = {"verdicts": d.verdicts if d else [], "ai_decision": d.ai_decision if d else None,
+           "decision": (d.human_decision or d.ai_decision) if d else None, "decided_by": d.decided_by if d else None,
+           "disagrees": bool(d and d.disagrees), "human_reason": d.human_reason if d else "",
+           "blind_label": d.blind_label if d else None}
+    return {k: v for k, v in out.items() if k not in AI_FIELDS} if blind else out
+
+
+def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit: int, blind: bool = False) -> dict:
+    """blind: the AI's verdicts and decisions (and the decision tab counts that would reveal them) are left out."""
     counts = _counts(s, project_id)
+    version = latest_version(s, project_id)
     tab_counts = {"all": counts["papers"], "duplicates": counts["possible_duplicates"],
                   "fulltext": s.scalar(select(func.count()).select_from(db.Paper).where(
                       db.Paper.project_id == project_id, db.Paper.fulltext_status != "not_tried"))}
+    if not blind:
+        by = dict(s.execute(_decision_join(select(_final(), func.count()).select_from(db.Paper), version)
+                            .where(db.Paper.project_id == project_id).group_by(_final())).all())
+        tab_counts |= {t: by.get(d, 0) for t, d in _TAB_DECISION.items()}
     if tab == "duplicates":
         rows = list(s.scalars(select(db.PossibleDuplicate).where(
             db.PossibleDuplicate.project_id == project_id, db.PossibleDuplicate.resolved.is_(False))
@@ -186,8 +218,12 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
     q = select(db.Paper).where(db.Paper.project_id == project_id)
     if tab == "fulltext":
         q = q.where(db.Paper.fulltext_status != "not_tried")
-    rows = s.scalars(q.order_by(db.Paper.created_at, db.Paper.id).offset(offset).limit(limit))
-    return {"total": tab_counts[tab], "counts": tab_counts, "items": [paper_out(p) for p in rows]}
+    if tab in _TAB_DECISION:
+        q = _decision_join(q, version).where(_final() == _TAB_DECISION[tab])
+    rows = list(s.scalars(q.order_by(db.Paper.created_at, db.Paper.id).offset(offset).limit(limit)))
+    dec = _decisions(s, version, [p.id for p in rows])
+    return {"total": tab_counts[tab], "counts": tab_counts, "criteria_version": version,
+            "items": [paper_out(p) | decision_fields(dec.get(p.id), blind) for p in rows]}
 
 
 def _paper_in(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID) -> db.Paper | None:
@@ -201,7 +237,7 @@ def _refs_of(s: Session, paper_id: uuid.UUID) -> list[db.Reference]:
 
 def split(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID) -> list[dict] | None:
     """One paper per reference, all pinned. None if the paper is not in this project; [] if nothing to split."""
-    _lock(s, project_id)
+    lock(s, project_id)
     paper = _paper_in(s, project_id, paper_id)
     if paper is None:
         return None
@@ -223,7 +259,7 @@ def split(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID) -> list[dict] 
 def resolve_duplicate(s: Session, project_id: uuid.UUID, dup_id: uuid.UUID, action: str) -> dict | None:
     """merge: paper_b's references join paper_a (pinned, reason manual); dismiss: hide the pair for good;
     keep_article: the preprint of the pair is marked superseded by the journal article (kept, not screened)."""
-    _lock(s, project_id)
+    lock(s, project_id)
     d = s.get(db.PossibleDuplicate, dup_id)
     if d is None or d.project_id != project_id or d.resolved:
         return None
@@ -250,3 +286,241 @@ def resolve_duplicate(s: Session, project_id: uuid.UUID, dup_id: uuid.UUID, acti
     _drop_papers(s, {d.paper_b})
     s.commit()
     return {"paper": paper_out(a)}
+
+
+# --- screening: criteria versions, test run, decisions, pending actions ---
+
+def latest_version(s: Session, project_id: uuid.UUID) -> int | None:
+    return s.scalar(select(func.max(db.CriteriaSet.version)).where(db.CriteriaSet.project_id == project_id))
+
+
+def criteria_set(s: Session, project_id: uuid.UUID, version: int | None = None) -> db.CriteriaSet | None:
+    version = latest_version(s, project_id) if version is None else version
+    return s.scalar(select(db.CriteriaSet).where(db.CriteriaSet.project_id == project_id, db.CriteriaSet.version == version))
+
+
+def criteria_out(cs: db.CriteriaSet) -> dict:
+    return {"version": cs.version, "sentence": cs.sentence, "criteria": cs.criteria, "created_at": cs.created_at}
+
+
+def save_criteria(s: Session, project_id: uuid.UUID, criteria: list[sc.Criterion], sentence: str | None = None) -> dict:
+    """A new criteria version; sentence None keeps the previous version's sentence."""
+    lock(s, project_id)
+    prev = criteria_set(s, project_id)
+    cs = db.CriteriaSet(project_id=project_id, version=(prev.version if prev else 0) + 1,
+                        sentence=sentence if sentence is not None else (prev.sentence if prev else ""),
+                        criteria=[c.model_dump() for c in criteria])
+    s.add(cs)
+    s.commit()
+    return criteria_out(cs)
+
+
+def _criteria(cs: db.CriteriaSet) -> list[sc.Criterion]:
+    return [sc.Criterion(**c) for c in cs.criteria]
+
+
+def _decisions(s: Session, version: int | None, paper_ids: list[uuid.UUID], test: bool = False) -> dict:
+    if version is None or not paper_ids:
+        return {}
+    rows = s.scalars(select(db.ScreeningDecision).where(db.ScreeningDecision.criteria_version == version,
+                                                        db.ScreeningDecision.test.is_(test),
+                                                        db.ScreeningDecision.paper_id.in_(paper_ids)))
+    return {d.paper_id: d for d in rows}
+
+
+def _screenable(s: Session, project_id: uuid.UUID) -> list[db.Paper]:
+    """Papers to screen: all but preprints the user replaced by their journal article."""
+    return list(s.scalars(select(db.Paper).where(db.Paper.project_id == project_id, db.Paper.superseded_by.is_(None))
+                          .order_by(db.Paper.created_at, db.Paper.id)))
+
+
+def _test_items(s: Session, rows: list[db.ScreeningDecision]) -> list[dict]:
+    return [{"paper": paper_out(s.get(db.Paper, d.paper_id)), "verdicts": d.verdicts, "ai_decision": d.ai_decision,
+             "feedback": d.feedback} for d in rows]
+
+
+def run_test(s: Session, project_id: uuid.UUID, parse: sc.Parse) -> dict | None:
+    """Screen a TEST_SAMPLE of papers under the latest criteria (test rows, not decisions). Already tested under this
+    version: the stored rows, at no cost. None if there are no criteria yet."""
+    cs = criteria_set(s, project_id)
+    if cs is None:
+        return None
+    criteria, papers = _criteria(cs), [paper_out(p) for p in _screenable(s, project_id)]
+    out = {"version": cs.version, "estimate": sc.estimate(papers, criteria), "seconds": None}
+    stored = list(s.scalars(select(db.ScreeningDecision).where(
+        db.ScreeningDecision.project_id == project_id, db.ScreeningDecision.criteria_version == cs.version,
+        db.ScreeningDecision.test.is_(True)).order_by(db.ScreeningDecision.id)))
+    if stored:
+        order = {p["id"]: n for n, p in enumerate(sc.test_sample(papers, criteria, seed=cs.version))}
+        return out | {"items": _test_items(s, sorted(stored, key=lambda d: order.get(str(d.paper_id), len(order))))}
+    sample = sc.test_sample(papers, criteria, seed=cs.version)
+    start = time.monotonic()
+    verdicts = sc.screen_many(parse, sample, criteria)
+    rows = [db.ScreeningDecision(project_id=project_id, paper_id=uuid.UUID(p["id"]), criteria_version=cs.version,
+                                 verdicts=[v.model_dump() for v in vs], ai_decision=sc.decide(criteria, vs, bool(p["abstract"])),
+                                 test=True) for p, vs in zip(sample, verdicts, strict=True)]
+    s.add_all(rows)
+    s.commit()  # ponytail: two concurrent test runs of one version collide on the unique key (500); the UI runs one
+    return out | {"items": _test_items(s, rows), "seconds": round(time.monotonic() - start, 1)}
+
+
+def set_feedback(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID, feedback: str) -> dict | None:
+    """Thumbs up/down on a test row of the latest criteria version. None if that paper was not in the test."""
+    d = _decisions(s, latest_version(s, project_id), [paper_id], test=True).get(paper_id)
+    if d is None or d.project_id != project_id:
+        return None
+    d.feedback = feedback
+    s.commit()
+    return {"paper_id": str(paper_id), "criteria_version": d.criteria_version, "feedback": feedback}
+
+
+def _history(s: Session, version: int, paper_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[db.ScreeningDecision]]:
+    """Each paper's real decision rows up to this criteria version, oldest first."""
+    out: dict[uuid.UUID, list[db.ScreeningDecision]] = {}
+    if paper_ids:
+        for d in s.scalars(select(db.ScreeningDecision).where(
+                db.ScreeningDecision.paper_id.in_(paper_ids), db.ScreeningDecision.test.is_(False),
+                db.ScreeningDecision.criteria_version <= version).order_by(db.ScreeningDecision.criteria_version)):
+            out.setdefault(d.paper_id, []).append(d)
+    return out
+
+
+def _carry(rows: list[db.ScreeningDecision]) -> dict:
+    """Human work from a paper's newest row (any version): it carries to the next version's row."""
+    d = rows[-1] if rows else None
+    return {"human_decision": d.human_decision if d else None, "human_reason": d.human_reason if d else "",
+            "blind_label": d.blind_label if d else None}
+
+
+def _current_row(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID, version: int,
+                 rows: list[db.ScreeningDecision]) -> db.ScreeningDecision:
+    """The paper's row under this version, created (with the human work carried from its newest row) if missing."""
+    if rows and rows[-1].criteria_version == version:
+        return rows[-1]
+    h = _carry(rows)
+    d = db.ScreeningDecision(project_id=project_id, paper_id=paper_id, criteria_version=version, verdicts=[],
+                             ai_decision=None, human_decision=h["human_decision"], human_reason=h["human_reason"] or "",
+                             decided_by="human" if h["human_decision"] else "ai", disagrees=False,
+                             blind_label=h["blind_label"], test=False)
+    s.add(d)
+    return d
+
+
+def set_decision(s: Session, project_id: uuid.UUID, paper_id: uuid.UUID, changes: dict) -> dict | None:
+    """changes: {"decision": include|exclude|None, "reason"} (None clears the human decision) and/or {"blind_label"}.
+    Applies to the latest criteria version. None if the paper is not in this project; Conflict without criteria.
+    A blind_label-only change answers without the AI's fields (the labeller must not see them)."""
+    if _paper_in(s, project_id, paper_id) is None:
+        return None
+    version = latest_version(s, project_id)
+    if version is None:
+        raise Conflict("No screening criteria yet")
+    d = _current_row(s, project_id, paper_id, version, _history(s, version, [paper_id]).get(paper_id, []))
+    if "decision" in changes:
+        d.human_decision = changes["decision"]
+        d.human_reason = (changes.get("reason") or "") if d.human_decision else ""
+        d.decided_by = "human" if d.human_decision else "ai"
+        d.disagrees = bool(d.human_decision and d.ai_decision and d.human_decision != d.ai_decision)
+    if "blind_label" in changes:
+        d.blind_label = changes["blind_label"]
+    s.commit()
+    return {"paper_id": str(paper_id), "criteria_version": version} | decision_fields(d, blind="decision" not in changes)
+
+
+def _same(a: sc.Criterion, b: dict) -> bool:
+    return all(getattr(a, k) == b.get(k) for k in ("id", "kind", "check", "definition", "field", "value"))
+
+
+def _screen_plan(s: Session, project_id: uuid.UUID, version: int) -> tuple[list[sc.Criterion], list[tuple]]:
+    """(criteria, todo). todo: (paper dict, copied verdicts, criteria to ask) for each paper without an AI decision
+    under this version. AI yes/no verdicts from the paper's newest screened earlier version are copied when that
+    criterion is unchanged since; metadata checks are free and always re-run (the paper's fields may have changed)."""
+    criteria = _criteria(criteria_set(s, project_id, version))
+    by_id = {c.id: c for c in criteria}
+    papers = _screenable(s, project_id)
+    history = _history(s, version, [p.id for p in papers])
+    unchanged: dict[int, set[str]] = {}
+
+    def same_since(v: int) -> set[str]:
+        if v not in unchanged:
+            old = {c["id"]: c for c in criteria_set(s, project_id, v).criteria}
+            unchanged[v] = {c.id for c in criteria if c.check == "ai" and c.id in old and _same(c, old[c.id])}
+        return unchanged[v]
+
+    todo = []
+    for p in papers:
+        rows = history.get(p.id, [])
+        if rows and rows[-1].criteria_version == version and rows[-1].ai_decision is not None:
+            continue
+        src = next((d for d in reversed(rows) if d.criteria_version < version and d.ai_decision is not None), None)
+        keep = same_since(src.criteria_version) if src else set()
+        copied = {v["criterion_id"]: sc.Verdict(**v) for v in (src.verdicts if src else [])
+                  if v["criterion_id"] in keep and v["verdict"] != "unclear"}
+        excluded = any(sc.excludes(by_id[k], v) for k, v in copied.items())  # still excluded: nothing to pay for
+        todo.append((paper_out(p), copied, [] if excluded else [c for c in criteria if c.id not in copied]))
+    return criteria, todo
+
+
+def screen_estimate(s: Session, project_id: uuid.UUID, version: int) -> dict:
+    _, todo = _screen_plan(s, project_id, version)
+    parts = [sc.estimate([p], ask) for p, _, ask in todo]
+    return {"papers": len(todo), **{k: sum(e[k] for e in parts) for k in ("calls", "input_tokens", "output_tokens")}}
+
+
+def _write_batch(sessions: sessionmaker, project_id: uuid.UUID, version: int, criteria: list[sc.Criterion],
+                 batch: list[tuple], asked: list[list[sc.Verdict]]) -> Counter:
+    """Write AI results onto each paper's row under this version, read fresh now: a decision the user made while we
+    screened is kept, not overwritten or collided with."""
+    counts: Counter = Counter()
+    with sessions() as s:
+        pids = [uuid.UUID(t[0]["id"]) for t in batch]
+        alive = set(s.scalars(select(db.Paper.id).where(db.Paper.id.in_(pids))))
+        history = _history(s, version, pids)
+        for (paper, copied, ask), new, pid in zip(batch, asked, pids, strict=True):
+            if pid not in alive:  # regrouped away by an import while we screened
+                continue
+            got = copied | {v.criterion_id: v for v in new}
+            verdicts = [got[c.id] for c in criteria if c.id in got]
+            d = _current_row(s, project_id, pid, version, history.get(pid, []))
+            d.verdicts, d.ai_decision = [v.model_dump() for v in verdicts], sc.decide(criteria, verdicts, bool(paper["abstract"]))
+            d.disagrees = bool(d.human_decision and d.human_decision != d.ai_decision)
+            counts[d.ai_decision] += 1
+            counts["calls"] += bool(ask)
+        s.commit()
+    return counts
+
+
+def screen_all(sessions: sessionmaker, project_id: uuid.UUID, version: int, parse: sc.Parse) -> dict:
+    """Screen every paper without an AI decision under this criteria version, committing every SCREEN_BATCH papers
+    (a re-run continues where a crash stopped)."""
+    with sessions() as s:
+        criteria, todo = _screen_plan(s, project_id, version)
+    counts: Counter = Counter()
+    with ThreadPoolExecutor(max_workers=sc.SCREEN_WORKERS) as pool:
+        for i in range(0, len(todo), SCREEN_BATCH):
+            batch = todo[i:i + SCREEN_BATCH]
+            asked = list(pool.map(lambda t: sc.screen_paper(parse, t[0], t[2]) if t[2] else [], batch))
+            try:
+                counts += _write_batch(sessions, project_id, version, criteria, batch, asked)
+            except IntegrityError:  # a user decision or an import landed between our read and commit: re-read once
+                counts += _write_batch(sessions, project_id, version, criteria, batch, asked)
+    return {"screened": counts["include"] + counts["exclude"] + counts["review"], "include": counts["include"],
+            "exclude": counts["exclude"], "review": counts["review"], "calls": counts["calls"]}
+
+
+def action_out(a: db.PendingAction) -> dict:
+    return {"id": str(a.id), "project_id": str(a.project_id), "tool": a.tool, "args": a.args,
+            "criteria_version": a.criteria_version, "estimate": a.estimate, "status": a.status, "result": a.result,
+            "error": a.error, "created_at": a.created_at}
+
+
+def propose(s: Session, project_id: uuid.UUID, tool: str) -> dict:
+    """A pending action with its estimate; nothing runs until the owner confirms it. Conflict without criteria."""
+    version = latest_version(s, project_id)
+    if version is None:
+        raise Conflict("No screening criteria yet")
+    a = db.PendingAction(project_id=project_id, tool=tool, args={}, criteria_version=version, status="pending",
+                         estimate=screen_estimate(s, project_id, version))
+    s.add(a)
+    s.commit()
+    return action_out(a)

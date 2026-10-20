@@ -144,7 +144,7 @@ def _quote_ok(v: Verdict, c: Criterion, text: str) -> bool:
     q = _norm(v.quote).strip(" .,;:")
     if not q or not re.search(rf"(?<![\w-]){re.escape(q)}(?![\w-])", text):
         return False
-    excluding = (c.kind == "include_if" and v.verdict == "no") or (c.kind == "exclude_if" and v.verdict == "yes")
+    excluding = excludes(c, v)
     return not excluding or len(q.split()) >= MIN_EXCLUDING_QUOTE_WORDS
 
 
@@ -156,8 +156,11 @@ def _meta_or_error(c: Criterion, paper: dict) -> Verdict | None:
 
 
 def screen_paper(parse: Parse, paper: dict, criteria: list[Criterion]) -> list[Verdict]:
-    """One verdict per criterion, in criteria order. Metadata first; everything else in one model call."""
+    """One verdict per criterion, in criteria order. Metadata first; everything else in one model call. A paper that
+    metadata already excludes is not sent to the model: its unchecked criteria get no verdict."""
     meta = {c.id: _meta_or_error(c, paper) for c in criteria}
+    if any(meta[c.id] and excludes(c, meta[c.id]) for c in criteria):
+        return [meta[c.id] for c in criteria if meta[c.id]]
     ask = [c for c in criteria if meta[c.id] is None]
     got: dict[str, Verdict] = {}
     if ask:
@@ -186,13 +189,17 @@ def screen_many(parse: Parse, papers: list[dict], criteria: list[Criterion],
         return list(pool.map(lambda p: screen_paper(parse, p, criteria), papers))
 
 
+def excludes(c: Criterion, v: Verdict) -> bool:
+    return (c.kind == "include_if" and v.verdict == "no") or (c.kind == "exclude_if" and v.verdict == "yes")
+
+
 def decide(criteria: list[Criterion], verdicts: list[Verdict], has_abstract: bool) -> Literal["include", "exclude", "review"]:
     """exclude: an include_if criterion is not met, or an exclude_if criterion is met. review: anything unclear, or an
     AI criterion without an abstract to read. Else include."""
     by_id = {v.criterion_id: v for v in verdicts}
     for c in criteria:
         v = by_id.get(c.id)
-        if v and ((c.kind == "include_if" and v.verdict == "no") or (c.kind == "exclude_if" and v.verdict == "yes")):
+        if v and excludes(c, v):
             return "exclude"
     if not has_abstract or any(by_id.get(c.id) is None or by_id[c.id].verdict == "unclear" for c in criteria):
         return "review"
@@ -200,6 +207,17 @@ def decide(criteria: list[Criterion], verdicts: list[Verdict], has_abstract: boo
 
 
 # --- drafting, test sample, estimate ---
+
+def validate_criteria(criteria: list[Criterion]) -> str | None:
+    """Why a user-edited criteria list can't be saved, or None."""
+    if not criteria:
+        return "at least one criterion is needed"
+    ids = [c.id for c in criteria]
+    if len(set(ids)) != len(ids):
+        return "duplicate criterion ids"
+    bad = [c.id for c in criteria if c.check == "metadata" and not _valid_metadata(c)]
+    return f"metadata check cannot run for {', '.join(bad)} (year >=2015 / <=2020 / 2015-2020, language eng|fre)" if bad else None
+
 
 def draft_criteria(parse: Parse, sentence: str) -> list[Criterion]:
     """Criteria cards from the user's sentence; ids c1..cn; a metadata check the code cannot run becomes an AI check."""

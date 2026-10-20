@@ -138,6 +138,54 @@ class PossibleDuplicate(Base):
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class CriteriaSet(Base):
+    """One version of a project's screening criteria; editing makes a new version."""
+    __tablename__ = "criteria_sets"
+    __table_args__ = (UniqueConstraint("project_id", "version"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    sentence: Mapped[str] = mapped_column(Text, default="")
+    criteria: Mapped[list] = mapped_column(JSON)  # screening.Criterion dicts
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ScreeningDecision(Base):
+    """A paper screened under one criteria version. test=True rows come from the 20-paper test run and are not the
+    paper's decision. Final decision = human_decision if set, else ai_decision."""
+    __tablename__ = "screening_decisions"
+    __table_args__ = (UniqueConstraint("paper_id", "criteria_version", "test"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    paper_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"), index=True)
+    criteria_version: Mapped[int] = mapped_column(Integer)
+    verdicts: Mapped[list] = mapped_column(JSON, default=list)  # screening.Verdict dicts
+    ai_decision: Mapped[str | None] = mapped_column(String(10))
+    human_decision: Mapped[str | None] = mapped_column(String(10))
+    human_reason: Mapped[str] = mapped_column(Text, default="")
+    decided_by: Mapped[str] = mapped_column(String(10), default="ai")
+    disagrees: Mapped[bool] = mapped_column(Boolean, default=False)  # human decision differs from the AI's
+    blind_label: Mapped[str | None] = mapped_column(String(10))
+    feedback: Mapped[str | None] = mapped_column(String(10))  # test rows: thumbs "up" / "down"
+    test: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class PendingAction(Base):
+    """A paid step proposed by the agent or the UI; it runs only once its owner confirms it through the API."""
+    __tablename__ = "pending_actions"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    tool: Mapped[str] = mapped_column(String(30))
+    args: Mapped[dict] = mapped_column(JSON, default=dict)
+    criteria_version: Mapped[int | None] = mapped_column(Integer)
+    estimate: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    result: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 # Columns added after research_runs existed. create_all never alters a table, so add them in place (Postgres only:
 # SQLite is used by tests and always starts from fresh tables).
 ADDED_COLUMNS = [

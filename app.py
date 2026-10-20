@@ -27,6 +27,7 @@ import auth
 import db
 import funnel
 import jobs
+import screening
 from config import Settings
 
 ROOT = Path(__file__).parent
@@ -98,6 +99,29 @@ class RunIn(BaseModel):
 
 class DuplicateAction(BaseModel):
     action: Literal["merge", "dismiss", "keep_article"]
+
+
+class SentenceIn(BaseModel):
+    sentence: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=2000)]
+
+
+class CriteriaIn(BaseModel):
+    criteria: list[screening.Criterion] = Field(max_length=30)
+
+
+class ActionIn(BaseModel):
+    tool: Literal["screen_all"]  # fetch_full_text joins with its job (Task 6)
+
+
+class FeedbackIn(BaseModel):
+    feedback: Literal["up", "down"]
+
+
+class DecisionIn(BaseModel):
+    """Send decision (+ reason) and/or blind_label; a field left out is left unchanged, null clears it."""
+    decision: Literal["include", "exclude"] | None = None
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] = ""
+    blind_label: Literal["include", "exclude"] | None = None
 
 
 class ConversationIn(BaseModel):
@@ -382,8 +406,11 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
 
     @app.get("/api/v1/projects/{project_id}/papers")
     def list_papers(project: OwnedProject, s: DB, tab: Literal[funnel.TABS] = "all",
-                    offset: Annotated[int, Field(ge=0)] = 0, limit: Annotated[int, Field(ge=1, le=500)] = 50):
-        return funnel.list_papers(s, project.id, tab, offset, limit)
+                    offset: Annotated[int, Field(ge=0)] = 0, limit: Annotated[int, Field(ge=1, le=500)] = 50,
+                    blind: bool = False):
+        if blind and tab in ("included", "review", "excluded"):
+            raise HTTPException(422, "Blind mode lists papers without the AI's decisions; use tab=all")
+        return funnel.list_papers(s, project.id, tab, offset, limit, blind)
 
     @app.post("/api/v1/projects/{project_id}/papers/{paper_id}/split")
     def split_paper(paper_id: uuid.UUID, project: OwnedProject, s: DB):
@@ -403,6 +430,98 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         if out is None:
             raise HTTPException(404, "Possible duplicate not found")
         return out
+
+    # --- screening: criteria, test run, decisions, confirmed actions ---
+
+    def new_criteria(s: Session, project: db.Project, criteria: list[screening.Criterion], sentence: str | None):
+        problem = screening.validate_criteria(criteria)
+        if problem:
+            raise HTTPException(422, problem)
+        return funnel.save_criteria(s, project.id, criteria, sentence)
+
+    @app.post("/api/v1/projects/{project_id}/criteria", status_code=201)
+    def draft_criteria(body: SentenceIn, project: OwnedProject, s: DB):
+        criteria = screening.draft_criteria(jobs.screen_parse(state), body.sentence)
+        if not criteria:
+            raise HTTPException(502, "Could not draft criteria from that sentence; try again or write them yourself")
+        return new_criteria(s, project, criteria, body.sentence)
+
+    @app.put("/api/v1/projects/{project_id}/criteria", status_code=201)
+    def edit_criteria(body: CriteriaIn, project: OwnedProject, s: DB):
+        return new_criteria(s, project, body.criteria, None)
+
+    @app.get("/api/v1/projects/{project_id}/criteria")
+    def get_criteria(project: OwnedProject, s: DB):
+        cs = funnel.criteria_set(s, project.id)
+        if cs is None:
+            raise HTTPException(404, "No screening criteria yet")
+        return funnel.criteria_out(cs)
+
+    @app.post("/api/v1/projects/{project_id}/screening/test")
+    def test_screen(project: OwnedProject, s: DB):
+        out = funnel.run_test(s, project.id, jobs.screen_parse(state))
+        if out is None:
+            raise HTTPException(409, "No screening criteria yet")
+        return out
+
+    @app.patch("/api/v1/projects/{project_id}/screening/test/{paper_id}")
+    def test_feedback(paper_id: uuid.UUID, body: FeedbackIn, project: OwnedProject, s: DB):
+        out = funnel.set_feedback(s, project.id, paper_id, body.feedback)
+        if out is None:
+            raise HTTPException(404, "That paper is not in the test run of the current criteria")
+        return out
+
+    @app.patch("/api/v1/projects/{project_id}/papers/{paper_id}/decision")
+    def set_decision(paper_id: uuid.UUID, body: DecisionIn, project: OwnedProject, s: DB):
+        changes = body.model_dump(include=body.model_fields_set)
+        if not {"decision", "blind_label"} & changes.keys():
+            raise HTTPException(422, "Send decision and/or blind_label")
+        try:
+            out = funnel.set_decision(s, project.id, paper_id, changes)
+        except funnel.Conflict as e:
+            raise HTTPException(409, str(e)) from None
+        if out is None:
+            raise HTTPException(404, "Paper not found")
+        return out
+
+    @app.post("/api/v1/projects/{project_id}/actions", status_code=201)
+    def propose_action(body: ActionIn, project: OwnedProject, s: DB):
+        try:
+            return funnel.propose(s, project.id, body.tool)
+        except funnel.Conflict as e:
+            raise HTTPException(409, str(e)) from None
+
+    def owned_action(action_id: uuid.UUID, user: CurrentUser, s: DB) -> db.PendingAction:
+        a = s.get(db.PendingAction, action_id)
+        if a is None or s.get(db.Project, a.project_id).owner_id != user.id:
+            raise HTTPException(404, "Action not found")
+        return a
+
+    OwnedAction = Annotated[db.PendingAction, Depends(owned_action)]
+
+    @app.get("/api/v1/actions/{action_id}")
+    def get_action(a: OwnedAction):
+        return funnel.action_out(a)
+
+    @app.post("/api/v1/actions/{action_id}/confirm")
+    def confirm_action(a: OwnedAction, s: DB):
+        """The only way a paid step starts: its owner confirms this server-issued action (never a chat message)."""
+        if a.status != "pending":
+            raise HTTPException(409, f"This action is {a.status}")
+        if a.criteria_version != funnel.latest_version(s, a.project_id):
+            a.status = "expired"
+            s.commit()
+            raise HTTPException(409, "expired: the criteria changed after this estimate; propose the run again")
+        funnel.lock(s, a.project_id)  # two confirms at once: the second sees the first as busy
+        busy = s.scalar(select(db.PendingAction.id).where(db.PendingAction.project_id == a.project_id,
+                                                          db.PendingAction.status.in_(("confirmed", "running"))).limit(1))
+        if busy is not None:
+            raise HTTPException(409, "Another screening run is in progress")
+        if not jobs.claim(s, db.PendingAction, a.id, "pending", "confirmed"):
+            raise HTTPException(409, "This action was already confirmed")
+        state.research_pool.submit(jobs.screen_all, state, a.id)
+        s.refresh(a)
+        return funnel.action_out(a)
 
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
