@@ -74,17 +74,70 @@ def _drop_papers(s: Session, ids: set[uuid.UUID]) -> None:
         s.execute(delete(db.Paper).where(db.Paper.id.in_(ids)))
 
 
-def _save_group(s: Session, project_id: uuid.UUID, refs: list[db.Reference], recs: list[references.Record],
-                idx: list[int], reason: str, by_members: dict) -> uuid.UUID:
-    """The paper for these free references: the existing row if it has exactly these members, else a new one."""
+def carry(s: Session, src: uuid.UUID, dst: uuid.UUID) -> None:
+    """Move a paper's work onto the paper that replaces it (before src is dropped): its PDF link when dst has none,
+    decisions per criteria version (a human decision, blind label or feedback fills what dst lacks), extracted values
+    dst lacks or has only as "not stated", and papers superseded by it."""
+    a, b = s.get(db.Paper, src), s.get(db.Paper, dst)
+    if a is None or b is None or src == dst:
+        return
+    if b.document_id is None and a.document_id is not None:
+        link_document(b, a.document_id, a.fulltext_status, a.fulltext_url, a.fulltext_license)
+        a.document_id = None
+    s.execute(update(db.Paper).where(db.Paper.superseded_by == src, db.Paper.id != dst).values(superseded_by=dst))
+    if b.superseded_by is None and a.superseded_by not in (None, dst):
+        b.superseded_by = a.superseded_by
+    for d in s.scalars(select(db.PossibleDuplicate).where(db.PossibleDuplicate.resolved, or_(
+            db.PossibleDuplicate.paper_a == src, db.PossibleDuplicate.paper_b == src))):  # dismissals stay dismissed
+        other = d.paper_b if d.paper_a == src else d.paper_a
+        if other != dst:
+            d.paper_a, d.paper_b = sorted((dst, other), key=str)
+    have = {(d.criteria_version, d.test): d for d in s.scalars(select(db.ScreeningDecision).where(
+        db.ScreeningDecision.paper_id == dst))}
+    for d in s.scalars(select(db.ScreeningDecision).where(db.ScreeningDecision.paper_id == src)):
+        keep = have.get((d.criteria_version, d.test))
+        if keep is None:
+            d.paper_id = dst
+            continue
+        if d.human_decision and not keep.human_decision:
+            keep.human_decision, keep.human_reason, keep.decided_by = d.human_decision, d.human_reason, d.decided_by
+            keep.disagrees = keep.ai_decision is not None and keep.ai_decision != d.human_decision
+        keep.blind_label = keep.blind_label or d.blind_label
+        keep.feedback = keep.feedback or d.feedback
+    values = {v.column_id: v for v in s.scalars(select(db.ExtractValue).where(db.ExtractValue.paper_id == dst))}
+    for v in s.scalars(select(db.ExtractValue).where(db.ExtractValue.paper_id == src)):
+        keep = values.get(v.column_id)
+        if keep is None:
+            v.paper_id = dst
+        elif keep.value == extraction.NOT_STATED and v.value != extraction.NOT_STATED:
+            keep.value, keep.quote, keep.reason, keep.source = v.value, v.quote, v.reason, v.source
+    s.flush()
+
+
+def _reuse_ids(groups: list[list[int]], old_of: list[uuid.UUID | None], reusable: set[uuid.UUID]) -> list:
+    """Per group, the earlier paper id it keeps (or None): each earlier paper goes to the group holding most of its
+    references, each group takes at most one, largest overlaps first."""
+    overlaps = sorted(((n, gi, pid) for gi, idx in enumerate(groups)
+                       for pid, n in Counter(old_of[i] for i in idx if old_of[i] in reusable).items()),
+                      key=lambda t: (-t[0], t[1], str(t[2])))
+    out, used = [None] * len(groups), set()
+    for _, gi, pid in overlaps:
+        if out[gi] is None and pid not in used:
+            out[gi] = pid
+            used.add(pid)
+    return out
+
+
+def _save_group(s: Session, project_id: uuid.UUID, recs: list[references.Record], idx: list[int], reason: str,
+                pid: uuid.UUID | None) -> uuid.UUID:
+    """The paper for these free references: the earlier paper `pid` (keeping its id, decisions and values), or new."""
     fields = _paper_fields([recs[i] for i in idx], reason)
-    pid = by_members.get(frozenset(refs[i].id for i in idx))
     if pid is None:
         paper = db.Paper(project_id=project_id, **fields)
         s.add(paper)
         s.flush()
         return paper.id
-    paper = s.get(db.Paper, pid)  # same members as before: keep the row (and its decisions), refresh its fields
+    paper = s.get(db.Paper, pid)  # keep the row (and its decisions), refresh its fields
     for k, v in fields.items():
         setattr(paper, k, v)
     return pid
@@ -93,8 +146,9 @@ def _save_group(s: Session, project_id: uuid.UUID, refs: list[db.Reference], rec
 def regroup(s: Session, project_id: uuid.UUID) -> None:
     """Rebuild papers from all the project's references. Pinned references (user splits/merges) never move: a dedup
     group touching one pinned paper adds its free references to that paper; a group touching several (the user split
-    them) keeps its free references as their own paper, flagged as a possible duplicate of each. A paper whose member
-    set is unchanged keeps its id (and so its screening decisions).
+    them) keeps its free references as their own paper, flagged as a possible duplicate of each. A new group keeps the
+    id of the earlier paper most of its references belonged to; an earlier paper that is gone carries its work
+    (decisions, values, PDF link) to the paper most of its references joined.
     ponytail: regroups the whole project per import; make it incremental if projects reach tens of thousands."""
     refs = list(s.scalars(select(db.Reference).where(db.Reference.project_id == project_id).order_by(db.Reference.id)))
     recs = _records(refs)
@@ -104,21 +158,22 @@ def regroup(s: Session, project_id: uuid.UUID) -> None:
         if r.paper_id is not None and not r.pinned:
             old.setdefault(r.paper_id, set()).add(r.id)
     pinned_papers = {r.paper_id for r in refs if r.pinned and r.paper_id is not None}
-    by_members = {frozenset(m): pid for pid, m in old.items() if pid not in pinned_papers}
+    old_of = [r.paper_id for r in refs]
+    free_of = [[i for i in g.members if not refs[i].pinned] for g in groups]
+    anchors_of = [{refs[i].paper_id for i in g.members if refs[i].pinned} for g in groups]
+    reuse = _reuse_ids([f if len(a) != 1 else [] for f, a in zip(free_of, anchors_of)], old_of, set(old) - pinned_papers)
     kept: set[uuid.UUID] = set(pinned_papers)
     paper_of: list[uuid.UUID | None] = [r.paper_id if r.pinned else None for r in refs]
     flagged: list[tuple[uuid.UUID, uuid.UUID, float]] = []
     touched: set[uuid.UUID] = set()
-    for g in groups:
-        anchors = {refs[i].paper_id for i in g.members if refs[i].pinned}
-        free = [i for i in g.members if not refs[i].pinned]
+    for g, free, anchors, keep in zip(groups, free_of, anchors_of, reuse):
         if not free:
             continue
         if len(anchors) == 1:
             pid = next(iter(anchors))
             touched.add(pid)
         else:
-            pid = _save_group(s, project_id, refs, recs, free, g.reason if len(free) > 1 else "single", by_members)
+            pid = _save_group(s, project_id, recs, free, g.reason if len(free) > 1 else "single", keep)
             flagged += [(pid, a, 1.0) for a in anchors]
         kept.add(pid)
         for i in free:
@@ -129,6 +184,10 @@ def regroup(s: Session, project_id: uuid.UUID) -> None:
         members = [r for r in refs if r.paper_id == pid]
         for k, v in _paper_fields(_records(members), "manual").items():
             setattr(s.get(db.Paper, pid), k, v)
+    for gone in set(old) - kept:
+        joined = Counter(paper_of[i] for i, r in enumerate(refs) if old_of[i] == gone and paper_of[i])
+        if joined:
+            carry(s, gone, max(joined, key=lambda k: (joined[k], str(k))))
     _drop_papers(s, set(old) - kept)
 
     dismissed = {frozenset((d.paper_a, d.paper_b)) for d in s.scalars(select(db.PossibleDuplicate).where(
@@ -297,6 +356,7 @@ def resolve_duplicate(s: Session, project_id: uuid.UUID, dup_id: uuid.UUID, acti
         r.paper_id, r.pinned = a.id, True
     for k, v in _paper_fields(_records(refs), "manual").items():
         setattr(a, k, v)
+    carry(s, d.paper_b, a.id)
     _drop_papers(s, {d.paper_b})
     s.commit()
     return {"paper": paper_out(a)}

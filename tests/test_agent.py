@@ -204,3 +204,24 @@ def test_agent_reads_a_column_of_its_own_project_only(api, signup):
     script = Script([call("get_column", {"column_id": col["id"]})], say("ok"))
     chat(api, h, pid, script)
     assert "error" in outputs(script.requests[1])[0]
+
+
+def test_turns_keep_their_order_when_the_clock_repeats(api, signup, monkeypatch):
+    import db
+    h, pid, _ = setup(api, signup)
+    frozen = db.utcnow()
+    monkeypatch.setattr(db, "utcnow", lambda: frozen)  # Windows: the clock can return one value for ~15 ms
+    script = Script(say("first answer"), say("second answer"))
+    cid, _ = chat(api, h, pid, script, "first question")
+    api.post(f"/api/v1/conversations/{cid}/agent", headers=h, json={"message": "second question"})
+    convo = api.get(f"/api/v1/conversations/{cid}", headers=h).json()
+    assert [m["content"].get("text") for m in convo["messages"] if m["role"] != "tool"] == [
+        "first question", "first answer", "second question", "second answer"]
+
+
+def test_as_utc_converts_aware_times_and_labels_naive_ones():
+    from datetime import UTC, datetime, timedelta, timezone
+
+    import db
+    assert db.as_utc(datetime(2026, 1, 1, 12, tzinfo=timezone(timedelta(hours=2)))) == datetime(2026, 1, 1, 10, tzinfo=UTC)
+    assert db.as_utc(datetime(2026, 1, 1, 12)) == datetime(2026, 1, 1, 12, tzinfo=UTC)

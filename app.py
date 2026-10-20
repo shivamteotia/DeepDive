@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -441,8 +441,12 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         rows = [db.AgentMessage(conversation_id=c.id, role="user", content={"text": body.message})]
         rows += [db.AgentMessage(conversation_id=c.id, role=m["role"],
                                  content=json.loads(json.dumps(m["content"], default=str))) for m in new]
+        last = s.scalar(select(func.max(db.AgentMessage.created_at)).where(db.AgentMessage.conversation_id == c.id))
+        start = db.utcnow()  # the clock can repeat (~15 ms on Windows): never at or before the previous turn
+        if last is not None:
+            start = max(start, db.as_utc(last) + timedelta(microseconds=1))
         for n, r in enumerate(rows):  # one timestamp per turn would tie; keep the order explicit
-            r.created_at = db.utcnow() + timedelta(microseconds=n)
+            r.created_at = start + timedelta(microseconds=n)
         s.add_all(rows)
         c.updated_at = db.utcnow()
         s.commit()

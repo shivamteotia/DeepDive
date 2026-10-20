@@ -12,6 +12,11 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def as_utc(t: datetime) -> datetime:
+    """A stored time as aware UTC: Postgres returns it in the session's time zone, SQLite naive (already UTC)."""
+    return t.astimezone(UTC) if t.tzinfo else t.replace(tzinfo=UTC)
+
+
 class Base(DeclarativeBase):
     pass
 
