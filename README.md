@@ -1,6 +1,6 @@
 # MaxRIM — Research Intelligence & Management
 
-> **Status:** Architecture defined · Backend-first development · Implementation status to be verified
+> **Status (2026-10-20):** Backend, web UI, screening funnel and LangGraph assistant implemented · 480 unit tests passing · eval baseline run 12 (recall@k 1.00, MRR 0.86) · see [§15 Current status](#15-current-status)
 
 **MaxRIM** is a proposed AI-assisted research intelligence and management platform designed for healthcare researchers and research teams. It brings project-specific literature, incremental document ingestion, evidence retrieval, and citation-verified report generation into one auditable workflow.
 
@@ -28,7 +28,9 @@ MaxRIM aims to provide:
 5. Identify evidence gaps and unsupported statements before presenting a draft to a researcher.
 6. Maintain a traceable research history across multiple independent projects.
 
-Potential later extensions include structured systematic-review extraction, screening workflows, study comparison matrices, and exportable reports. These are **not** claimed as implemented features.
+Since the first version, the systematic-review side is implemented too: importing database exports, deduplication,
+AI-assisted title/abstract screening, full-text retrieval, data-extraction columns, filters and counts, CSV/Excel
+export, and PubMed literature summaries, all driven from a screening assistant (see §5.0 and §15).
 
 ## 2. High-level architecture
 
@@ -147,6 +149,62 @@ For many research projects, the initial recommendation is **one or a small numbe
 **A filter alone is not a security boundary.** The backend must authorize the requesting user for the project and construct the filter server-side. Never trust a client-supplied project filter or allow cross-project retrieval by omitting it. Add integration tests that attempt cross-project access.
 
 ## 5. Multi-agent orchestration: LangGraph
+
+### 5.0 What is built (2026-10-20)
+
+Two orchestrations exist today.
+
+**Screening assistant (`agent.py`): a LangGraph `StateGraph`.** One agent node holds all 15 tools; guardrails are
+graph nodes; every turn returns a `trace` of the steps it ran. No checkpointer: the chat lives in Postgres
+(`agent_messages`) and each turn's state is built from the last 20 messages (blocked messages are never replayed).
+
+```mermaid
+flowchart TD
+    U[User message] --> GI{guard_input<br/>self-check rail}
+    GI -->|blocked| R1[Refusal saved] --> E1([END])
+    GI -->|ok| M[model<br/>Responses API + 15 tools]
+    M -->|tool calls, max 8 per message| T[tools<br/>server-side project id]
+    T --> M
+    M -->|reply| GO{guard_output<br/>self-check rail}
+    M -->|model error| E2([END: error saved, work kept])
+    GO -->|ok| E3([END: reply])
+    GO -->|blocked| E4([END: reply replaced])
+```
+
+| Tool | Does | Cost |
+|---|---|---|
+| `import_status`, `deduplicate_status`, `get_funnel_status` | read the project's imports, merges and funnel counts | free |
+| `draft_criteria`, `update_criteria` | write versioned screening criteria | 1 call / free |
+| `test_screen` | screen a 20-paper sample | ~20 calls |
+| `propose_action` | **screen all**, **fetch free full text**, **fill an extraction column**: creates a pending action that runs only after the user presses Confirm | paid, confirmed |
+| `add_column`, `get_column` | extraction columns (category / number / text) and their values with quotes | free |
+| `get_papers`, `count_papers` | list and count papers, filtered by year, database or extracted value | free |
+| `export_table` | CSV / Excel of a tab with decisions and extracted columns | free |
+| `web_search` | background from the web (Firecrawl, else Tavily); untrusted, cited by URL | ~2 Firecrawl credits |
+| `ask_research_question` | starts a research run over the project's PDFs | research run |
+| `search_pubmed` | starts a research run over the **20 latest PubMed abstracts** for the question | research run |
+
+**Research runs (`research.py`): the planner / researcher / synthesizer / verifier loop as plain functions**
+(background job in `jobs.run_research`):
+
+```mermaid
+flowchart TD
+    Q[Question] --> GI{input rail}
+    GI -->|blocked| B([blocked: refusal])
+    GI --> RW[rewrite follow-up<br/>to a standalone question]
+    RW --> P[Planner<br/>sub-questions]
+    P --> S[Researcher<br/>project PDFs in Qdrant, hybrid search<br/>or PubMed latest 20, plus optional web]
+    S --> A[Synthesizer<br/>claims citing evidence ids]
+    A --> V[Verifier<br/>guard model per claim]
+    V -->|thin or unsupported, rounds left| S
+    V -->|done| GO{output rail}
+    GO --> F([verified answer + gaps + sources])
+```
+
+PubMed runs search PubMed once per run (a fast-model step turns the question into keywords), frame the task as a
+literature summary, and stop after 2 rounds. Every claim cites PMIDs, pages or URLs that exist in the run's evidence.
+
+The workflow below (5.1 to 5.6) is the original target design; the research loop above implements its core.
 
 The agentic workflow begins **after** indexing. The graph works with structured state and bounded transitions rather than relying on a free-form conversation alone.
 
@@ -418,25 +476,35 @@ Create a small **expert-reviewed evaluation set** with source documents, questio
 
 ## 13. Configuration and local development
 
-The following are **proposed environment variables**, not a claim that the current repository supports them:
+Settings are read by one `pydantic-settings` class (`config.py`) from `.env`. Supported keys:
 
 ```dotenv
-APP_ENV=development
-DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/maxrim
-REDIS_URL=redis://localhost:6379/0
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=maxrim_documents
-OBJECT_STORAGE_ENDPOINT=http://localhost:9000
-EMBEDDING_PROVIDER=openai
-EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_API_KEY=replace_me
-TAVILY_API_KEY=replace_me_optional
-WEB_SEARCH_ENABLED=false
-MAX_GRAPH_ITERATIONS=3
-MLFLOW_TRACKING_URI=http://localhost:5000
+# OpenAI models (never hard-coded)
+OPENAI_API_KEY=            OPENAI_MODEL=          OPENAI_FAST_MODEL=     OPENAI_GUARD_MODEL=
+OPENAI_EMBED_MODEL=        OPENAI_CONTEXT_MODEL=  OPENAI_SCREEN_MODEL=
+# Qdrant Cloud
+QDRANT_CLUSTER_ENDPOINT=   QDRANT_API_KEY=        QDRANT_COLLECTION=     HYBRID_SEARCH=true
+CONTEXTUAL_CHUNKS=true     RERANKER_MODEL=        JENA_AI_API_KEY=
+# App
+DATABASE_URL=postgresql+psycopg://...@127.0.0.1:5432/...   # 127.0.0.1, not localhost, on Windows
+JWT_SECRET=                ACCESS_TOKEN_MINUTES=
+# Optional sources
+WEB_SEARCH_ENABLED=false   FIRECRAWL_API_KEY=     TAVILY_API_KEY=        WEB_SEARCH_TIMEOUT_SECONDS=20
+PUBMED_API_KEY=            UNPAYWALL_EMAIL=       FULLTEXT_MAX_MB=
+# Evaluation
+JUDGE_MODEL=               GROQ_API_KEY=          EVAL_API=
 ```
 
-Never commit real `.env` files or API keys. Once the backend scaffold exists, the intended developer workflow is to create the environment, start Docker services, run database migrations, start the FastAPI service and background worker, then execute integration tests. **Exact commands should be added only after the repository's dependencies and entry points are implemented and verified.**
+Never commit real `.env` files or API keys.
+
+```
+uv sync                                   # install
+docker compose up -d --wait               # local Postgres
+uv run uvicorn app:create_app --factory   # UI + API on http://127.0.0.1:8000 (docs at /docs)
+uv run pytest -m "not live"               # unit tests (no network, no cost)
+uv run python evaluate.py                 # retrieval + verifier eval (costs money)
+uv run python -m evals.run && uv run python -m evals.compare   # end-to-end eval vs baseline (costs money)
+```
 
 ## 14. Key engineering decisions and open questions
 
@@ -462,7 +530,54 @@ Never commit real `.env` files or API keys. Once the backend scaffold exists, th
 
 ## 15. Current status
 
-This README describes the **target design and development plan**. It does not imply that the APIs, agents, database tables, integrations, or tests are already implemented. Track implementation status against the roadmap and update this section after each verified milestone.
+Updated 2026-10-20 (`main` includes the `screening-funnel` work). Sections 1 to 14 remain the target design; this
+section is what is built and measured.
+
+**Implemented**
+
+| Area | What works |
+|---|---|
+| Ingestion | Docling, smart chunking (document type, front/back matter), **section outline** (one LLM call per document: heading tree + canonical section per chunk, chunker v3), OpenAI embeddings + bm25 into Qdrant; hash-idempotent; crash-isolated worker |
+| Retrieval & answers | project-filtered hybrid search; planner / researcher / synthesizer / verifier research runs with cited claims; chat memory with follow-up rewriting; optional web (Firecrawl or Tavily) and **PubMed** evidence |
+| Screening funnel | import PubMed `.nbib`, Europe PMC/BibTeX `.bib`, RIS, CSV, Excel (Scopus, WoS, Embase, Cochrane); deduplication with a possible-duplicates review; versioned criteria; 20-paper test; AI screening with verified quotes (never excludes without evidence); blind labelling; free full text (Europe PMC, Unpaywall) and upload matching |
+| Extraction & outputs | extraction columns with per-paper quotes, from full text when ingested; free filters and counts; CSV / Excel export |
+| Assistant | LangGraph screening assistant with 15 tools (§5.0); paid steps only after Confirm |
+| Guardrails | input and output self-check rails on research questions and the assistant (fail open); untrusted text always quoted as data; server-side project filter on every query |
+
+**Unit tests:** `uv run pytest -m "not live"`: **480 passed** (4 live tests deselected), ruff clean.
+
+**Retrieval eval** (`evaluate.py`, gold.json v1, 20 questions, k=6, hybrid search):
+
+| Run | Change | recall@k | MRR | Verifier catch rate |
+|---|---|---|---|---|
+| 8 | smart chunking + contextual retrieval | 0.95 | 0.85 | 1.00 |
+| **12 (baseline)** | **+ section outline (chunker v3)** | **1.00** | **0.86** | **1.00** |
+| 13 | LlamaParse (agentic) instead of Docling: rejected | 0.95 | 0.81 | 1.00 |
+
+**End-to-end eval** (`evals.run`, 26 golden cases, DeepEval judge):
+
+| Metric | Run 8 | Run 12 (baseline) | Run 13 LlamaParse | Run 14 + guardrails |
+|---|---|---|---|---|
+| correctness | 0.977 | 0.985 | 0.923 | **0.992** |
+| faithfulness | 1.00 | 1.00 | 0.92 | 0.92 (1) |
+| contextual precision | 1.00 | 0.99 | 0.92 | 1.00 |
+| contextual relevancy | 0.50 | 0.48 | 0.55 | **0.56** |
+| premise (false-premise pushback) | 1.00 | 0.90 (2) | 0.90 | 0.95 |
+| p95 latency | 40.0 s | 14.4 s | 15.1 s | 18.4 s |
+| verdict | baseline | REVIEW vs run 8 (2) | REVIEW, rejected | REVIEW vs run 12 (1) |
+
+(1) One judge error on a08 (1.0 on both re-runs). (2) One noisy case, p01 (1.0 on both re-runs). In run 14 the input
+rail blocked exactly the injection case and no gold question. Full log: `evals/baselines/RESULTS.md`.
+
+**Live screening run** (PubMed + Europe PMC exports, 3,448 records, 1,845 papers): criteria v4 gave **38 included**,
+468 review, 1,339 excluded (651 model calls, about 5 min). Extraction on the 38: study design, sample size and country
+with quotes; 13 free PDFs found (Europe PMC + Unpaywall).
+
+**PubMed summary (live):** "machine learning for early ICU mortality prediction": 20 latest papers (2026), 37
+findings, 36 supported and 1 thinly supported by the verifier, each citing its PMID.
+
+**Known limits / next:** cross-chat memory for the assistant; a screening recall gate (needs about 150 blind labels);
+PubMed results are not yet importable into the project; PRISMA counts and exclusion reasons in exports.
 
 ---
 
