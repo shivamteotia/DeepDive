@@ -808,3 +808,36 @@ def paper_columns(s: Session, project_id: uuid.UUID, paper_ids: list[uuid.UUID])
     for v, name in rows:
         out.setdefault(v.paper_id, {})[name] = {"value": v.value, "source": v.source, "quote": v.quote}
     return out
+
+
+# --- outputs ---
+
+EXPORT_CHUNK = 5000
+
+def export_table(s: Session, project_id: uuid.UUID, tab: str) -> tuple[list[str], list[list]]:
+    """(headers, rows): one row per paper in the tab — citation, final decision, full-text status, and per extraction
+    column its value, quote and source. Invalid for a tab that is not a paper list (duplicates).
+    ponytail: whole tab in memory; stream it if projects reach tens of thousands of papers."""
+    if tab not in EXTRACT_TABS:
+        raise Invalid(f"Export one of: {', '.join(EXTRACT_TABS)}")
+    papers = _papers_in_tab(s, project_id, tab)
+    ids, version = [p.id for p in papers], latest_version(s, project_id)
+    dec, vals = {}, {}
+    for i in range(0, len(ids), EXPORT_CHUNK):  # bounded IN lists (Postgres/SQLite bind-parameter limits)
+        dec |= _decisions(s, version, ids[i:i + EXPORT_CHUNK])
+        vals |= paper_columns(s, project_id, ids[i:i + EXPORT_CHUNK])
+    names = [c["name"] for c in list_columns(s, project_id)]
+    headers = ["Title", "Authors", "Year", "Journal", "DOI", "PMID", "PMCID", "Databases", "Decision", "Decided by",
+               "Reason", "Full text"]
+    headers += [h for n in names for h in (n, f"{n} (quote)", f"{n} (source)")]
+    rows = []
+    for p in papers:
+        d = dec.get(p.id)
+        row = [p.title, "; ".join(p.authors or []), p.year, p.journal, p.doi, p.pmid, p.pmcid,
+               ", ".join(p.sources or []), (d.human_decision or d.ai_decision) if d else None,
+               d.decided_by if d else None, d.human_reason if d else None, p.fulltext_status]
+        for n in names:
+            v = vals.get(p.id, {}).get(n) or {}
+            row += [v.get("value"), v.get("quote"), v.get("source")]
+        rows.append(row)
+    return headers, rows

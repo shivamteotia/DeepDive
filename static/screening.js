@@ -536,8 +536,24 @@ const TOOL_LABEL = {
   import_status: "Checked the imports", deduplicate_status: "Checked deduplication", get_funnel_status: "Checked the funnel",
   draft_criteria: "Drafted criteria", update_criteria: "Saved criteria", test_screen: "Tested on 20 papers",
   propose_action: "Proposed a step", get_papers: "Read papers", ask_research_question: "Asked your papers",
-  add_column: "Added a column", get_column: "Read a column",
+  add_column: "Added a column", get_column: "Read a column", export_table: "Built a table",
 };
+
+async function scDownload(tab, format) {
+  const res = await fetch(`/api/v1/projects/${state.projectId}/export?tab=${encodeURIComponent(tab)}&format=${format}`,
+    { headers: { Authorization: `Bearer ${state.token}` } });
+  if (!res.ok) {
+    const d = (await res.json().catch(() => ({}))).detail;
+    throw new Error(typeof d === "string" ? d : `Export failed (${res.status})`);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || `papers.${format}`;
+  const url = URL.createObjectURL(await res.blob());
+  const a = h("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function renderAgent() {
   const log = $("#agent-log");
@@ -551,6 +567,12 @@ function renderAgent() {
     if (m.role === "assistant") return h("div", { class: "msg bot" }, m.content.text);
     const c = m.content;
     if (c.action) return actionCard(c.action);
+    const ex = c.result && c.result.export;
+    if (ex) return h("div", { class: "tool-line" }, `✓ Table: ${ex.papers} ${ex.tab} papers, ${ex.columns.length} columns `,
+      h("button", { class: "btn small", type: "button",
+        onclick: () => sc.blind ? toast("Turn off blind labelling to export: the table shows the AI's decisions.")
+          : scDownload(ex.tab, ex.format).catch((err) => toast(err.message)) },
+        `Download ${ex.format === "xlsx" ? "Excel" : "CSV"}`));
     const failed = c.result && c.result.error;
     return h("div", { class: `tool-line${failed ? " error" : ""}` },
       `${failed ? "⚠" : "✓"} ${TOOL_LABEL[c.tool] || c.tool}${failed ? `: ${typeof c.result.error === "string"
@@ -644,6 +666,13 @@ $("#blind-toggle").addEventListener("change", (e) => {
   sc.blind = e.target.checked;
   sc.queue = null;
   scLoad().catch((ex) => toast(ex.message));
+});
+$("#sc-export").addEventListener("change", (e) => {
+  const format = e.target.value;
+  e.target.value = "";
+  if (!format) return;
+  if (sc.blind) { toast("Turn off blind labelling to export: the table shows the AI's decisions."); return; }
+  scDownload(sc.tab, format).catch((ex) => toast(ex.message));
 });
 document.addEventListener("keydown", queueKeys);
 if (store.get("maxrim.view") === "screening") showView("screening");

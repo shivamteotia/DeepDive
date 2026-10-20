@@ -39,7 +39,8 @@ prospectives"), call update_criteria with the same criteria and the new exclude_
 stored values and costs nothing.
 To extract data for an evidence table ("extract sample size and country for the included papers"), create one column per
 item with add_column, then propose_action extract_column for each; values come from the full text when the PDF is
-ingested, else the abstract. Answer briefly and plainly."""
+ingested, else the abstract. For a table or spreadsheet of the papers ("export the included papers to Excel"), call
+export_table; the user gets a download button, so don't paste the table into the chat. Answer briefly and plainly."""
 
 
 class _Args(BaseModel):
@@ -80,6 +81,11 @@ class ColumnIdArgs(_Args):
 class PapersArgs(_Args):
     tab: Literal[funnel.TABS]
     limit: int = Field(description=f"1-{PAPERS_LIMIT}")
+
+
+class ExportArgs(_Args):
+    tab: Literal[funnel.EXTRACT_TABS]
+    format: Literal["csv", "xlsx"]
 
 
 class QuestionArgs(_Args):
@@ -199,6 +205,12 @@ def _papers(ctx: ToolContext, a: PapersArgs) -> dict:
     return {"total": out["total"], "items": [brief(p) for p in out["items"]]}
 
 
+def _export(ctx: ToolContext, a: ExportArgs) -> dict:
+    """Builds the table once to report its size; the UI downloads it from the export endpoint."""
+    headers, rows = funnel.export_table(ctx.s, ctx.project_id, a.tab)
+    return {"export": {"tab": a.tab, "format": a.format, "papers": len(rows), "columns": headers}}
+
+
 def _ask(ctx: ToolContext, a: QuestionArgs) -> dict:
     return ctx.ask_research(a.question)
 
@@ -227,6 +239,9 @@ TOOLS: dict[str, Tool] = {
                        _get_column),
     "get_papers": Tool("Papers in a tab (all, included, review, excluded, duplicates, fulltext) with their decisions.",
                        PapersArgs, _papers),
+    "export_table": Tool("Export a tab's papers (citation, decision, reason, full-text status, and every extraction "
+                         "column's value, quote and source) as csv or xlsx; the user gets a download button.",
+                         ExportArgs, _export),
     "ask_research_question": Tool("Ask a research question answered from this project's ingested full-text PDFs, with "
                                   "verified citations. Starts a run; the answer appears in the chat when done.",
                                   QuestionArgs, _ask),

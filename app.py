@@ -30,6 +30,7 @@ import db
 import extraction
 import funnel
 import jobs
+import outputs
 import screening
 from config import Settings
 
@@ -593,6 +594,19 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
     @app.get("/api/v1/projects/{project_id}/columns")
     def list_columns(project: OwnedProject, s: DB):
         return funnel.list_columns(s, project.id)
+
+    @app.get("/api/v1/projects/{project_id}/export")
+    def export(project: OwnedProject, s: DB, tab: str = "included", format: Literal["csv", "xlsx"] = "csv"):
+        """The tab's papers with decisions and extracted columns, as a CSV or Excel download."""
+        try:
+            headers, rows = funnel.export_table(s, project.id, tab)
+        except funnel.Invalid as e:
+            raise HTTPException(422, str(e)) from None
+        name = re.sub(r"[^A-Za-z0-9_-]+", "-", project.name).strip("-")[:60] or "project"
+        data = outputs.to_csv(headers, rows) if format == "csv" else outputs.to_xlsx(headers, rows, tab.capitalize())
+        media = "text/csv" if format == "csv" else             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return Response(data, media_type=media,
+                        headers={"Content-Disposition": f'attachment; filename="{name}-{tab}.{format}"'})
 
     @app.get("/api/v1/columns/{column_id}")
     def get_column(column_id: uuid.UUID, user: CurrentUser, s: DB):
