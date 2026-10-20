@@ -2,13 +2,15 @@
 
 Stdlib only. A record that cannot be read is reported in the error list, never dropped silently."""
 
+import csv
 import html
+import io
 import re
 from typing import Literal
 
 from pydantic import BaseModel
 
-Source = Literal["pubmed", "europepmc", "bibtex"]
+Source = Literal["pubmed", "europepmc", "bibtex", "scopus", "wos", "embase", "ris", "csv"]
 EUROPEPMC_PREFIXES = ("PMID", "PMCID", "PPR", "AGR", "MED", "PMC")
 
 
@@ -53,7 +55,8 @@ def _surname(author: str) -> str:
     if "," in a:
         return a.split(",", 1)[0].strip().lower()
     parts = a.split()
-    if len(parts) > 1 and parts[-1].isalpha() and parts[-1].isupper() and len(parts[-1]) <= 3:
+    initials = parts[-1].replace(".", "").replace("-", "") if parts else ""
+    if len(parts) > 1 and initials.isalpha() and initials.isupper() and len(initials) <= 3:  # "Smith J", "Wu Y.", "Li J.-P."
         return " ".join(parts[:-1]).lower()
     return parts[-1].lower() if parts else ""
 
@@ -230,11 +233,193 @@ def parse_bibtex(text: str) -> tuple[list[Record], list[str]]:
     return recs, errs
 
 
+# --- RIS (Embase, Cochrane, Scopus, Web of Science, reference managers) ---
+
+_RIS_LINE = re.compile(r"^([A-Z][A-Z0-9])  -(?: (.*))?$")
+_RIS_TITLE, _RIS_ABSTRACT, _RIS_AUTHORS = ("TI", "T1", "CT", "BT"), ("AB", "N2"), ("AU", "A1")
+_RIS_YEAR, _RIS_JOURNAL = ("PY", "Y1", "DA", "Y2"), ("T2", "JO", "JF", "JA", "J2", "T3")
+
+
+def _ris_source(db: str) -> Source:
+    d = db.lower()
+    return next((src for key, src in (("embase", "embase"), ("scopus", "scopus"), ("web of science", "wos"),
+                                      ("clarivate", "wos"), ("pubmed", "pubmed"), ("medline", "pubmed")) if key in d), "ris")
+
+
+def parse_ris(text: str) -> tuple[list[Record], list[str]]:
+    recs, errs = [], []
+    tags: dict[str, list[str]] = {}
+    last = None
+    n = 0
+
+    def first(*keys: str) -> str:
+        return next((tags[k][0].strip() for k in keys if tags.get(k) and tags[k][0].strip()), "")
+
+    def flush():
+        nonlocal tags
+        if not tags:
+            return
+        title = strip_html(" ".join(first(*_RIS_TITLE).split()))
+        if not title:
+            errs.append(f"record {n}: no title")
+        else:
+            authors = next((tags[k] for k in _RIS_AUTHORS if tags.get(k)), [])
+            key = first("AN", "ID", "U1", "M1") or f"ris:{n}:{norm_title(title)[:80]}"
+            source = _ris_source(first("DB", "DP"))
+            recs.append(_record(
+                source=source, source_key=key, title=title,
+                abstract=strip_html(" ".join(first(*_RIS_ABSTRACT).split())), authors=authors,
+                year=_year(first(*_RIS_YEAR)), journal=first(*_RIS_JOURNAL), doi=norm_doi(first("DO")),
+                pmid=first("AN") if source == "pubmed" and first("AN").isdigit() else "", pmcid="", language=first("LA"),
+                pub_types=[first("M3")] if first("M3") else [first("TY").lower()] if first("TY") else [],
+                keywords=tags.get("KW", []), raw={k: v for k, v in tags.items()}))
+        tags = {}
+
+    for line in text.splitlines():
+        m = _RIS_LINE.match(line.rstrip())
+        if m:
+            tag, value = m.group(1), (m.group(2) or "").strip()
+            if tag == "TY":
+                flush()
+                n += 1
+            if tag == "ER":
+                flush()
+                last = None
+                continue
+            tags.setdefault(tag, []).append(value)
+            last = tag
+        elif last and line.strip():  # wrapped value
+            tags[last][-1] = f"{tags[last][-1]} {line.strip()}".strip()
+    flush()
+    return recs, errs
+
+
+# --- CSV / tab-delimited / Excel (Scopus, Web of Science, Embase, generic) ---
+
+_COLUMNS = {  # field -> header names (lower-case), first present wins
+    "title": ("title", "article title", "document title", "ti"),
+    "abstract": ("abstract", "ab"),
+    "authors_full": ("author full names", "af", "author names"),
+    "authors": ("authors", "author", "au"),
+    "year": ("year", "publication year", "py", "publication date", "date"),
+    "journal": ("source title", "journal", "journal title", "so", "publication title", "journal/book"),
+    "doi": ("doi", "di"),
+    "pmid": ("pubmed id", "pmid", "pm", "medline pmid"),
+    "language": ("language of original document", "language", "la"),
+    "type": ("document type", "publication type", "dt", "type"),
+    "keywords": ("author keywords", "keywords", "de"),
+    "key": ("eid", "ut", "ut (unique wos id)", "accession number", "embase accession number", "id"),
+    "database": ("source", "database", "db"),
+}
+_COMMA_AUTHORS = re.compile(r"[^,;]+ [A-Z][A-Z.\-]*(?:, [^,;]+ [A-Z][A-Z.\-]*)+")
+_SCOPUS_ID = re.compile(r"\s*\(\d+\)\s*$")
+
+
+def _split(value: str, sep: str = ";") -> list[str]:
+    return [x.strip() for x in value.split(sep) if x.strip()]
+
+
+MAX_ROWS = 100_000
+MAX_COLS = 200
+MAX_EMPTY_RUN = 500  # an Excel sheet formatted down to row 1,048,576 ends here
+
+
+def _table_records(rows, name: str) -> tuple[list[Record], list[str]]:
+    rows = iter(rows)
+    first_row = next(rows, None)
+    if first_row is None:
+        return [], [f"{name}: empty file"]
+    header = [str(h or "").replace("\x00", "").strip().lstrip("\ufeff").lower() for h in first_row[:MAX_COLS]]
+    col = {f: next((header.index(h) for h in names if h in header), None) for f, names in _COLUMNS.items()}
+    if col["title"] is None:
+        return [], [f"{name}: no Title column found (columns: {', '.join(h for h in header if h)[:200]})"]
+    recs, errs = [], []
+    empty_run = 0
+    for n, row in enumerate(rows, 2):
+        row = ["" if c is None else str(c).replace("\x00", "") for c in row[:MAX_COLS]]
+        if not any(c.strip() for c in row):
+            empty_run += 1
+            if empty_run >= MAX_EMPTY_RUN:
+                break
+            continue
+        empty_run = 0
+        if n - 1 > MAX_ROWS:
+            errs.append(f"{name}: only the first {MAX_ROWS:,} rows were read")
+            break
+        def get(field: str, row: list = row) -> str:
+            i = col[field]
+            return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ""
+
+        title = strip_html(get("title"))
+        if not title:
+            errs.append(f"{name} row {n}: no title")
+            continue
+        key, db = get("key"), get("database").lower()
+        source: Source = ("scopus" if key.startswith("2-s2.0-") or db == "scopus" else
+                          "wos" if key.upper().startswith("WOS:") else "embase" if "embase" in db else "csv")
+        full = [_SCOPUS_ID.sub("", a) for a in _split(get("authors_full"))]
+        short = get("authors")
+        if ";" not in short and _COMMA_AUTHORS.fullmatch(short):  # older Scopus: "Wu Y., Huang B."
+            short = short.replace(", ", "; ")
+        authors = full or _split(short)
+        recs.append(_record(
+            source=source, source_key=key or f"{source}:{n}:{norm_title(title)[:80]}", title=title,
+            abstract=strip_html(get("abstract")), authors=authors, year=_year(get("year")), journal=get("journal"),
+            doi=norm_doi(get("doi")), pmid=get("pmid") if get("pmid").isdigit() else "", pmcid="",
+            language=get("language"), pub_types=_split(get("type")), keywords=_split(get("keywords")),
+            raw={h: str(row[i]) for i, h in enumerate(header) if h and i < len(row) and row[i] not in (None, "")}))
+    return recs, errs
+
+
+csv.field_size_limit(16 * 1024 * 1024)  # Scopus exports "with references" have very long cells
+
+
+def parse_csv(text: str, name: str) -> tuple[list[Record], list[str]]:
+    """Delimiter = the most frequent of tab / semicolon / comma in the header line; quotes are standard CSV ("" inside
+    a quoted field), which is what Scopus, WoS and Excel write."""
+    head = text.split("\n", 1)[0]
+    delimiter = max(("\t", ";", ","), key=head.count)
+    try:
+        return _table_records(csv.reader(io.StringIO(text), delimiter=delimiter), name)
+    except csv.Error as e:
+        return [], [f"{name}: could not read the CSV ({e})"]
+
+
+def parse_xlsx(data: bytes, name: str) -> tuple[list[Record], list[str]]:
+    try:
+        import openpyxl  # ponytail: installed with docling, not declared in pyproject; declare it if docling goes
+    except ImportError:
+        return [], [f"{name}: Excel files need openpyxl; export as CSV instead"]
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        rows = wb.worksheets[0].iter_rows(values_only=True, max_col=MAX_COLS)  # lazy: no full-sheet padding in memory
+        return _table_records(rows, name)
+    except Exception as e:  # noqa: BLE001 — a corrupt workbook is reported, not raised
+        return [], [f"{name}: could not read the Excel file ({type(e).__name__})"]
+
+
+def _decode(data: bytes) -> str:
+    """UTF-8 (with or without BOM), UTF-16 (some Web of Science exports), else Windows-1252 (Excel's default "CSV")."""
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return data.decode("utf-16").lstrip("\ufeff")
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("cp1252", errors="replace")
+
+
 def parse_file(name: str, data: bytes) -> tuple[list[Record], list[str]]:
     """Records and error messages. The format is sniffed from the content (extensions lie: PubMed exports .txt)."""
-    text = data.decode("utf-8-sig", errors="replace")
+    if data[:2] == b"PK":  # a zip container: .xlsx
+        return parse_xlsx(data, name)
+    text = _decode(data)
     if re.search(r"^PMID\s*-", text, re.MULTILINE):
         return parse_medline(text)
+    if re.search(r"^TY  -", text, re.MULTILINE):
+        return parse_ris(text)
     if _ENTRY_RE.search(text):
         return parse_bibtex(text)
-    return [], [f"{name}: unknown format (expected PubMed .nbib or BibTeX .bib)"]
+    first_line = text.split("\n", 1)[0]
+    if any(d in first_line for d in (",", "\t", ";")):
+        return parse_csv(text, name)
+    return [], [f"{name}: unknown format (expected PubMed .nbib, BibTeX .bib, RIS, CSV or Excel)"]

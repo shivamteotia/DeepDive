@@ -266,7 +266,7 @@ function scRenderBody() {
   const total = sc.listing?.total ?? 0;
   if (!sc.items.length) {
     body.replaceChildren(h("p", { class: "muted empty-note" },
-      sc.listing?.counts?.all ? "Nothing in this tab." : "Import a PubMed (.nbib) or BibTeX (.bib) export to start."));
+      sc.listing?.counts?.all ? "Nothing in this tab." : "Import a reference export (PubMed .nbib, BibTeX .bib, RIS, CSV or Excel) to start."));
     return;
   }
   const tab = sc.blind ? "all" : sc.tab;
