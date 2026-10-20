@@ -36,23 +36,34 @@ def export(sessions, project_id: uuid.UUID) -> dict:
             .order_by(db.ScreeningDecision.criteria_version))
         newest = {d.paper_id: d.blind_label for d in rows}  # each paper's newest row wins, even when it cleared the label
         sample = {x.paper_id: x for x in s.scalars(select(db.LabelSample).where(db.LabelSample.project_id == project_id))}
+        latest = funnel.latest_version(s, project_id)
         papers = []
         for pid, label in newest.items():
             p = s.get(db.Paper, pid) if label else None
             if p is not None and p.superseded_by is None:  # screening skips preprints replaced by their article
                 out = funnel.paper_out(p)
-                x = sample.get(pid)  # sampled papers stand for their whole pile; others count once
+                x = sample.get(pid)
                 papers.append({**{k: out[k] for k in PAPER_FIELDS}, "label": label, "stratum": x.stratum if x else None,
-                               "weight": round(x.stratum_size / x.stratum_sampled, 4) if x else 1.0})
+                               "stratum_size": x.stratum_size if x else None})
+        labelled: dict[str, int] = {}  # weights divide by the papers actually labelled per pile, not those drawn
+        for p in papers:
+            if p["stratum"]:
+                labelled[p["stratum"]] = labelled.get(p["stratum"], 0) + 1
+        for p in papers:  # with a sample, only sampled papers enter the weighted estimate (outside labels would
+            size = p.pop("stratum_size")  # count twice: a sampled paper already stands for its whole pile)
+            p["weight"] = round(size / labelled[p["stratum"]], 4) if p["stratum"] else (None if sample else 1.0)
+        info = {"size": len(sample), "labelled": sum(labelled.values()),
+                "stale": any(x.criteria_version != latest for x in sample.values())} if sample else None
         return {"project_id": str(project_id), "criteria_version": cs.version if cs else None,
-                "criteria": cs.criteria if cs else [], "exported_at": datetime.now(UTC).isoformat(), "papers": papers}
+                "criteria": cs.criteria if cs else [], "exported_at": datetime.now(UTC).isoformat(), "papers": papers,
+                "sample": info}
 
 
 def weighted_recall(papers: list[dict], decisions: list[str]) -> float | None:
     """Recall on includes with each labelled paper standing for its sampled pile (weight = pile size / sampled), so a
     stratified sample estimates the whole project's recall."""
     w = [p.get("weight", 1.0) for p in papers]
-    inc = [i for i, p in enumerate(papers) if p["label"] == "include"]
+    inc = [i for i, p in enumerate(papers) if p["label"] == "include" and w[i] is not None]  # None: outside the sample
     total = sum(w[i] for i in inc)
     return round(sum(w[i] for i in inc if decisions[i] != "exclude") / total, 3) if total else None
 

@@ -105,6 +105,8 @@ def carry(s: Session, src: uuid.UUID, dst: uuid.UUID) -> None:
             keep.disagrees = keep.ai_decision is not None and keep.ai_decision != d.human_decision
         keep.blind_label = keep.blind_label or d.blind_label
         keep.feedback = keep.feedback or d.feedback
+    if s.scalar(select(db.LabelSample.id).where(db.LabelSample.paper_id == dst)) is None:  # its place in the sample
+        s.execute(update(db.LabelSample).where(db.LabelSample.paper_id == src).values(paper_id=dst))
     values = {v.column_id: v for v in s.scalars(select(db.ExtractValue).where(db.ExtractValue.paper_id == dst))}
     for v in s.scalars(select(db.ExtractValue).where(db.ExtractValue.paper_id == src)):
         keep = values.get(v.column_id)
@@ -268,8 +270,8 @@ def list_papers(s: Session, project_id: uuid.UUID, tab: str, offset: int, limit:
     tab_counts = {"all": counts["papers"], "duplicates": counts["possible_duplicates"],
                   "fulltext": s.scalar(select(func.count()).select_from(db.Paper).where(
                       db.Paper.project_id == project_id, db.Paper.fulltext_status != "not_tried"))}
-    tab_counts["sample"] = s.scalar(select(func.count()).select_from(db.LabelSample).where(
-        db.LabelSample.project_id == project_id))
+    tab_counts["sample"] = s.scalar(select(func.count()).select_from(db.LabelSample).join(  # rows of papers that exist
+        db.Paper, db.Paper.id == db.LabelSample.paper_id).where(db.LabelSample.project_id == project_id))
     if blind:
         tab_counts.pop("fulltext")
     else:
@@ -964,7 +966,6 @@ def make_label_sample(s: Session, project_id: uuid.UUID, size: int = 150) -> dic
     rng.shuffle(chosen)
     for pos, (pid, k) in enumerate(chosen):
         s.add(db.LabelSample(project_id=project_id, paper_id=pid, position=pos, stratum=k,
-                             stratum_size=len(piles[k]), stratum_sampled=take[k]))
+                             stratum_size=len(piles[k]), stratum_sampled=take[k], criteria_version=version))
     s.commit()
-    return {"size": len(chosen), "criteria_version": version,
-            "strata": {k: {"sampled": take[k], "total": len(v)} for k, v in piles.items()}}
+    return {"size": len(chosen), "criteria_version": version}  # not the pile sizes: they hint at the AI's answers

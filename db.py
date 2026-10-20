@@ -222,9 +222,10 @@ class LabelSample(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
     paper_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(Integer)
-    stratum: Mapped[str] = mapped_column(String(10))  # the AI's decision when sampled: include | review | exclude
+    stratum: Mapped[str] = mapped_column(String(10))  # final decision (human, else AI) when sampled: include | review | exclude
     stratum_size: Mapped[int] = mapped_column(Integer)  # papers in that pile when sampled
     stratum_sampled: Mapped[int] = mapped_column(Integer)  # papers drawn from it
+    criteria_version: Mapped[int] = mapped_column(Integer)  # the version the piles came from (stale when it changes)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
