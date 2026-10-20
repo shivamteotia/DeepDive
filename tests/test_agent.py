@@ -232,3 +232,29 @@ def test_each_turn_reports_the_graph_steps_it_ran(api, signup):
     script = Script([call("get_funnel_status", {})], say("You have 30 papers."))
     out = chat(api, h, pid, script, "how many papers?")[1].json()
     assert out["trace"] == ["Input checked", "Model", "Tool: get_funnel_status", "Model", "Answer checked"]
+
+
+def test_web_search_tool_returns_quoted_results_when_enabled(api, signup, monkeypatch):
+    import web
+    h, pid, _ = setup(api, signup)
+    api.maxrim.settings = api.maxrim.settings.model_copy(update={"web_search_enabled": True, "tavily_api_key": "tv"})
+    seen = {}
+
+    def fake_search(query, *, api_key, project_id, timeout, max_results=5, transport=None):
+        seen.update(query=query, project_id=project_id)
+        return [{"url": "https://who.int/pcos", "title": "WHO PCOS", "text": "x" * 2000, "source_type": "web"}]
+    monkeypatch.setattr(web, "search", fake_search)
+    script = Script([call("web_search", {"query": "PCOS prevalence WHO"})], say("WHO says..."))
+    chat(api, h, pid, script)
+    out = outputs(script.requests[1])[0]
+    assert out["results"] == [{"title": "WHO PCOS", "url": "https://who.int/pcos", "text": "x" * 600}]
+    assert seen == {"query": "PCOS prevalence WHO", "project_id": pid} and "untrusted" in out["note"]
+
+
+def test_web_search_tool_is_off_unless_enabled(api, signup, monkeypatch):
+    import web
+    h, pid, _ = setup(api, signup)
+    monkeypatch.setattr(web, "search", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no call when off")))
+    script = Script([call("web_search", {"query": "anything"})], say("ok"))
+    chat(api, h, pid, script)
+    assert "WEB_SEARCH_ENABLED" in outputs(script.requests[1])[0]["error"]

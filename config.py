@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     eval_api: str = "http://127.0.0.1:8000"
     web_search_enabled: bool = False  # per-run opt-in still required (RunIn.web_search)
     tavily_api_key: str = ""
+    firecrawl_api_key: str = ""  # preferred over Tavily when set (web.searcher)
     web_search_timeout_seconds: float = 20
     qdrant_cluster_endpoint: str
     qdrant_api_key: str

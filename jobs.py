@@ -142,7 +142,7 @@ class IngestRunner:
 def short_error(exc: Exception, settings: Settings) -> str:
     msg = str(exc) if isinstance(exc, IngestFailed) else f"{type(exc).__name__}: {exc}"
     for secret in (settings.openai_api_key, settings.qdrant_api_key, settings.jena_ai_api_key, settings.jwt_secret,
-                   settings.tavily_api_key):
+                   settings.tavily_api_key, settings.firecrawl_api_key):
         if secret:
             msg = msg.replace(secret, "***")
     return msg[:500]
@@ -191,9 +191,8 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
         hits = ask.search(state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
                           project_id=project_id, question=q, k=RESEARCH_K, rerank_model=cfg.reranker_model,
                           rerank_api_key=cfg.jena_ai_api_key, sha256_in=ready, hybrid=cfg.hybrid_search)
-        if use_web:  # opt-in per run; web text is untrusted and quoted exactly like PDF chunks
-            hits += web.search(q, api_key=cfg.tavily_api_key, project_id=project_id,
-                               timeout=cfg.web_search_timeout_seconds, max_results=WEB_RESULTS)
+        if use_web and (find := web.searcher(cfg)):  # opt-in per run; untrusted, quoted exactly like PDF chunks
+            hits += find(q, project_id=project_id, max_results=WEB_RESULTS)
         return hits
 
     def blocked(message: str) -> dict:  # a refused run: no claims, no evidence, the refusal as its gap

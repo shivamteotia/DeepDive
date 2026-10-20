@@ -32,6 +32,7 @@ import funnel
 import jobs
 import outputs
 import screening
+import web
 from config import Settings
 
 ROOT = Path(__file__).parent
@@ -363,7 +364,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
                                                             db.ResearchRun.status.in_(("queued", "running"))).limit(1))
             if busy is not None:  # its answer isn't history yet; a follow-up now would lose its context
                 raise HTTPException(409, "The previous question in this chat is still running")
-        if body.web_search and not (settings.web_search_enabled and settings.tavily_api_key):
+        if body.web_search and web.searcher(settings) is None:
             raise HTTPException(400, "Web search is not enabled on this server")
         ready = s.scalar(select(db.Document.id).where(db.Document.project_id == project.id,
                                                        db.Document.status == "ready").limit(1))
@@ -394,7 +395,7 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
 
     @app.get("/api/v1/config")
     def client_config(user: CurrentUser):
-        return {"web_search": bool(settings.web_search_enabled and settings.tavily_api_key)}
+        return {"web_search": web.searcher(settings) is not None}
 
     @app.post("/api/v1/projects/{project_id}/conversations", status_code=201)
     def create_conversation(body: ConversationIn, project: OwnedProject, s: DB):
@@ -438,7 +439,14 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
             except ValueError as e:  # RunIn validation (e.g. a too-short question)
                 return {"error": str(e)[:300]}
 
-        ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state), ask_research=ask_research)
+        cfg = state.settings
+        find = web.searcher(cfg)
+
+        def web_search(query: str) -> list[dict]:  # the project id is the server's, never the model's
+            return find(query, project_id=str(c.project_id))
+
+        ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state), ask_research=ask_research,
+                                web_search=web_search if find else None)
         turn = agent.run_turn(state.openai, settings.openai_model, history, body.message, ctx,
                               guard_model=settings.openai_guard_model)  # rails are nodes of the graph
         new, refusal = turn["messages"], turn["blocked"]
