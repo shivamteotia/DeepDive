@@ -130,9 +130,10 @@ def test_csv_doubled_quotes_inside_fields_keep_the_row_aligned():
 
 def test_huge_or_malformed_csv_is_reported_not_raised():
     big = "Title,Abstract\nA,\"" + "x" * 300_000 + "\"\n"
-    recs, errs = refs.parse_file("big.csv", big.encode())
+    recs, _ = refs.parse_file("big.csv", big.encode())
     assert len(recs) == 1 and len(recs[0].abstract) == 300_000
-    assert refs.parse_file("bad.csv", b"Title,Year\n\"unclosed,2020\n" + b"\x00" * 3)[1] or True  # never raises
+    recs, errs = refs.parse_file("bad.csv", b"Title,Year\n\"unclosed,2020\n" + b"\x00" * 3)  # returns, never raises
+    assert isinstance(recs, list) and isinstance(errs, list)
 
 
 def test_ris_record_types_are_not_publication_type_evidence():
