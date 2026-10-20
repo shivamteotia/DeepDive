@@ -5,12 +5,13 @@ Docs: http://127.0.0.1:8000/docs
 """
 
 import hashlib
+import json
 import re
 import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -23,6 +24,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import agent
 import auth
 import db
 import funnel
@@ -122,6 +124,10 @@ class DecisionIn(BaseModel):
     decision: Literal["include", "exclude"] | None = None
     reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] = ""
     blind_label: Literal["include", "exclude"] | None = None
+
+
+class AgentIn(BaseModel):
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
 
 
 class ConversationIn(BaseModel):
@@ -396,7 +402,41 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
     def get_conversation(c: OwnedConversation, s: DB):
         runs = s.scalars(select(db.ResearchRun).where(db.ResearchRun.conversation_id == c.id)
                          .order_by(db.ResearchRun.created_at))
-        return {**conversation_out(c), "runs": [run_out(r) for r in runs]}
+        return {**conversation_out(c), "runs": [run_out(r) for r in runs], "messages": agent_messages(s, c.id)}
+
+    def agent_messages(s: Session, conversation_id: uuid.UUID) -> list[dict]:
+        rows = s.scalars(select(db.AgentMessage).where(db.AgentMessage.conversation_id == conversation_id)
+                         .order_by(db.AgentMessage.created_at, db.AgentMessage.id))
+        return [{"id": str(m.id), "role": m.role, "content": m.content, "created_at": m.created_at} for m in rows]
+
+    @app.post("/api/v1/conversations/{conversation_id}/agent")
+    def agent_turn(body: AgentIn, c: OwnedConversation, s: DB):
+        """One message to the screening agent; runs its tool loop now and returns the new messages."""
+        project = s.get(db.Project, c.project_id)
+        # ponytail: loads the whole chat and holds a DB connection for the turn (model calls included); fine for a
+        # few users, move the loop to a background job + polling if many chat at once.
+        history = [{"role": m["role"], "content": m["content"]["text"]} for m in agent_messages(s, c.id)
+                   if m["role"] in ("user", "assistant") and m["content"].get("text")]
+
+        def ask_research(question: str) -> dict:
+            try:
+                return start_research_run(RunIn(question=question, conversation_id=c.id), project, s)
+            except HTTPException as e:
+                return {"error": e.detail}
+            except ValueError as e:  # RunIn validation (e.g. a too-short question)
+                return {"error": str(e)[:300]}
+
+        ctx = agent.ToolContext(s=s, project_id=c.project_id, parse=jobs.screen_parse(state), ask_research=ask_research)
+        new = agent.run_turn(state.openai, settings.openai_model, history, body.message, ctx)
+        rows = [db.AgentMessage(conversation_id=c.id, role="user", content={"text": body.message})]
+        rows += [db.AgentMessage(conversation_id=c.id, role=m["role"],
+                                 content=json.loads(json.dumps(m["content"], default=str))) for m in new]
+        for n, r in enumerate(rows):  # one timestamp per turn would tie; keep the order explicit
+            r.created_at = db.utcnow() + timedelta(microseconds=n)
+        s.add_all(rows)
+        c.updated_at = db.utcnow()
+        s.commit()
+        return {"messages": agent_messages(s, c.id)[-len(rows):]}
 
     @app.delete("/api/v1/conversations/{conversation_id}", status_code=204)
     def delete_conversation(c: OwnedConversation, s: DB):

@@ -74,6 +74,16 @@ class ResearchRun(Base):
     standalone_question: Mapped[str | None] = mapped_column(Text)
 
 
+class AgentMessage(Base):
+    """One screening-agent chat message: role user / assistant / tool (a tool call and its JSON result)."""
+    __tablename__ = "agent_messages"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10))
+    content: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ReferenceImport(Base):
     """One uploaded reference export (.bib / .nbib). The same file twice in a project imports nothing."""
     __tablename__ = "reference_imports"
