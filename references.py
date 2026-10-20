@@ -240,10 +240,20 @@ _RIS_TITLE, _RIS_ABSTRACT, _RIS_AUTHORS = ("TI", "T1", "CT", "BT"), ("AB", "N2")
 _RIS_YEAR, _RIS_JOURNAL = ("PY", "Y1", "DA", "Y2"), ("T2", "JO", "JF", "JA", "J2", "T3")
 
 
+_DATABASE_NAMES = (("embase", "embase"), ("scopus", "scopus"), ("web of science", "wos"), ("clarivate", "wos"),
+                   ("pubmed", "pubmed"), ("medline", "pubmed"), ("europe pmc", "europepmc"))
+
+
 def _ris_source(db: str) -> Source:
     d = db.lower()
-    return next((src for key, src in (("embase", "embase"), ("scopus", "scopus"), ("web of science", "wos"),
-                                      ("clarivate", "wos"), ("pubmed", "pubmed"), ("medline", "pubmed")) if key in d), "ris")
+    return next((src for key, src in _DATABASE_NAMES if key in d), "ris")
+
+
+def database_code(name: str) -> str | None:
+    """The stored source code for a database name as people write it ("Web of Science" -> wos), or None."""
+    d = " ".join(name.lower().split())
+    codes = {c for c in Source.__args__}
+    return d.replace(" ", "") if d.replace(" ", "") in codes else next((c for k, c in _DATABASE_NAMES if k in d), None)
 
 
 def parse_ris(text: str) -> tuple[list[Record], list[str]]:
