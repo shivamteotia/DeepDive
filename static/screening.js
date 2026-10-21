@@ -553,7 +553,7 @@ const TOOL_LABEL = {
   propose_action: "Proposed a step", get_papers: "Read papers", ask_research_question: "Asked your papers",
   add_column: "Added a column", get_column: "Read a column", export_table: "Built a table",
   count_papers: "Counted papers", web_search: "Searched the web", search_pubmed: "Asked PubMed",
-  export_answer: "Saved the answer", chart_answer: "Built a chart",
+  export_answer: "Saved the answer", chart_answer: "Built a chart", remember: "Saved a note", forget: "Removed a note",
 };
 
 async function downloadFrom(path, fallback) {

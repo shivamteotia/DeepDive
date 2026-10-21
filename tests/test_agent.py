@@ -117,7 +117,8 @@ def test_history_is_kept_and_shown_in_the_conversation(api, signup):
     script = Script(say("first answer"), say("second answer"))
     cid, _ = chat(api, h, pid, script, "first question")
     api.post(f"/api/v1/conversations/{cid}/agent", headers=h, json={"message": "second question"})
-    texts = [i.get("content") for i in script.requests[1]["input"] if isinstance(i, dict) and "role" in i]
+    texts = [i.get("content") for i in script.requests[1]["input"] if isinstance(i, dict) and "role" in i
+             and not str(i.get("content")).startswith("Project memory")]
     assert texts[:3] == ["first question", "first answer", "second question"]
     convo = api.get(f"/api/v1/conversations/{cid}", headers=h).json()
     assert [m["content"].get("text") for m in convo["messages"] if m["role"] != "tool"] == [
@@ -175,7 +176,8 @@ def test_empty_replies_are_not_replayed(api, signup):
     script = Script(say(""), say("second"))
     cid, _ = chat(api, h, pid, script, "one")
     api.post(f"/api/v1/conversations/{cid}/agent", headers=h, json={"message": "two"})
-    assert [i["content"] for i in script.requests[1]["input"] if isinstance(i, dict) and "role" in i] == ["one", "two"]
+    assert [i["content"] for i in script.requests[1]["input"] if isinstance(i, dict) and "role" in i
+            and not str(i["content"]).startswith("Project memory")] == ["one", "two"]
 
 
 def test_agent_adds_a_column_and_proposes_filling_it(api, signup):
@@ -231,7 +233,7 @@ def test_each_turn_reports_the_graph_steps_it_ran(api, signup):
     h, pid, _ = setup(api, signup)
     script = Script([call("get_funnel_status", {})], say("You have 30 papers."))
     out = chat(api, h, pid, script, "how many papers?")[1].json()
-    assert out["trace"] == ["Input checked", "Model", "Tool: get_funnel_status", "Model", "Answer checked"]
+    assert out["trace"] == ["Input checked", "Memory loaded", "Model", "Tool: get_funnel_status", "Model", "Answer checked"]
 
 
 def test_web_search_tool_returns_quoted_results_when_enabled(api, signup, monkeypatch):

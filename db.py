@@ -213,6 +213,16 @@ class ExtractValue(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class ProjectNote(Base):
+    """Assistant memory that lasts across chats: something the researcher asked it to keep (a preference, a decision,
+    a convention). Loaded into every assistant turn in the project as data, never as instructions."""
+    __tablename__ = "project_notes"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class LabelSample(Base):
     """The fixed, stratified sample a researcher blind-labels for the screening recall eval: one row per paper, in a
     shuffled order, with the AI pile it was drawn from and that pile's size when the sample was made (the weights)."""
