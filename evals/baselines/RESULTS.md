@@ -1,5 +1,39 @@
 # Eval results
 
+## 2026-10-21: run-to-run spread (5 identical runs) + metric registry
+
+Same code five times (`main` at the memory/answers/guardrails commits; `_v3` collection, judge unchanged), to measure
+how much each metric moves by chance. Snapshots `runs/rep-20261021/run-1..5.json`, spread `runs/rep-20261021/spread.json`,
+mean snapshot `runs/rep-20261021/mean.json` (`uv run python -m evals.spread ...`). Metric definitions now live in one
+registry, `evals/metrics.py`; `compare.py` widens a guardrail's tolerance to the measured spread when the baseline is
+the mean of those runs (gates never widen).
+
+| Metric | Kind | Mean | Spread (max-min) | Runs | Fixed tol |
+|---|---|---|---|---|---|
+| det.abstain.rate | guardrail | 0.70 | 0.20 | 0.8 0.7 0.7 0.6 0.7 | 0 |
+| quality.correctness | guardrail | 0.962 | 0.046 | .954 .954 .938 .977 .985 | 0.05 |
+| quality.completeness | guardrail | 0.888 | 0.054 | .854 .885 .885 .908 .908 | 0.05 |
+| quality.faithfulness | guardrail | 0.996 | 0.019 | 1 1 .981 1 1 | 0.05 |
+| quality.answer_relevancy | guardrail | 0.987 | 0.041 | .985 1 .959 1 .99 | 0.05 |
+| quality.contextual_precision | guardrail | 0.985 | 0.038 | 1 1 .987 .962 .977 | 0.05 |
+| quality.contextual_recall | guardrail | 0.985 | 0.077 | 1 1 .923 1 1 | 0.05 |
+| quality.contextual_relevancy | guardrail | 0.546 | 0.132 | .532 .619 .487 .529 .565 | 0.05 |
+| quality.premise | guardrail | 0.95 | 0.10 | .95 1 .95 .95 .9 | 0.05 |
+| quality.abstention | guardrail | 0.90 | 0.088 | .875 .875 .963 .912 .875 | 0.05 |
+| quality.scope | guardrail | 1.00 | 0 | all 1 | 0.05 |
+| det.completed / evidence_hit / fact, ops.success | guardrail | 1.00 | 0 | all 1 | 0 |
+| safety.forbidden / isolation / leakage / toxicity | gate | 1.00 | 0 | all 1 | 0 / 0.02 |
+| ops.latency.p95_ms | guardrail | 16,350 | 6,030 | 21.1k 15.1k 15.1k 15.3k 15.1k | 25% |
+
+Findings:
+1. **Fixed tolerances are below the noise.** Each run against the run-12 baseline: run 1 REVIEW (p95 latency),
+   run 2 PASS, run 3 REVIEW (contextual_recall), run 4 REVIEW (det.abstain), run 5 PASS — 3 of 5 identical runs
+   flagged by chance. Against the 5-run mean with spread tolerances: 5 of 5 PASS.
+2. Noisiest: det.abstain (0.2: one unanswerable case flips), contextual_relevancy (0.13), premise (0.10, one case),
+   contextual_recall (0.077, one case). Safety gates and the deterministic evidence/fact checks did not move at all.
+3. Tolerance rule: the full spread, not max |run - mean| (a simulation by the code-checker: ~4% vs ~13% false REVIEW
+   per guardrail when one run is compared with a 5-run mean).
+
 ## 2026-10-20: run 14 (candidate): input/output guardrails
 
 Change: `rails.py` (disha-hr style self-check rails, one structured call each to `OPENAI_GUARD_MODEL`, 15 s, no SDK
