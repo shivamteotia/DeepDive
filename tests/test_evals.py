@@ -172,3 +172,26 @@ def test_golden_v2_covers_all_six_papers_and_validates():
         "EA2022.pdf", "JPan2023.pdf", "BJMarafino2018.pdf", "Changze2025.pdf", "CJackA2024.pdf", "CMugisha2022.pdf"}
     used = {s for c in cases for s in c.get("source", [])}
     assert used == set(ev.PROJECTS["main"])
+
+
+def test_facts_match_whole_tokens_not_parts_of_other_words_or_numbers():
+    assert ev.has_fact("used named entity recognition (NER) to filter", "NER")
+    assert not ev.has_fact("a general manner of learning", "NER")
+    assert not ev.has_fact("AUC ROC 0.862 and 0.868", "0.86") and ev.has_fact("AUC ROC 0.86, F1 0.52", "0.86")
+    assert not ev.has_fact("480 died; F1 0.48", "48") and ev.has_fact("at least 48 h in the ICU", "48")
+    assert ev.has_fact("mortality was 13.8%.", "13.8") and ev.has_fact("Single-Center data", "single-center")
+
+
+def test_facts_all_needs_every_part_of_a_two_part_answer():
+    case = {"id": "x02", "kind": "answerable", "project": "main", "question": "q", "expected": "e",
+            "source": ["EA2022.pdf"], "facts_all": ["13.8", "10.4"]}
+    assert ev.det_checks(row(case, [claim("13.8% versus 10.4%", ["E1"])], evidence=EV))["det.fact"] is True
+    assert ev.det_checks(row(case, [claim("13.8% only", ["E1"])], evidence=EV))["det.fact"] is False
+
+
+def test_wrong_source_must_be_a_paper_of_the_project():
+    import pytest
+    bad = {"id": "t9", "kind": "answerable", "project": "main", "question": "q", "expected": "e",
+           "source": ["EA2022.pdf"], "facts": ["x"], "wrong_source": ["Typo2020.pdf"]}
+    with pytest.raises(ValueError):
+        ev.validate([bad])

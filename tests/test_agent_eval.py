@@ -48,3 +48,9 @@ def test_the_routing_golden_set_is_valid_and_covers_every_tool():
     named = {t for c in cases for t in c.get("expect", []) + [x for alt in c.get("expect_any", []) for x in alt]}
     assert set(agent.TOOLS) - named <= {"forget", "get_funnel_status"}  # forget needs a saved note; status is in the briefing
     assert all(t in agent.TOOLS for c in cases for t in c.get("expect", []) + c.get("forbid", []))
+
+
+def test_cases_needing_web_search_are_skipped_when_it_is_off():
+    cases = [{"id": "w", "message": "m", "expect": ["web_search"], "needs": "web"}, {"id": "a", "message": "m", "no_tools": True}]
+    assert [c["id"] for c in ar.runnable(cases, web=False)] == ["a"]
+    assert [c["id"] for c in ar.runnable(cases, web=True)] == ["w", "a"]

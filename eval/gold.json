@@ -1,6 +1,6 @@
 {
  "version": 3,
- "status": "DRAFT: written by Claude from the indexed chunk text of EA2022.pdf and JPan2023.pdf. Needs expert review before being treated as ground truth.",
+ "status": "v3 (2026-10-21): r/f/t items v1 on EA2022 + JPan2023 (r03, r05, r07, r08 qualified for six papers), g01-g20 and f20/f21/t20/t21 on BJMarafino2018, Changze2025, CJackA2024, CMugisha2022; contains strings chosen to match few chunks.",
  "project_id": "demo",
  "retrieval": [
   {
@@ -45,7 +45,7 @@
   },
   {
    "id": "r05",
-   "question": "Which time periods had the worst model performance and why?",
+   "question": "Which time periods had the worst model performance and why in the pediatric Criticality Index study?",
    "expected": [
     {
      "source": "EA2022.pdf",
@@ -65,7 +65,7 @@
   },
   {
    "id": "r07",
-   "question": "How was calibration of the mortality models assessed?",
+   "question": "How was calibration of the mortality models assessed in the pediatric Criticality Index study?",
    "expected": [
     {
      "source": "EA2022.pdf",
@@ -75,7 +75,7 @@
   },
   {
    "id": "r08",
-   "question": "How did changes in mortality risk differ between deaths and survivors?",
+   "question": "How did changes in mortality risk differ between deaths and survivors in the pediatric Criticality Index study?",
    "expected": [
     {
      "source": "EA2022.pdf",
@@ -209,17 +209,17 @@
    "expected": [
     {
      "source": "Changze2025.pdf",
-     "contains": "429"
+     "contains": "429 patients entered the final study cohort"
     }
    ]
   },
   {
    "id": "g02",
-   "question": "Which model performed best in the ICU epilepsy study, and what AUC and accuracy did it reach?",
+   "question": "Which model did the authors of the ICU epilepsy study identify as best, and what AUC did it reach?",
    "expected": [
     {
      "source": "Changze2025.pdf",
-     "contains": "0.79"
+     "contains": "with an accuracy of 0.906, an AUC of 0.79"
     }
    ]
   },
@@ -229,7 +229,7 @@
    "expected": [
     {
      "source": "Changze2025.pdf",
-     "contains": "APS III"
+     "contains": "SHAP value analysis identified the APS III score"
     }
    ]
   },
@@ -249,7 +249,7 @@
    "expected": [
     {
      "source": "Changze2025.pdf",
-     "contains": "2.34"
+     "contains": "Hazard Ratio (HR) of 2.34"
     }
    ]
   },
@@ -259,7 +259,7 @@
    "expected": [
     {
      "source": "BJMarafino2018.pdf",
-     "contains": "101 196"
+     "contains": "This retrospective cohort study included 101 196 patients"
     }
    ]
   },
@@ -269,13 +269,13 @@
    "expected": [
     {
      "source": "BJMarafino2018.pdf",
-     "contains": "0.922"
+     "contains": "further increased the AUC to 0.922"
     }
    ]
   },
   {
    "id": "g08",
-   "question": "Which clinical note term was most strongly associated with survival in the NLP mortality model?",
+   "question": "Among the example note terms the NLP mortality study lists, which had the most negative weight (most associated with survival)?",
    "expected": [
     {
      "source": "BJMarafino2018.pdf",
@@ -299,7 +299,7 @@
    "expected": [
     {
      "source": "BJMarafino2018.pdf",
-     "contains": "cost"
+     "contains": "owing to the cost of data collection required for a cohort of our size"
     }
    ]
   },
@@ -309,7 +309,7 @@
    "expected": [
     {
      "source": "CJackA2024.pdf",
-     "contains": "3,489"
+     "contains": "3,489 hospitalizations remained for analysis"
     }
    ]
   },
@@ -319,7 +319,7 @@
    "expected": [
     {
      "source": "CJackA2024.pdf",
-     "contains": "0.86"
+     "contains": "(AUC ROC 0.86, F1 0.52)"
     }
    ]
   },
@@ -329,7 +329,7 @@
    "expected": [
     {
      "source": "CJackA2024.pdf",
-     "contains": "GCS"
+     "contains": "Top features include GCS, blood urea nitrogen, and Richmond RASS score"
     }
    ]
   },
@@ -369,7 +369,7 @@
    "expected": [
     {
      "source": "CMugisha2022.pdf",
-     "contains": "98.2"
+     "contains": "F1-scores of 98.2%, 97.4%, and"
     }
    ]
   },
@@ -379,7 +379,7 @@
    "expected": [
     {
      "source": "CMugisha2022.pdf",
-     "contains": "Named Entity Recognition"
+     "contains": "extreme preprocessing filtering only"
     }
    ]
   },
@@ -399,7 +399,7 @@
    "expected": [
     {
      "source": "CMugisha2022.pdf",
-     "contains": "380"
+     "contains": "to a size of 380 words"
     }
    ]
   }

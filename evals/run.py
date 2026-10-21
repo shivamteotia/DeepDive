@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import statistics
 import sys
 import threading
@@ -38,6 +39,11 @@ REQUEST_TIMEOUT_S, RETRIES = 30, 3  # API endpoints answer in ms; 30 s means a s
 
 
 # ---- golden ----
+def has_fact(text: str, fact: str) -> bool:
+    """The fact as a whole token, case-insensitive: "0.86" is not in "0.862", "NER" not in "general", "48" not in "480"."""
+    return re.search(rf"(?<![\w.]){re.escape(fact)}(?![\w]|\.\d)", text, re.IGNORECASE) is not None
+
+
 def validate(cases: list[dict]) -> list[dict]:
     ids = [c.get("id") for c in cases]
     if len(set(ids)) != len(ids):
@@ -47,11 +53,14 @@ def validate(cases: list[dict]) -> list[dict]:
             raise ValueError(f"{c.get('id')}: id, question and expected are required")
         if c.get("kind") not in KINDS or c.get("project") not in PROJECTS:
             raise ValueError(f"{c['id']}: bad kind or project")
-        for k in ("source", "facts", "forbidden", "foreign", "wrong_source"):
+        for k in ("source", "facts", "facts_all", "forbidden", "foreign", "wrong_source"):
             if k in c and not (isinstance(c[k], list) and c[k] and all(isinstance(x, str) for x in c[k])):
                 raise ValueError(f"{c['id']}: {k} must be a non-empty list of strings")
-        if c["kind"] == "answerable" and not ("source" in c and "facts" in c):
-            raise ValueError(f"{c['id']}: answerable cases need source and facts")
+        if c["kind"] == "answerable" and not ("source" in c and ("facts" in c or "facts_all" in c)):
+            raise ValueError(f"{c['id']}: answerable cases need source and facts (or facts_all)")
+        for k in ("source", "wrong_source"):  # a typo would pass silently
+            if unknown := set(c.get(k, [])) - set(PROJECTS[c["project"]]):
+                raise ValueError(f"{c['id']}: {k} not in project {c['project']}: {sorted(unknown)}")
     return cases
 
 
@@ -82,9 +91,10 @@ def det_checks(r: dict) -> dict:
         out["det.evidence_hit"] = set(r["source"]) <= cited
         if "wrong_source" in r:  # a similar paper the answer must not be built from (a wrong-paper answer)
             out["det.attribution"] = not cited & set(r["wrong_source"])
-    if "facts" in r:
-        claimed = " ".join(c["text"] for c in r["claims"]).lower()  # gaps may mention a fact only to say it is missing
-        out["det.fact"] = any(f.lower() in claimed for f in r["facts"])
+    if "facts" in r or "facts_all" in r:
+        claimed = " ".join(c["text"] for c in r["claims"])  # gaps may mention a fact only to say it is missing
+        out["det.fact"] = (not r.get("facts") or any(has_fact(claimed, f) for f in r["facts"])) and \
+            all(has_fact(claimed, f) for f in r.get("facts_all", []))  # facts: any one; facts_all: every part
     if r["kind"] in ABSTAIN_KINDS or (r["kind"] == "scope" and "facts" not in r):
         out["det.abstain"] = not any(c["verdict"] == "SUPPORTED" for c in r["claims"])
     if "forbidden" in r:
@@ -393,7 +403,9 @@ def main() -> None:
         bad = [k for k, v in r["det"].items() if not v]
         print(f"  {r['id']:4} {r['kind']:13} {'ok' if not bad else 'FAIL ' + ', '.join(bad)}")
     if not args.only:
+        golden = json.loads((HERE / "golden.json").read_text(encoding="utf-8"))
         meta = {"judge_model": None if args.no_judge else (s.judge_model or s.openai_fast_model),
+                "golden_version": golden.get("version"), "n_cases": len(rows),
                 "app_models": {"model": s.openai_model, "fast": s.openai_fast_model, "guard": s.openai_guard_model,
                                "embed": s.openai_embed_model}}
         snap = snapshot(rows, judged, args.label, meta)

@@ -10,7 +10,6 @@ Metrics (evals/metrics.py): agent.routing.rate (guardrail), agent.forbidden.rate
 
 import argparse
 import json
-import os
 import statistics
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -19,7 +18,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BASELINES = HERE / "baselines"
-PROJECT = "eval-agent"
+PROJECT = "eval-agent"  # each run gets its own project eval-agent-<timestamp>: identical starting state
 TURN_TIMEOUT_S = 240  # a turn runs up to 8 tool calls with model calls between them
 WORKERS = 3
 CRITERIA = [
@@ -40,13 +39,20 @@ def load_cases(path: Path = HERE / "agent_golden.json") -> list[dict]:
     return cases
 
 
+def runnable(cases: list[dict], web: bool) -> list[dict]:
+    """Cases this server can run: needs="web" cases only when web search is enabled (else the model's fallback,
+    e.g. to PubMed, would be scored as a routing failure that is really a configuration one)."""
+    return [c for c in cases if c.get("needs") != "web" or web]
+
+
 def called(turn: dict) -> list[str]:
     return [m["content"]["tool"] for m in turn.get("messages", []) if m.get("role") == "tool"]
 
 
 def score(case: dict, turn: dict) -> dict:
-    """routing: the expected tools ran (all of `expect`, or exactly one of the `expect_any` sets; none for no_tools)
-    and nothing forbidden ran; forbidden: no forbidden tool ran; steps: tool calls made."""
+    """routing: the expected tools ran (all of `expect`; or every tool of at least one `expect_any` set, where []
+    means no tool at all; none for no_tools) and nothing forbidden ran; forbidden: no forbidden tool ran; steps:
+    tool calls made."""
     tools = called(turn)
     ran = set(tools)
     forbidden_ok = not ran & set(case.get("forbid", []))
@@ -79,25 +85,31 @@ def _nbib(n: int = 30) -> str:
 
 
 def setup(api) -> str:
-    """Find-or-create the eval-agent project with its synthetic import, criteria and a Study design column (free)."""
-    existing = {p["name"]: p["id"] for p in api.call("GET", "/api/v1/projects")}
-    pid = existing.get(PROJECT) or api.call("POST", "/api/v1/projects", json={"name": PROJECT})["id"]
+    """A new project for this run with the synthetic import, fixed criteria and a Study design column (free), so
+    every run starts from the same state (earlier runs' criteria edits and pending actions never carry over)."""
+    name = f"{PROJECT}-{datetime.now(UTC):%Y%m%dT%H%M%S}"
+    pid = api.call("POST", "/api/v1/projects", json={"name": name})["id"]
     api.call("POST", f"/api/v1/projects/{pid}/reference-files",
-             files={"file": ("eval-agent.nbib", _nbib().encode(), "text/plain")})  # the same file twice imports nothing
-    if api.request("GET", f"/api/v1/projects/{pid}/criteria").status_code == 404:
-        api.call("PUT", f"/api/v1/projects/{pid}/criteria", json={"criteria": CRITERIA})
-    if not any(c["name"] == "Study design" for c in api.call("GET", f"/api/v1/projects/{pid}/columns")):
-        api.call("POST", f"/api/v1/projects/{pid}/columns", json={
-            "name": "Study design", "instruction": "The study design", "kind": "category",
-            "options": ["retrospective cohort", "randomized controlled trial (RCT)", "other"]})
+             files={"file": ("eval-agent.nbib", _nbib().encode(), "text/plain")})
+    api.call("PUT", f"/api/v1/projects/{pid}/criteria", json={"criteria": CRITERIA})
+    api.call("POST", f"/api/v1/projects/{pid}/columns", json={
+        "name": "Study design", "instruction": "The study design", "kind": "category",
+        "options": ["retrospective cohort", "randomized controlled trial (RCT)", "other"]})
     return pid
 
 
 def run_case(api, pid: str, case: dict) -> dict:
+    """One turn, sent once: a turn that times out is recorded as an error, never re-sent (a retry would be a second
+    paid turn in the same chat)."""
+    import httpx
+
     cid = api.call("POST", f"/api/v1/projects/{pid}/conversations", json={"title": f"eval {case['id']}"})["id"]
-    r = api.request("POST", f"/api/v1/conversations/{cid}/agent", json={"message": case["message"]},
-                    timeout=TURN_TIMEOUT_S)
-    turn = r.json() if r.status_code == 200 else {"messages": [], "trace": [f"HTTP {r.status_code}"]}
+    try:
+        r = httpx.post(api.base + f"/api/v1/conversations/{cid}/agent", headers=api.headers,
+                       json={"message": case["message"]}, timeout=TURN_TIMEOUT_S)
+        turn = r.json() if r.status_code == 200 else {"messages": [], "trace": [f"HTTP {r.status_code}"]}
+    except httpx.HTTPError as e:
+        turn = {"messages": [], "trace": [f"error: {type(e).__name__}"]}
     return {"id": case["id"], "kind": case.get("kind"), "message": case["message"], "called": called(turn),
             "trace": turn.get("trace", []), **score(case, turn)}
 
@@ -113,14 +125,19 @@ def main() -> None:
     from evals.run import Api
 
     s = Settings()
-    api = Api(os.environ.get("EVAL_API") or s.eval_api or "http://127.0.0.1:8000")
+    api = Api(s.eval_api)
     api.login(s.jwt_secret)
     pid = setup(api)
-    cases = load_cases()
+    web = bool(api.call("GET", "/api/v1/config").get("web_search"))
+    cases = runnable(load_cases(), web)
+    if not web:
+        print("  web search is off on this server: web cases skipped")
     if args.only:
         cases = [c for c in cases if c["id"] in set(args.only.split(","))]
-    with ThreadPoolExecutor(WORKERS) as pool:
-        rows = list(pool.map(lambda c: run_case(api, pid, c), cases))
+    shared = [c for c in cases if not c.get("mutates")]
+    with ThreadPoolExecutor(WORKERS) as pool:  # cases that change project state run last, one at a time
+        rows = list(pool.map(lambda c: run_case(api, pid, c), shared))
+    rows += [run_case(api, pid, c) for c in cases if c.get("mutates")]
     for r in rows:
         mark = "ok  " if r["routing"] else ("FORBIDDEN" if not r["forbidden"] else "MISS")
         print(f"  {r['id']:4} {r['kind'] or '':11} {mark:9} called={r['called']}")

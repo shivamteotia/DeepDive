@@ -12,11 +12,16 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PAPERS = HERE.parent / "DATA" / "Papers"
-_DASHES = str.maketrans({"–": "-", "—": "-", "−": "-", " ": " ", " ": " ", " ": " "})
+_DASHES = str.maketrans({"\u2013": "-", "\u2014": "-", "\u2212": "-", "\u2009": " ", "\u202f": " ", "\u00a0": " "})
 
 
 def norm(text: str) -> str:
-    return " ".join(text.replace("￾", "").replace("­", "").translate(_DASHES).split()).casefold()
+    return " ".join(text.replace("\ufffe", "").replace("\u00ad", "").translate(_DASHES).split()).casefold()
+
+
+def variants(text: str) -> tuple[str, str]:
+    """pdfium marks a line-break hyphen with U+FFFE: a soft hyphen ("cur-rently") or a real one ("single-center")."""
+    return norm(text), norm(text.replace("\ufffe", "-"))
 
 
 @cache
@@ -25,7 +30,7 @@ def pages(filename: str) -> dict[int, str]:
 
     doc = pdfium.PdfDocument(str(PAPERS / filename))
     try:
-        return {i + 1: norm(doc[i].get_textpage().get_text_range()) for i in range(len(doc))}
+        return {i + 1: " ".join(variants(doc[i].get_textpage().get_text_range())) for i in range(len(doc))}
     finally:
         doc.close()
 
@@ -44,10 +49,11 @@ def problems(case: dict) -> list[str]:
         if norm(case["quote"]) not in text:
             found = [p for p, t in pages(sources[0]).items() if norm(case["quote"]) in t]
             out.append(f"quote not on page {case.get('page')} of {sources[0]}" + (f" (found on {found})" if found else ""))
-    if case.get("facts") and sources:
+    if sources and (case.get("facts") or case.get("facts_all")):
         everything = " ".join(t for s in sources for t in pages(s).values())
-        if not any(norm(f) in everything for f in case["facts"]):
+        if case.get("facts") and not any(norm(f) in everything for f in case["facts"]):
             out.append("no fact appears in the source PDFs")
+        out += [f"fact {f!r} not in the source PDFs" for f in case.get("facts_all", []) if norm(f) not in everything]
     return out
 
 
@@ -58,7 +64,7 @@ def main() -> int:
         for p in problems(c):
             failed += 1
             print(f"  FAIL {c['id']}: {p}")
-    checked = sum(1 for c in cases if c.get("quote") or (c.get("facts") and c.get("source")))
+    checked = sum(1 for c in cases if c.get("quote") or ((c.get("facts") or c.get("facts_all")) and c.get("source")))
     print(f"checked {checked} of {len(cases)} cases against the PDFs: {failed} problem(s)")
     return 1 if failed else 0
 

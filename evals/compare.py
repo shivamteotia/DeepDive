@@ -86,8 +86,11 @@ def main():
     for name, snap in (("baseline", baseline), ("candidate", candidate)):
         meta = snap["metadata"]
         print(f"{name:10} {meta.get('label') or '(no label)'}  judge {meta['judge_model']}  {meta['created_at']}")
-    if baseline["metadata"]["judge_model"] != candidate["metadata"]["judge_model"]:
+    if baseline["metadata"].get("judge_model") != candidate["metadata"].get("judge_model"):
         print("  ! judge models differ - judged scores are not comparable")
+    sets = [(m.get("golden_version"), m.get("n_cases")) for m in (baseline["metadata"], candidate["metadata"])]
+    if sets[0] != sets[1]:
+        print(f"  ! different golden sets {sets[0]} vs {sets[1]} - the verdict compares different questions")
 
     noise = noise_for(args.spread, baseline)
     if noise:
