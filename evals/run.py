@@ -331,6 +331,7 @@ def main() -> None:
     ap.add_argument("--only", help="comma-separated case ids (writes no snapshot)")
     ap.add_argument("--from-report", type=Path, help="re-score a saved runs/<ts>.json without calling the API")
     ap.add_argument("--label", default="")
+    ap.add_argument("--out", type=Path, help="write the snapshot here instead of baselines/candidate.json")
     args = ap.parse_args()
 
     os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")
@@ -393,7 +394,8 @@ def main() -> None:
                 "app_models": {"model": s.openai_model, "fast": s.openai_fast_model, "guard": s.openai_guard_model,
                                "embed": s.openai_embed_model}}
         snap = snapshot(rows, judged, args.label, meta)
-        path = BASELINES / ("baseline.json" if args.baseline else "candidate.json")
+        path = args.out or BASELINES / ("baseline.json" if args.baseline else "candidate.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(snap, indent=2, sort_keys=True), encoding="utf-8")
         print("\n  snapshot")
         for k, v in sorted(snap["metrics"].items()):
