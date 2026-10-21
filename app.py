@@ -485,6 +485,25 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
         s.commit()
         return Response(status_code=204)
 
+    def owned_note(note_id: uuid.UUID, user: CurrentUser, s: DB) -> db.ProjectNote:
+        n = s.get(db.ProjectNote, note_id)
+        if n is None or s.get(db.Project, n.project_id).owner_id != user.id:
+            raise HTTPException(404, "Note not found")
+        return n
+
+    @app.post("/api/v1/notes/{note_id}/save")
+    def save_note(note_id: uuid.UUID, user: CurrentUser, s: DB):
+        """The owner keeps a note the assistant proposed: from now on every chat in the project sees it."""
+        n = owned_note(note_id, user, s)
+        n.status = "saved"
+        s.commit()
+        return {"id": str(n.id), "text": n.text, "status": n.status}
+
+    @app.delete("/api/v1/notes/{note_id}", status_code=204)
+    def delete_note(note_id: uuid.UUID, user: CurrentUser, s: DB):
+        s.delete(owned_note(note_id, user, s))
+        s.commit()
+
     @app.get("/api/v1/research-runs/{run_id}/export")
     def export_answer(run: OwnedRun, format: Literal["csv", "docx"] = "csv"):
         """A finished answer as CSV (one row per finding) or a Word report (findings, gaps, references)."""

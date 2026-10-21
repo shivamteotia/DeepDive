@@ -220,6 +220,7 @@ class ProjectNote(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
     text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10), default="proposed")  # proposed by the assistant | saved by the owner
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -263,6 +264,7 @@ ADDED_COLUMNS = [
     "CREATE INDEX IF NOT EXISTS ix_research_runs_conversation_id ON research_runs (conversation_id)",
     "ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_type VARCHAR(20)",
     "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS pubmed BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE project_notes ADD COLUMN IF NOT EXISTS status VARCHAR(10) NOT NULL DEFAULT 'proposed'",
 ]
 
 

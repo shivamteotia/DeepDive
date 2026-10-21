@@ -613,6 +613,19 @@ function chartCard(chart) {
         onclick: () => saveBlob(new Blob(["\ufeff" + csv], { type: "text/csv" }), "maxrim-chart-data.csv") }, "Download data (CSV)")));
 }
 
+function noteCard(note) {  // a note the assistant proposed: kept only if the researcher presses Save
+  const status = h("span", { class: "muted small" }, "");
+  const save = h("button", { class: "btn small primary", type: "button" }, "Save note");
+  const discard = h("button", { class: "btn small", type: "button" }, "Discard");
+  const done = (text) => { save.remove(); discard.remove(); status.textContent = text; };
+  save.addEventListener("click", () => api("POST", `/api/v1/notes/${note.id}/save`)
+    .then(() => done("Saved: every chat in this project will see it.")).catch((ex) => toast(ex.message)));
+  discard.addEventListener("click", () => api("DELETE", `/api/v1/notes/${note.id}`)
+    .then(() => done("Discarded.")).catch((ex) => toast(ex.message)));
+  return h("div", { class: "card note" }, h("div", { class: "small" }, "Remember for this project?"),
+    h("blockquote", {}, note.text), h("div", { class: "row" }, save, discard, status));
+}
+
 async function scDownload(tab, format) {
   const res = await fetch(`/api/v1/projects/${state.projectId}/export?tab=${encodeURIComponent(tab)}&format=${format}`,
     { headers: { Authorization: `Bearer ${state.token}` } });
@@ -647,8 +660,7 @@ function renderAgent() {
         onclick: () => downloadFrom(`/api/v1/research-runs/${ans.run_id}/export?format=${ans.format}`, `answer.${ans.format}`)
           .catch((err) => toast(err.message)) }, `Download ${ans.format === "docx" ? "Word" : "CSV"}`));
     if (c.result && c.result.chart) return chartCard(c.result.chart);
-    if (c.tool === "remember" && c.result && c.result.note)  // show exactly what was stored
-      return h("div", { class: "tool-line" }, `✓ Saved a note for this project: “${c.result.note.text}”`);
+    if (c.tool === "remember" && c.result && c.result.note_proposal) return noteCard(c.result.note_proposal);
     const ex = c.result && c.result.export;
     if (ex) return h("div", { class: "tool-line" }, `✓ Table: ${ex.papers} ${ex.tab} papers, ${ex.columns.length} columns `,
       h("button", { class: "btn small", type: "button",
