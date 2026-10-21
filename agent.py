@@ -341,20 +341,35 @@ class NoteIdArgs(_Args):
     note_id: str
 
 
-def _words(text: str) -> set[str]:
-    return {w for w in re.findall(r"\w{3,}", text.casefold())}
+NEGATIONS = {"not", "no", "don't", "dont", "never", "without", "except", "isn't", "doesn't", "shouldn't", "nor"}
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[\w']+", text.casefold())
+
+
+def _verbatim(note: str, message: str) -> bool:
+    """The note is a run of the researcher's own consecutive words from this turn's message (case and punctuation
+    ignored), not right after a negation. Text the model read in papers or results never is; nor is padding."""
+    n, m = _tokens(note), _tokens(message)
+    if not n:
+        return False
+    return any(m[i:i + len(n)] == n and (i == 0 or m[i - 1] not in NEGATIONS) for i in range(len(m) - len(n) + 1))
 
 
 def _remember(ctx: ToolContext, a: NoteArgs) -> dict:
-    text = " ".join(a.note.split())[:NOTE_CHARS]
+    text = " ".join(a.note.split())
+    if len(text) > NOTE_CHARS:  # cut at a word, then check exactly what is stored
+        text = text[:NOTE_CHARS].rsplit(" ", 1)[0]
     if not text:
         return {"error": "nothing to remember"}
-    words = _words(a.note)  # most of a note's words must be the researcher's own, from this turn's message: text
-    if not words or len(words & _words(ctx.user_message)) < 0.6 * len(words):  # read in papers or search results
-        return {"error": "a note must be something the researcher asked to keep, in their own words this turn"}
+    if not _verbatim(text, ctx.user_message):
+        return {"error": "a note must be the researcher's own words from this message, copied (e.g. after "
+                         "'remember:'); ask them to say it if needed"}
     funnel.lock(ctx.s, ctx.project_id)  # two chats at once must not pass MAX_NOTES
     count = ctx.s.scalar(select(func.count()).select_from(db.ProjectNote).where(db.ProjectNote.project_id == ctx.project_id))
     if count >= MAX_NOTES:
+        ctx.s.rollback()  # releases the project lock before the turn's model calls
         return {"error": f"this project already keeps {MAX_NOTES} notes: forget one first"}
     n = db.ProjectNote(project_id=ctx.project_id, text=text)
     ctx.s.add(n)
@@ -491,22 +506,23 @@ def _guard_input(state: TurnState, config) -> dict:
     return {"trace": ["Input checked"]}
 
 
-BRIEF_CRITERIA, BRIEF_COLUMNS = 20, 30  # the briefing is resent on every model call of a turn: keep it bounded
+BRIEF_COLUMNS = 30  # the briefing is resent on every model call of a turn: keep it bounded (columns_total tells more)
 
 
 def briefing(s: Session, project_id: uuid.UUID) -> dict:
     """What the assistant should know at the start of every turn, read free from the database: funnel counts, the
     current criteria, extraction columns, open actions and the project's notes."""
     listing = funnel.list_papers(s, project_id, "all", 0, 1)
+    columns = funnel.list_columns(s, project_id)
     cs = funnel.criteria_set(s, project_id)
     pending = s.scalars(select(db.PendingAction).where(db.PendingAction.project_id == project_id,
                                                        db.PendingAction.status.in_(("pending", "confirmed", "running"))))
     notes = s.scalars(select(db.ProjectNote).where(db.ProjectNote.project_id == project_id)
                       .order_by(db.ProjectNote.created_at))
     return {"funnel": listing["counts"],
-            "criteria": {"version": cs.version, "items": cs.criteria[:BRIEF_CRITERIA]} if cs else None,  # full: for
-            "columns": [{k: c[k] for k in ("id", "name", "kind", "filled")}  # update_criteria edits (exclude_values ...)
-                        for c in funnel.list_columns(s, project_id)][:BRIEF_COLUMNS],
+            "criteria": {"version": cs.version, "items": cs.criteria} if cs else None,  # in full, never cut: an
+            "columns": [{k: c[k] for k in ("id", "name", "kind", "filled")}  # update_criteria edit saves the whole list
+                        for c in columns][:BRIEF_COLUMNS], "columns_total": len(columns),
             "open_actions": [{"id": str(a.id), "tool": a.tool, "status": a.status} for a in pending],
             "notes": [{"id": str(n.id), "text": n.text} for n in notes]}
 

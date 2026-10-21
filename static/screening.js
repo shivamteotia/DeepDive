@@ -647,6 +647,8 @@ function renderAgent() {
         onclick: () => downloadFrom(`/api/v1/research-runs/${ans.run_id}/export?format=${ans.format}`, `answer.${ans.format}`)
           .catch((err) => toast(err.message)) }, `Download ${ans.format === "docx" ? "Word" : "CSV"}`));
     if (c.result && c.result.chart) return chartCard(c.result.chart);
+    if (c.tool === "remember" && c.result && c.result.note)  // show exactly what was stored
+      return h("div", { class: "tool-line" }, `✓ Saved a note for this project: “${c.result.note.text}”`);
     const ex = c.result && c.result.export;
     if (ex) return h("div", { class: "tool-line" }, `✓ Table: ${ex.papers} ${ex.tab} papers, ${ex.columns.length} columns `,
       h("button", { class: "btn small", type: "button",

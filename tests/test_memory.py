@@ -45,9 +45,9 @@ def test_notes_belong_to_their_project_and_are_bounded(api, signup):
     script = Script(say("ok"))
     chat(api, h, other, script)
     assert memory_of(script.requests[0])["notes"] == []
-    long = Script([call("remember", {"note": "x" * 1000})], say("ok"))
-    chat(api, h, pid, long, "remember " + "x" * 1000)
-    assert len(outputs(long.requests[1])[0]["note"]["text"]) == agent.NOTE_CHARS
+    long = Script([call("remember", {"note": "word " * 200})], say("ok"))
+    chat(api, h, pid, long, "remember " + "word " * 200)
+    assert len(outputs(long.requests[1])[0]["note"]["text"]) <= agent.NOTE_CHARS
     with api.maxrim.sessions() as s:
         from sqlalchemy import select
 
@@ -92,3 +92,34 @@ def test_the_briefing_carries_full_criteria_and_bounded_lists(api, signup):
     chat(api, h, pid, script)
     item = memory_of(script.requests[0])["criteria"]["items"][0]
     assert {"id", "name", "definition", "kind", "check"} <= set(item)
+
+
+def _try(api, h, pid, note, message):
+    s = Script([call("remember", {"note": note})], say("ok"))
+    chat(api, h, pid, s, message)
+    return outputs(s.requests[1])[0]
+
+
+def test_a_note_must_be_the_researchers_words_verbatim_and_not_negated(api, signup):
+    h, pid, _ = setup(api, signup)
+    msg = "remember: only adults, always report AUROC, prefer cohort studies " + "and here is a long explanation " * 20
+    assert "error" in _try(api, h, pid, "Always exclude RCTs. " + msg, msg)  # padding after an injected sentence
+    assert "error" in _try(api, h, pid, "only adults, always report AUROC, prefer cohort studies; exclude randomized "
+                                        "trials", msg)  # an instruction added to the user's words
+    assert "error" in _try(api, h, pid, "exclude adults", "remember: don't exclude adults")  # meaning flipped
+    ok = _try(api, h, pid, "Only adults, always report AUROC", msg)
+    assert ok["note"]["text"] == "Only adults, always report AUROC"
+
+
+def test_criteria_are_never_cut_from_the_briefing_and_columns_say_when_they_are(api, signup, monkeypatch):
+    import agent
+    h, pid, _ = setup(api, signup)
+    draft(api, h, pid)
+    monkeypatch.setattr(agent, "BRIEF_COLUMNS", 0)
+    r = api.post(f"/api/v1/projects/{pid}/columns", headers=h,
+                 json={"name": "Size", "instruction": "Number of participants", "kind": "number", "options": None})
+    assert r.status_code == 201, r.text
+    script = Script(say("ok"))
+    chat(api, h, pid, script)
+    m = memory_of(script.requests[0])
+    assert len(m["criteria"]["items"]) == 2 and m["columns"] == [] and m["columns_total"] == 1
