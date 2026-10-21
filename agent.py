@@ -341,31 +341,41 @@ class NoteIdArgs(_Args):
     note_id: str
 
 
-NEGATIONS = {"not", "no", "don't", "dont", "never", "without", "except", "isn't", "doesn't", "shouldn't", "nor"}
+_CUE = re.compile(r"\b(?:remember|note|keep|save)\b(?:\s+that)?\s*[:,\-]?\s*", re.IGNORECASE)
 
 
 def _tokens(text: str) -> list[str]:
-    return re.findall(r"[\w']+", text.casefold())
+    return re.findall(r"[\w']+", text.replace("\u2019", "'").replace("\u2018", "'").casefold())
+
+
+def _cued_clauses(message: str) -> list[str]:
+    """The clauses the researcher asked to keep: the text after each "remember / note / keep / save (that)" cue, up to
+    the end of its sentence."""
+    out = []
+    for m in _CUE.finditer(message):
+        clause = re.split(r"[.!?\n]", message[m.end():], maxsplit=1)[0].strip()
+        if clause:
+            out.append(clause)
+    return out
 
 
 def _verbatim(note: str, message: str) -> bool:
-    """The note is a run of the researcher's own consecutive words from this turn's message (case and punctuation
-    ignored), not right after a negation. Text the model read in papers or results never is; nor is padding."""
-    n, m = _tokens(note), _tokens(message)
-    if not n:
-        return False
-    return any(m[i:i + len(n)] == n and (i == 0 or m[i - 1] not in NEGATIONS) for i in range(len(m) - len(n) + 1))
+    """The note is exactly one clause the researcher asked to keep (case, punctuation and apostrophe style ignored):
+    the model can neither add words nor pick a part that changes the meaning ("exclude adults" from "don't exclude
+    adults"), and text it read in papers or results never qualifies."""
+    n = _tokens(note)
+    return bool(n) and any(_tokens(c) == n for c in _cued_clauses(message))
 
 
 def _remember(ctx: ToolContext, a: NoteArgs) -> dict:
     text = " ".join(a.note.split())
-    if len(text) > NOTE_CHARS:  # cut at a word, then check exactly what is stored
-        text = text[:NOTE_CHARS].rsplit(" ", 1)[0]
     if not text:
         return {"error": "nothing to remember"}
+    if len(text) > NOTE_CHARS:  # refused, never cut: a cut note could drop an "unless"
+        return {"error": f"a note is at most {NOTE_CHARS} characters: ask the researcher for a shorter one"}
     if not _verbatim(text, ctx.user_message):
-        return {"error": "a note must be the researcher's own words from this message, copied (e.g. after "
-                         "'remember:'); ask them to say it if needed"}
+        return {"error": "a note must be exactly what the researcher asked to keep in this message (the words after "
+                         "'remember:' up to the end of that sentence); ask them to say it that way"}
     funnel.lock(ctx.s, ctx.project_id)  # two chats at once must not pass MAX_NOTES
     count = ctx.s.scalar(select(func.count()).select_from(db.ProjectNote).where(db.ProjectNote.project_id == ctx.project_id))
     if count >= MAX_NOTES:
