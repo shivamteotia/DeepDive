@@ -541,7 +541,7 @@
    "id": "t02",
    "label": "true",
    "search": "dataset limitations retrospective",
-   "claim": "The pediatric Criticality Index study used a retrospective EHR dataset.",
+   "claim": "Trujillo Rivera et al. (2022), on dynamic mortality risk predictions for children in intensive care units, used a retrospective EHR dataset.",
    "expected": [
     {
      "source": "EA2022.pdf",
@@ -577,7 +577,7 @@
    "id": "t05",
    "label": "true",
    "search": "missing values multiple imputation",
-   "claim": "The SCAP study excluded variables with more than 20% missing values and used multiple imputation for the rest.",
+   "claim": "Pan et al. (2023), the nomogram study of severe community-acquired pneumonia (SCAP), excluded variables with more than 20% missing values and used multiple imputation for the rest.",
    "expected": [
     {
      "source": "JPan2023.pdf",
