@@ -47,8 +47,11 @@ def test_a_note_is_kept_only_after_the_researcher_saves_it(api, signup):
     r = api.post(f"/api/v1/notes/{proposal['id']}/save", headers=h)
     assert r.status_code == 200 and r.json()["status"] == "saved"
     assert [n["text"] for n in briefed(api, h, pid)["notes"]] == ["Flag AUROC below 0.85 as weak, e.g. in tables."]
-    assert api.delete(f"/api/v1/notes/{proposal['id']}", headers=h).status_code == 204
-    assert briefed(api, h, pid)["notes"] == []
+    stale = api.delete(f"/api/v1/notes/{proposal['id']}", headers=h)  # Discard on an old card after a reload
+    assert stale.status_code == 409 and "forget" in stale.json()["detail"]
+    assert len(briefed(api, h, pid)["notes"]) == 1  # a saved note is never lost to a stale Discard
+    fresh = propose(api, h, pid, "report AUROC")["note_proposal"]["id"]
+    assert api.delete(f"/api/v1/notes/{fresh}", headers=h).status_code == 204  # a proposal is discarded
 
 
 def test_the_assistant_can_forget_a_saved_note(api, signup):

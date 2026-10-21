@@ -501,7 +501,12 @@ def create_app(settings: Settings | None = None, *, qdrant=None, openai_client=N
 
     @app.delete("/api/v1/notes/{note_id}", status_code=204)
     def delete_note(note_id: uuid.UUID, user: CurrentUser, s: DB):
-        s.delete(owned_note(note_id, user, s))
+        """Discards a proposal. A saved note is never deleted here (an old card's Discard after a reload would lose
+        it silently): ask the assistant to forget it."""
+        n = owned_note(note_id, user, s)
+        if n.status == "saved":
+            raise HTTPException(409, "This note is already saved; ask the assistant to forget it")
+        s.delete(n)
         s.commit()
 
     @app.get("/api/v1/research-runs/{run_id}/export")
