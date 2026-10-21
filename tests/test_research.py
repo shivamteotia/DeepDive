@@ -71,6 +71,28 @@ def test_verifier_sees_each_cited_source():
     assert '"source": "Li2024.pdf"' in oa.inputs[r.Verification][0]
 
 
+def test_verifier_sees_the_question_in_a_run():
+    # A true claim about the wrong study or time window ("in-hospital" for "90-day") is only catchable with the question.
+    oa = FakeOpenAI({r.Verification: [verdicts("SUPPORTED")]})
+    r.verify(oa, "g", [claim("In-hospital mortality was 21%", "E1")], [{**hit("p1", "21%"), "eid": "E1"}],
+             question="What was the 90-day mortality?")
+    assert '"question": "What was the 90-day mortality?"' in oa.inputs[r.Verification][0]
+    oa = FakeOpenAI({r.Verification: [verdicts("SUPPORTED")]})
+    r.verify(oa, "g", [claim("a", "E1")], [{**hit("p1"), "eid": "E1"}])  # claim-only check (evaluate.py) unchanged
+    assert '"question"' not in oa.inputs[r.Verification][0]
+
+
+def test_run_passes_the_question_to_the_verifier(monkeypatch):
+    seen = []
+    monkeypatch.setattr(r, "verify", lambda oa, m, claims, ev, question="": seen.append(question) or
+                        [r.Verdict(claim_index=i, verdict="SUPPORTED", rationale="ok") for i in range(len(claims))])
+    oa = FakeOpenAI({r.Plan: [r.Plan(sub_questions=["q"])],
+                     ask.Answer: [ask.Answer(claims=[claim("x", "E1")], gaps="")]})
+    r.run(oa, search_fn=lambda q: [hit("p1")], project_id="demo", model="m", fast_model="f", guard_model="g",
+          question="What was the 90-day mortality?")
+    assert seen == ["What was the 90-day mortality?"]
+
+
 def test_all_supported_first_pass_is_verified():
     oa = FakeOpenAI({
         r.Plan: [r.Plan(sub_questions=["risks"])],
