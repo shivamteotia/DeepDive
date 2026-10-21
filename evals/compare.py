@@ -54,11 +54,16 @@ def compare(baseline, candidate, noise=None):
     return ("FAIL" if "blocked" in statuses else "REVIEW" if "regressed" in statuses else "PASS"), rows
 
 
-def load_noise(path: Path) -> dict:
-    """{metric id: noise} from evals.spread's output; {} when there is none yet."""
+def noise_for(path: Path, baseline: dict) -> dict:
+    """{metric id: noise} from evals.spread's spread.json, but only for the baseline it was measured for: the mean of
+    the same number of runs with the same judge. Anything else gets the registry's fixed tolerances ({})."""
     if not path.exists():
         return {}
-    return {r["id"]: r["noise"] for r in json.loads(path.read_text(encoding="utf-8"))}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    meta, bmeta = data.get("metadata") or {}, baseline.get("metadata") or {}
+    if bmeta.get("runs") != meta.get("runs") or bmeta.get("judge_model") != meta.get("judge_model"):
+        return {}
+    return {r["id"]: r["noise"] for r in data.get("metrics") or []}
 
 
 def _fmt(v):
@@ -84,9 +89,11 @@ def main():
     if baseline["metadata"]["judge_model"] != candidate["metadata"]["judge_model"]:
         print("  ! judge models differ - judged scores are not comparable")
 
-    noise = load_noise(args.spread)
+    noise = noise_for(args.spread, baseline)
     if noise:
         print(f"  tolerances widened to the measured noise in {args.spread.name} (guardrails only)")
+    elif args.spread.exists():
+        print(f"  ! {args.spread.name} was not measured for this baseline (runs / judge differ): fixed tolerances")
     verdict, rows = compare(baseline, candidate, noise)
     order = ["blocked", "regressed", "dropped", "new", "improved", "flat", "info"]
     print("=" * 92)
