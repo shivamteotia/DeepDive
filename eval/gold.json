@@ -1,45 +1,649 @@
 {
- "version": 2,
+ "version": 3,
  "status": "DRAFT: written by Claude from the indexed chunk text of EA2022.pdf and JPan2023.pdf. Needs expert review before being treated as ground truth.",
  "project_id": "demo",
  "retrieval": [
-  {"id": "r01", "question": "What clinical database was the pediatric ICU mortality dataset derived from?", "expected": [{"source": "EA2022.pdf", "contains": "Health Facts"}]},
-  {"id": "r02", "question": "What were the inclusion and exclusion criteria for the pediatric ICU admissions?", "expected": [{"source": "EA2022.pdf", "contains": "Exclusion criteria included hospital length of stay"}]},
-  {"id": "r03", "question": "How was the hospital course divided into time periods for modeling?", "expected": [{"source": "EA2022.pdf", "contains": "discretized into consecutive 6-hour time periods"}]},
-  {"id": "r04", "question": "What was the overall discrimination (AUROC) of the Criticality Index mortality models?", "expected": [{"source": "EA2022.pdf", "contains": "0.852"}]},
-  {"id": "r05", "question": "Which time periods had the worst model performance and why?", "expected": [{"source": "EA2022.pdf", "contains": "two worst performing time periods"}]},
-  {"id": "r06", "question": "What limitations did the authors of the Criticality Index mortality study report?", "expected": [{"source": "EA2022.pdf", "contains": "There are limitations to this analysis"}]},
-  {"id": "r07", "question": "How was calibration of the mortality models assessed?", "expected": [{"source": "EA2022.pdf", "contains": "Hosmer-Lemeshow"}]},
-  {"id": "r08", "question": "How did changes in mortality risk differ between deaths and survivors?", "expected": [{"source": "EA2022.pdf", "contains": "increased clinical volatility"}]},
-  {"id": "r09", "question": "What was the hospital mortality rate among children in the ICU population?", "expected": [{"source": "EA2022.pdf", "contains": "501(1.8%)"}]},
-  {"id": "r10", "question": "Who funded the pediatric Criticality Index study?", "expected": [{"source": "EA2022.pdf", "contains": "Mallinckrodt"}]},
-  {"id": "r11", "question": "Why are static mortality scores such as PRISM and PIM limited for individual patients?", "expected": [{"source": "EA2022.pdf", "contains": "Pediatric Risk of Mortality (PRISM)"}]},
-  {"id": "r12", "question": "How many patients were in the SCAP development and validation cohorts?", "expected": [{"source": "JPan2023.pdf", "contains": "455 patients"}]},
-  {"id": "r13", "question": "How was severe community-acquired pneumonia defined in the study?", "expected": [{"source": "JPan2023.pdf", "contains": "main diagnostic criteria"}]},
-  {"id": "r14", "question": "What clinical data were collected within 48 hours of ICU admission for SCAP patients?", "expected": [{"source": "JPan2023.pdf", "contains": "critical care electronic data mart"}]},
-  {"id": "r15", "question": "Which variables were independent risk factors for death in SCAP patients?", "expected": [{"source": "JPan2023.pdf", "contains": "independent risk factors for death in patients with SCAP"}]},
-  {"id": "r16", "question": "What was the C-index of the SCAP model in external validation?", "expected": [{"source": "JPan2023.pdf", "contains": "0.903"}]},
-  {"id": "r17", "question": "How did the SCAP nomogram compare with APACHE II and SOFA scores?", "expected": [{"source": "JPan2023.pdf", "contains": "APACHE II score 0.795"}]},
-  {"id": "r18", "question": "What were the in-hospital mortality rates of SCAP patients in the two cohorts?", "expected": [{"source": "JPan2023.pdf", "contains": "21.32%"}]},
-  {"id": "r19", "question": "How were missing values handled in the SCAP study?", "expected": [{"source": "JPan2023.pdf", "contains": "missing values greater than 20%"}]},
-  {"id": "r20", "question": "Why is PaO2/FiO2 relevant to mortality in severe pneumonia?", "expected": [{"source": "JPan2023.pdf", "contains": "PaO2/FiO2 reflects the severity of respiratory failure"}]}
+  {
+   "id": "r01",
+   "question": "What clinical database was the pediatric ICU mortality dataset derived from?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "Health Facts"
+    }
+   ]
+  },
+  {
+   "id": "r02",
+   "question": "What were the inclusion and exclusion criteria for the pediatric ICU admissions?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "Exclusion criteria included hospital length of stay"
+    }
+   ]
+  },
+  {
+   "id": "r03",
+   "question": "How was the hospital course divided into time periods for modeling?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "discretized into consecutive 6-hour time periods"
+    }
+   ]
+  },
+  {
+   "id": "r04",
+   "question": "What was the overall discrimination (AUROC) of the Criticality Index mortality models?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "0.852"
+    }
+   ]
+  },
+  {
+   "id": "r05",
+   "question": "Which time periods had the worst model performance and why?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "two worst performing time periods"
+    }
+   ]
+  },
+  {
+   "id": "r06",
+   "question": "What limitations did the authors of the Criticality Index mortality study report?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "There are limitations to this analysis"
+    }
+   ]
+  },
+  {
+   "id": "r07",
+   "question": "How was calibration of the mortality models assessed?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "Hosmer-Lemeshow"
+    }
+   ]
+  },
+  {
+   "id": "r08",
+   "question": "How did changes in mortality risk differ between deaths and survivors?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "increased clinical volatility"
+    }
+   ]
+  },
+  {
+   "id": "r09",
+   "question": "What was the hospital mortality rate among children in the ICU population?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "501(1.8%)"
+    }
+   ]
+  },
+  {
+   "id": "r10",
+   "question": "Who funded the pediatric Criticality Index study?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "Mallinckrodt"
+    }
+   ]
+  },
+  {
+   "id": "r11",
+   "question": "Why are static mortality scores such as PRISM and PIM limited for individual patients?",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "Pediatric Risk of Mortality (PRISM)"
+    }
+   ]
+  },
+  {
+   "id": "r12",
+   "question": "How many patients were in the SCAP development and validation cohorts?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "455 patients"
+    }
+   ]
+  },
+  {
+   "id": "r13",
+   "question": "How was severe community-acquired pneumonia defined in the study?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "main diagnostic criteria"
+    }
+   ]
+  },
+  {
+   "id": "r14",
+   "question": "What clinical data were collected within 48 hours of ICU admission for SCAP patients?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "critical care electronic data mart"
+    }
+   ]
+  },
+  {
+   "id": "r15",
+   "question": "Which variables were independent risk factors for death in SCAP patients?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "independent risk factors for death in patients with SCAP"
+    }
+   ]
+  },
+  {
+   "id": "r16",
+   "question": "What was the C-index of the SCAP model in external validation?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "0.903"
+    }
+   ]
+  },
+  {
+   "id": "r17",
+   "question": "How did the SCAP nomogram compare with APACHE II and SOFA scores?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "APACHE II score 0.795"
+    }
+   ]
+  },
+  {
+   "id": "r18",
+   "question": "What were the in-hospital mortality rates of SCAP patients in the two cohorts?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "21.32%"
+    }
+   ]
+  },
+  {
+   "id": "r19",
+   "question": "How were missing values handled in the SCAP study?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "missing values greater than 20%"
+    }
+   ]
+  },
+  {
+   "id": "r20",
+   "question": "Why is PaO2/FiO2 relevant to mortality in severe pneumonia?",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "PaO2/FiO2 reflects the severity of respiratory failure"
+    }
+   ]
+  },
+  {
+   "id": "g01",
+   "question": "How many patients were in the final cohort of the ICU epilepsy 90-day mortality study?",
+   "expected": [
+    {
+     "source": "Changze2025.pdf",
+     "contains": "429"
+    }
+   ]
+  },
+  {
+   "id": "g02",
+   "question": "Which model performed best in the ICU epilepsy study, and what AUC and accuracy did it reach?",
+   "expected": [
+    {
+     "source": "Changze2025.pdf",
+     "contains": "0.79"
+    }
+   ]
+  },
+  {
+   "id": "g03",
+   "question": "Which feature was the most influential predictor of mortality in the ICU epilepsy model?",
+   "expected": [
+    {
+     "source": "Changze2025.pdf",
+     "contains": "APS III"
+    }
+   ]
+  },
+  {
+   "id": "g04",
+   "question": "In the epilepsy study's model comparison table, what accuracy did logistic regression reach with 20 features?",
+   "expected": [
+    {
+     "source": "Changze2025.pdf",
+     "contains": "0.931"
+    }
+   ]
+  },
+  {
+   "id": "g05",
+   "question": "What hazard ratio was reported for patients with malignant cancer in the ICU epilepsy cohort?",
+   "expected": [
+    {
+     "source": "Changze2025.pdf",
+     "contains": "2.34"
+    }
+   ]
+  },
+  {
+   "id": "g06",
+   "question": "How many patients were included in the study using natural language processing of EHR notes to predict ICU mortality?",
+   "expected": [
+    {
+     "source": "BJMarafino2018.pdf",
+     "contains": "101 196"
+    }
+   ]
+  },
+  {
+   "id": "g07",
+   "question": "What AUC did the NLP-augmented ICU mortality model reach compared with the baseline model?",
+   "expected": [
+    {
+     "source": "BJMarafino2018.pdf",
+     "contains": "0.922"
+    }
+   ]
+  },
+  {
+   "id": "g08",
+   "question": "Which clinical note term was most strongly associated with survival in the NLP mortality model?",
+   "expected": [
+    {
+     "source": "BJMarafino2018.pdf",
+     "contains": "extubated"
+    }
+   ]
+  },
+  {
+   "id": "g09",
+   "question": "How many predictor variables did the baseline, clinical trajectory and NLP-augmented models use?",
+   "expected": [
+    {
+     "source": "BJMarafino2018.pdf",
+     "contains": "1192"
+    }
+   ]
+  },
+  {
+   "id": "g10",
+   "question": "Why could the NLP mortality study not compare its models directly with APACHE IV?",
+   "expected": [
+    {
+     "source": "BJMarafino2018.pdf",
+     "contains": "cost"
+    }
+   ]
+  },
+  {
+   "id": "g11",
+   "question": "How many ICU admissions were analysed in the acute ischemic stroke mortality study?",
+   "expected": [
+    {
+     "source": "CJackA2024.pdf",
+     "contains": "3,489"
+    }
+   ]
+  },
+  {
+   "id": "g12",
+   "question": "What AUC ROC and F1 did the best model reach in the acute ischemic stroke study?",
+   "expected": [
+    {
+     "source": "CJackA2024.pdf",
+     "contains": "0.86"
+    }
+   ]
+  },
+  {
+   "id": "g13",
+   "question": "Which features were most important in the ischemic stroke mortality model?",
+   "expected": [
+    {
+     "source": "CJackA2024.pdf",
+     "contains": "GCS"
+    }
+   ]
+  },
+  {
+   "id": "g14",
+   "question": "What AUC ROC did the ischemic stroke model achieve for Asian patients in the fairness analysis?",
+   "expected": [
+    {
+     "source": "CJackA2024.pdf",
+     "contains": "0.974"
+    }
+   ]
+  },
+  {
+   "id": "g15",
+   "question": "How did removing vitals and clinical assessments affect the ischemic stroke model?",
+   "expected": [
+    {
+     "source": "CJackA2024.pdf",
+     "contains": "0.814"
+    }
+   ]
+  },
+  {
+   "id": "g16",
+   "question": "How many pneumonia admissions did the study comparing neural language modeling pipelines use?",
+   "expected": [
+    {
+     "source": "CMugisha2022.pdf",
+     "contains": "2059"
+    }
+   ]
+  },
+  {
+   "id": "g17",
+   "question": "Which models reached the best F1-score in the clinical notes language modeling comparison?",
+   "expected": [
+    {
+     "source": "CMugisha2022.pdf",
+     "contains": "98.2"
+    }
+   ]
+  },
+  {
+   "id": "g18",
+   "question": "What three text preprocessing levels did the language modeling study compare?",
+   "expected": [
+    {
+     "source": "CMugisha2022.pdf",
+     "contains": "Named Entity Recognition"
+    }
+   ]
+  },
+  {
+   "id": "g19",
+   "question": "What F1-score did TF-IDF reach in the clinical notes study's bag-of-words comparison?",
+   "expected": [
+    {
+     "source": "CMugisha2022.pdf",
+     "contains": "0.889"
+    }
+   ]
+  },
+  {
+   "id": "g20",
+   "question": "To what length were the clinical notes truncated in the neural language modeling study?",
+   "expected": [
+    {
+     "source": "CMugisha2022.pdf",
+     "contains": "380"
+    }
+   ]
+  }
  ],
  "claims": [
-  {"id": "f01", "label": "false", "search": "overall AUROC of the CI-M models", "claim": "The CI-M models achieved an overall AUROC of 0.952.", "expected": [{"source": "EA2022.pdf", "contains": "0.852"}]},
-  {"id": "f02", "label": "false", "search": "dataset limitations retrospective", "claim": "The pediatric Criticality Index study used a prospective, single-center dataset.", "expected": [{"source": "EA2022.pdf", "contains": "retrospective EHR dataset"}]},
-  {"id": "f03", "label": "false", "search": "independent risk factors multivariate regression SCAP", "claim": "SOFA score was an independent risk factor for death in the multivariable analysis of SCAP patients.", "expected": [{"source": "JPan2023.pdf", "contains": "independent risk factors for death in patients with SCAP"}]},
-  {"id": "f04", "label": "false", "search": "SCAP validation cohort number of patients", "claim": "The SCAP validation cohort included 455 patients.", "expected": [{"source": "JPan2023.pdf", "contains": "88 patients"}]},
-  {"id": "f05", "label": "false", "search": "ROC curve predictive model compared with APACHE II and SOFA", "claim": "The SCAP nomogram had a lower AUC than the APACHE II score in the development cohort.", "expected": [{"source": "JPan2023.pdf", "contains": "APACHE II score 0.795"}]},
-  {"id": "f06", "label": "false", "search": "population characteristics hospital mortality children ICU", "claim": "Hospital mortality among the children in the ICU population was 18%.", "expected": [{"source": "EA2022.pdf", "contains": "501(1.8%)"}]},
-  {"id": "f07", "label": "false", "search": "time periods used for model development hours", "claim": "The CI-M models were developed for 12-hour time periods up to 360 hours of ICU care.", "expected": [{"source": "EA2022.pdf", "contains": "6-hour time periods"}]},
-  {"id": "f08", "label": "false", "search": "missing values multiple imputation", "claim": "The SCAP study excluded variables with more than 50% missing values.", "expected": [{"source": "JPan2023.pdf", "contains": "missing values greater than 20%"}]},
-  {"id": "f09", "label": "false", "search": "potential clinical use patient-level assessment", "claim": "The Criticality Index mortality model has been approved by the FDA for patient-level clinical use.", "expected": [{"source": "EA2022.pdf", "contains": "prior to use as a patient-level assessment"}]},
-  {"id": "f10", "label": "false", "search": "clinical volatility deaths survivors", "claim": "Survivors showed greater clinical volatility in mortality risk than deaths.", "expected": [{"source": "EA2022.pdf", "contains": "increased clinical volatility"}]},
-  {"id": "t01", "label": "true", "search": "overall AUROC of the CI-M models", "claim": "The overall AUROC of the CI-M models was 0.852.", "expected": [{"source": "EA2022.pdf", "contains": "0.852"}]},
-  {"id": "t02", "label": "true", "search": "dataset limitations retrospective", "claim": "The pediatric Criticality Index study used a retrospective EHR dataset.", "expected": [{"source": "EA2022.pdf", "contains": "retrospective EHR dataset"}]},
-  {"id": "t03", "label": "true", "search": "independent risk factors multivariate regression SCAP", "claim": "Lymphocyte count, PaO2/FiO2, shock, and APACHE II score were independent risk factors for death in SCAP patients.", "expected": [{"source": "JPan2023.pdf", "contains": "independent risk factors for death in patients with SCAP"}]},
-  {"id": "t04", "label": "true", "search": "external validation C index", "claim": "The SCAP model's C-index in the external validation cohort was 0.903.", "expected": [{"source": "JPan2023.pdf", "contains": "0.903"}]},
-  {"id": "t05", "label": "true", "search": "missing values multiple imputation", "claim": "The SCAP study excluded variables with more than 20% missing values and used multiple imputation for the rest.", "expected": [{"source": "JPan2023.pdf", "contains": "missing values greater than 20%"}]},
-  {"id": "t06", "label": "true", "search": "clinical volatility deaths survivors", "claim": "Deaths showed greater clinical volatility in mortality risk than survivors.", "expected": [{"source": "EA2022.pdf", "contains": "increased clinical volatility"}]}
+  {
+   "id": "f01",
+   "label": "false",
+   "search": "overall AUROC of the CI-M models",
+   "claim": "The CI-M models achieved an overall AUROC of 0.952.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "0.852"
+    }
+   ]
+  },
+  {
+   "id": "f02",
+   "label": "false",
+   "search": "dataset limitations retrospective",
+   "claim": "The pediatric Criticality Index study used a prospective, single-center dataset.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "retrospective EHR dataset"
+    }
+   ]
+  },
+  {
+   "id": "f03",
+   "label": "false",
+   "search": "independent risk factors multivariate regression SCAP",
+   "claim": "SOFA score was an independent risk factor for death in the multivariable analysis of SCAP patients.",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "independent risk factors for death in patients with SCAP"
+    }
+   ]
+  },
+  {
+   "id": "f04",
+   "label": "false",
+   "search": "SCAP validation cohort number of patients",
+   "claim": "The SCAP validation cohort included 455 patients.",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "88 patients"
+    }
+   ]
+  },
+  {
+   "id": "f05",
+   "label": "false",
+   "search": "ROC curve predictive model compared with APACHE II and SOFA",
+   "claim": "The SCAP nomogram had a lower AUC than the APACHE II score in the development cohort.",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "APACHE II score 0.795"
+    }
+   ]
+  },
+  {
+   "id": "f06",
+   "label": "false",
+   "search": "population characteristics hospital mortality children ICU",
+   "claim": "Hospital mortality among the children in the ICU population was 18%.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "501(1.8%)"
+    }
+   ]
+  },
+  {
+   "id": "f07",
+   "label": "false",
+   "search": "time periods used for model development hours",
+   "claim": "The CI-M models were developed for 12-hour time periods up to 360 hours of ICU care.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "6-hour time periods"
+    }
+   ]
+  },
+  {
+   "id": "f08",
+   "label": "false",
+   "search": "missing values multiple imputation",
+   "claim": "The SCAP study excluded variables with more than 50% missing values.",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "missing values greater than 20%"
+    }
+   ]
+  },
+  {
+   "id": "f09",
+   "label": "false",
+   "search": "potential clinical use patient-level assessment",
+   "claim": "The Criticality Index mortality model has been approved by the FDA for patient-level clinical use.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "prior to use as a patient-level assessment"
+    }
+   ]
+  },
+  {
+   "id": "f10",
+   "label": "false",
+   "search": "clinical volatility deaths survivors",
+   "claim": "Survivors showed greater clinical volatility in mortality risk than deaths.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "increased clinical volatility"
+    }
+   ]
+  },
+  {
+   "id": "t01",
+   "label": "true",
+   "search": "overall AUROC of the CI-M models",
+   "claim": "The overall AUROC of the CI-M models was 0.852.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "0.852"
+    }
+   ]
+  },
+  {
+   "id": "t02",
+   "label": "true",
+   "search": "dataset limitations retrospective",
+   "claim": "The pediatric Criticality Index study used a retrospective EHR dataset.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "retrospective EHR dataset"
+    }
+   ]
+  },
+  {
+   "id": "t03",
+   "label": "true",
+   "search": "independent risk factors multivariate regression SCAP",
+   "claim": "Lymphocyte count, PaO2/FiO2, shock, and APACHE II score were independent risk factors for death in SCAP patients.",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "independent risk factors for death in patients with SCAP"
+    }
+   ]
+  },
+  {
+   "id": "t04",
+   "label": "true",
+   "search": "external validation C index",
+   "claim": "The SCAP model's C-index in the external validation cohort was 0.903.",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "0.903"
+    }
+   ]
+  },
+  {
+   "id": "t05",
+   "label": "true",
+   "search": "missing values multiple imputation",
+   "claim": "The SCAP study excluded variables with more than 20% missing values and used multiple imputation for the rest.",
+   "expected": [
+    {
+     "source": "JPan2023.pdf",
+     "contains": "missing values greater than 20%"
+    }
+   ]
+  },
+  {
+   "id": "t06",
+   "label": "true",
+   "search": "clinical volatility deaths survivors",
+   "claim": "Deaths showed greater clinical volatility in mortality risk than survivors.",
+   "expected": [
+    {
+     "source": "EA2022.pdf",
+     "contains": "increased clinical volatility"
+    }
+   ]
+  },
+  {
+   "id": "f20",
+   "label": "false",
+   "search": "XGBoost AUC epilepsy 90-day mortality",
+   "claim": "The XGBoost model for 90-day mortality in ICU epilepsy patients reached an AUC of 0.97.",
+   "expected": [
+    {
+     "source": "Changze2025.pdf",
+     "contains": "0.79"
+    }
+   ]
+  },
+  {
+   "id": "f21",
+   "label": "false",
+   "search": "number of patients NLP ICU mortality prediction",
+   "claim": "The NLP critical care mortality study included 10 196 patients from a single hospital.",
+   "expected": [
+    {
+     "source": "BJMarafino2018.pdf",
+     "contains": "101 196"
+    }
+   ]
+  },
+  {
+   "id": "t20",
+   "label": "true",
+   "search": "ischemic stroke XGBoost AUC ROC F1",
+   "claim": "In the acute ischemic stroke study, XGBoost tuned for AUC ROC reached an AUC ROC of 0.86 and an F1 of 0.52.",
+   "expected": [
+    {
+     "source": "CJackA2024.pdf",
+     "contains": "0.86"
+    }
+   ]
+  },
+  {
+   "id": "t21",
+   "label": "true",
+   "search": "pneumonia admissions MIMIC-III notes mortality",
+   "claim": "The clinical notes study used 2059 pneumonia admissions from MIMIC-III with a 29% mortality rate.",
+   "expected": [
+    {
+     "source": "CMugisha2022.pdf",
+     "contains": "2059"
+    }
+   ]
+  }
  ]
 }

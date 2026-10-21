@@ -157,3 +157,18 @@ def test_only_completed_runs_are_judged():
 def test_fact_counts_only_in_claims_not_in_gaps():
     gaps_only = row(ANS, [claim("unclear", ["E1"])], gaps="the evidence does not report 0.852", evidence=EV)
     assert ev.det_checks(gaps_only)["det.fact"] is False
+
+
+def test_attribution_fails_when_a_claim_cites_the_wrong_paper():
+    case = {"id": "t01", "kind": "answerable", "project": "main", "question": "q", "expected": "e",
+            "source": ["EA2022.pdf"], "facts": ["x"], "wrong_source": ["JPan2023.pdf"]}
+    assert ev.det_checks(row(case, [claim("x", ["E1"])], evidence=EV))["det.attribution"] is True
+    assert ev.det_checks(row(case, [claim("x", ["E1", "E2"])], evidence=EV))["det.attribution"] is False
+
+
+def test_golden_v2_covers_all_six_papers_and_validates():
+    cases = ev.load_golden()
+    assert len(cases) >= 50 and set(ev.PROJECTS["main"]) == {
+        "EA2022.pdf", "JPan2023.pdf", "BJMarafino2018.pdf", "Changze2025.pdf", "CJackA2024.pdf", "CMugisha2022.pdf"}
+    used = {s for c in cases for s in c.get("source", [])}
+    assert used == set(ev.PROJECTS["main"])

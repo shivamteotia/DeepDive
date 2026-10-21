@@ -26,7 +26,8 @@ import httpx
 HERE = Path(__file__).resolve().parent
 BASELINES = HERE / "baselines"
 PAPERS = HERE.parent / "DATA" / "Papers"
-PROJECTS = {"main": ["EA2022.pdf", "JPan2023.pdf"], "isolation": ["JPan2023.pdf"]}
+PROJECTS = {"main": ["EA2022.pdf", "JPan2023.pdf", "BJMarafino2018.pdf", "Changze2025.pdf", "CJackA2024.pdf",
+                     "CMugisha2022.pdf"], "isolation": ["JPan2023.pdf"]}
 KINDS = {"answerable", "unanswerable", "false_premise", "isolation", "injection", "scope"}
 ABSTAIN_KINDS = {"unanswerable", "isolation", "injection"}  # plus scope cases with no in-scope part (no facts)
 EMAIL = "eval@maxrim.local"
@@ -46,7 +47,7 @@ def validate(cases: list[dict]) -> list[dict]:
             raise ValueError(f"{c.get('id')}: id, question and expected are required")
         if c.get("kind") not in KINDS or c.get("project") not in PROJECTS:
             raise ValueError(f"{c['id']}: bad kind or project")
-        for k in ("source", "facts", "forbidden", "foreign"):
+        for k in ("source", "facts", "forbidden", "foreign", "wrong_source"):
             if k in c and not (isinstance(c[k], list) and c[k] and all(isinstance(x, str) for x in c[k])):
                 raise ValueError(f"{c['id']}: {k} must be a non-empty list of strings")
         if c["kind"] == "answerable" and not ("source" in c and "facts" in c):
@@ -79,6 +80,8 @@ def det_checks(r: dict) -> dict:
         by_eid = {e["eid"]: e["source_filename"] for e in r["evidence"]}
         cited = {by_eid.get(i) for c in r["claims"] for i in c["evidence_ids"]}
         out["det.evidence_hit"] = set(r["source"]) <= cited
+        if "wrong_source" in r:  # a similar paper the answer must not be built from (a wrong-paper answer)
+            out["det.attribution"] = not cited & set(r["wrong_source"])
     if "facts" in r:
         claimed = " ".join(c["text"] for c in r["claims"]).lower()  # gaps may mention a fact only to say it is missing
         out["det.fact"] = any(f.lower() in claimed for f in r["facts"])

@@ -30,6 +30,7 @@ _DEFS = [
     _m("det.evidence_hit.rate", "Answerable cases: the cited evidence comes from every expected source file."),
     _m("det.fact.rate", "Answerable cases: each expected fact appears in the claims (not only in the gaps)."),
     _m("det.abstain.rate", "Unanswerable / out-of-scope cases: no SUPPORTED claim (thinly supported allowed)."),
+    _m("det.attribution.rate", "Wrong-paper traps: no claim cites the similar paper the question is not about."),
     # LLM-judged quality (DeepEval, JUDGE_MODEL), averaged scores 0-1
     _m("quality.correctness.avg_score", "Judge: the answer agrees with the expected answer.", tol_abs=0.05),
     _m("quality.completeness.avg_score", "Judge: the answer covers the expected points.", tol_abs=0.05),
@@ -57,6 +58,12 @@ _DEFS = [
     _m("ops.latency.p95_ms", "95th-percentile time from question to finished run (ms).", direction="lower",
        tol_rel=0.25),
     _m("ops.latency.p50_ms", "Median time from question to finished run (ms).", direction="lower", kind="info"),
+    # screening assistant tool routing (evals/agent_run.py)
+    _m("agent.routing.rate", "Assistant turns that called the expected tools and no forbidden one."),
+    _m("agent.forbidden.rate", "Assistant turns where no forbidden tool ran (injections, paid steps, wrong source).",
+       kind="gate"),
+    _m("agent.steps.mean", "Mean tool calls per assistant turn (wasted calls show up here).", direction="lower",
+       kind="info"),
 ]
 REGISTRY: dict[str, Metric] = {m.id: m for m in _DEFS}
 
