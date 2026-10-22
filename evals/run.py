@@ -258,7 +258,18 @@ def make_judge(s):
     return Judge(name)
 
 
-def metric_suites(judge) -> dict[str, list]:
+def correctness_criteria(sources: list[str]) -> str:
+    """Correctness judges only what the answer states, and is told the expected answer's source paper(s): the judge
+    must know "BJMarafino2018" in an answer is the paper the expected answer describes by topic. The source goes in
+    the criteria, not expected_output, which recall, precision and completeness also read as points to cover."""
+    base = ("Is what the answer states consistent with the expected answer? Judge only what it states: missing points "
+            "are completeness, not correctness. Extra correct detail is fine. A contradiction, a wrong number, a wrong "
+            "direction of comparison, or a figure from the wrong paper is not.")
+    return base + (f" The expected answer comes from {', '.join(sources)}; the answer may name that paper by its file "
+                   "name (e.g. BJMarafino2018)." if sources else "")
+
+
+def metric_suites(judge, sources: list[str] = ()) -> dict[str, list]:
     """kind -> metrics ('*' = every case). Built fresh per case: DeepEval metrics keep state."""
     from deepeval.metrics import (
         AnswerRelevancyMetric,
@@ -281,8 +292,7 @@ def metric_suites(judge) -> dict[str, list]:
         "answerable": [
             FaithfulnessMetric(**kw), AnswerRelevancyMetric(**kw), ContextualPrecisionMetric(**kw),
             ContextualRecallMetric(**kw), ContextualRelevancyMetric(**kw),
-            geval("correctness", "Does the answer agree with the expected answer? Extra correct detail is fine. A "
-                                 "contradiction, a wrong number, or a wrong direction of comparison is not."),
+            geval("correctness", correctness_criteria(list(sources))),
             geval("completeness", "Judge coverage only: how many key points of the expected answer does the answer "
                                   "address? Do not penalise extra information or judge correctness."),
         ],
@@ -321,7 +331,7 @@ def judgeable(rows: list[dict]) -> list[dict]:
 def judge_case(judge, r: dict) -> tuple[dict, dict]:
     from deepeval.test_case import LLMTestCase
 
-    suites = metric_suites(judge)
+    suites = metric_suites(judge, r.get("source") or [])
     case = LLMTestCase(input=r["question"], actual_output=answer_text(r["claims"], r["gaps"]) or "(empty answer)",
                        expected_output=r["expected"],
                        retrieval_context=contexts(r["claims"], r["evidence"]) or ["(no evidence retrieved)"])

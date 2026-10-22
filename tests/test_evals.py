@@ -195,3 +195,11 @@ def test_wrong_source_must_be_a_paper_of_the_project():
            "source": ["EA2022.pdf"], "facts": ["x"], "wrong_source": ["Typo2020.pdf"]}
     with pytest.raises(ValueError):
         ev.validate([bad])
+
+
+def test_only_correctness_is_told_the_expected_answers_source_papers():
+    # The judge must know "BJMarafino2018" in an answer is the paper the expected answer describes by topic; the
+    # source goes in the criteria, never expected_output (recall/completeness would count it as a point to cover).
+    # (metric_suites/judge_case are not called: importing deepeval loads .env into os.environ, leaking into tests.)
+    assert "comes from EA2022.pdf" in ev.correctness_criteria(["EA2022.pdf"])
+    assert "comes from" not in ev.correctness_criteria([])
