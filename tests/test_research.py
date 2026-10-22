@@ -31,7 +31,7 @@ def claim(text, *ids):
 
 
 def verdicts(*vs):
-    return r.Verification(verdicts=[r.Verdict(claim_index=i, verdict=v, rationale="why") for i, v in enumerate(vs)])
+    return r.Verification(verdicts=[r.Verdict(answers_question=True, claim_index=i, verdict=v, rationale="why") for i, v in enumerate(vs)])
 
 
 def run(oa, search_fn=None, max_iterations=3):
@@ -56,8 +56,8 @@ def test_add_evidence_dedupes_and_keeps_ids_stable():
 def test_verify_fails_closed():
     ev = [{**hit("p1"), "eid": "E1"}]
     claims = [claim("a", "E1"), claim("b", "E1")]
-    partial_v = r.Verification(verdicts=[r.Verdict(claim_index=0, verdict="SUPPORTED", rationale="ok"),
-                                         r.Verdict(claim_index=7, verdict="SUPPORTED", rationale="bogus index")])
+    partial_v = r.Verification(verdicts=[r.Verdict(answers_question=True, claim_index=0, verdict="SUPPORTED", rationale="ok"),
+                                         r.Verdict(answers_question=True, claim_index=7, verdict="SUPPORTED", rationale="bogus index")])
     out = r.verify(FakeOpenAI({r.Verification: [partial_v]}), "g", claims, ev)
     assert [v.verdict for v in out] == ["SUPPORTED", "UNSUPPORTED"]
     out = r.verify(FakeOpenAI({r.Verification: [None]}), "g", claims, ev)
@@ -82,10 +82,23 @@ def test_verifier_sees_the_question_in_a_run():
     assert '"question"' not in oa.inputs[r.Verification][0]
 
 
+def test_a_claim_that_does_not_answer_the_question_is_unsupported():
+    # A prose rule alone was ignored (u07: in-hospital mortality for a 90-day question was SUPPORTED): the verdict
+    # carries its own answers_question field, and False rejects the claim whatever the text says.
+    ev = [{**hit("p1", "in-hospital mortality 21%"), "eid": "E1"}]
+    off = r.Verification(verdicts=[r.Verdict(claim_index=0, rationale="text says in-hospital",
+                                             answers_question=False, verdict="SUPPORTED")])
+    (v,) = r.verify(FakeOpenAI({r.Verification: [off]}), "g", [claim("In-hospital mortality was 21%", "E1")], ev,
+                    question="What was the 90-day mortality?")
+    assert v.verdict == "UNSUPPORTED" and "question" in v.rationale
+    (v,) = r.verify(FakeOpenAI({r.Verification: [off]}), "g", [claim("In-hospital mortality was 21%", "E1")], ev)
+    assert v.verdict == "SUPPORTED"  # no question (evaluate.py's claim check): the field is ignored
+
+
 def test_run_passes_the_question_to_the_verifier(monkeypatch):
     seen = []
     monkeypatch.setattr(r, "verify", lambda oa, m, claims, ev, question="": seen.append(question) or
-                        [r.Verdict(claim_index=i, verdict="SUPPORTED", rationale="ok") for i in range(len(claims))])
+                        [r.Verdict(answers_question=True, claim_index=i, verdict="SUPPORTED", rationale="ok") for i in range(len(claims))])
     oa = FakeOpenAI({r.Plan: [r.Plan(sub_questions=["q"])],
                      ask.Answer: [ask.Answer(claims=[claim("x", "E1")], gaps="")]})
     r.run(oa, search_fn=lambda q: [hit("p1")], project_id="demo", model="m", fast_model="f", guard_model="g",
@@ -184,8 +197,8 @@ def test_live_verifier_rejects_false_claim():
 
 def test_duplicate_verdicts_most_severe_wins():
     ev = [{**hit("p1"), "eid": "E1"}]
-    dup = r.Verification(verdicts=[r.Verdict(claim_index=0, verdict="UNSUPPORTED", rationale="no"),
-                                   r.Verdict(claim_index=0, verdict="SUPPORTED", rationale="yes")])
+    dup = r.Verification(verdicts=[r.Verdict(answers_question=True, claim_index=0, verdict="UNSUPPORTED", rationale="no"),
+                                   r.Verdict(answers_question=True, claim_index=0, verdict="SUPPORTED", rationale="yes")])
     (v,) = r.verify(FakeOpenAI({r.Verification: [dup]}), "g", [claim("a", "E1")], ev)
     assert v.verdict == "UNSUPPORTED"
 
@@ -225,7 +238,7 @@ def test_audit_log_and_feedback_carry_rejected_claim_details():
 
 def test_invented_citation_forces_review():
     ans = ask.Answer(claims=[claim("ok", "E1")], gaps=ask.UNCITED_PREFIX + "fake")
-    res = r.finalize("q", ans, [r.Verdict(claim_index=0, verdict="SUPPORTED", rationale="")], [], [])
+    res = r.finalize("q", ans, [r.Verdict(answers_question=True, claim_index=0, verdict="SUPPORTED", rationale="")], [], [])
     assert res["status"] == "needs_review"
 
 
@@ -278,3 +291,10 @@ def test_audit_record_keeps_web_source_fields_only_for_web_evidence():
     out = r.audit_record({"evidence": [pdf, page], "claims": []})["evidence"]
     assert "url" not in out[0] and out[1]["url"] == "https://who.int/p" and out[1]["source_type"] == "web"
     assert "score" not in out[1]
+
+
+def test_verifier_schema_has_no_defaults():
+    import json
+
+    from openai.lib._pydantic import to_strict_json_schema
+    assert '"default"' not in json.dumps(to_strict_json_schema(r.Verification))  # OpenAI strict mode forbids them

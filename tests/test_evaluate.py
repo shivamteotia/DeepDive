@@ -48,7 +48,7 @@ def test_evaluate_end_to_end_with_fakes():
                        {"id": "t1", "label": "true", "search": "s", "claim": "right", "expected": exp},
                        {"id": "t2", "label": "true", "search": "none", "claim": "right", "expected": exp}]}
     search = lambda q: [] if q == "none" else [hit("hay"), hit("needle", eid="E2")]
-    verify = lambda c, evd: research.Verdict(claim_index=0, verdict="UNSUPPORTED", rationale="no")
+    verify = lambda c, evd: research.Verdict(answers_question=True, claim_index=0, verdict="UNSUPPORTED", rationale="no")
     res = ev.evaluate(gold, search_fn=search, verify_fn=verify)
     assert res["retrieval"]["items"][0]["rank"] == 2
     assert res["verifier"]["catch_rate"] == 1.0
