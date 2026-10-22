@@ -22,6 +22,7 @@ import db
 import extraction
 import fulltext
 import funnel
+import papers
 import pubmed
 import rails
 import research
@@ -190,6 +191,7 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
 
     web_cache: dict = {}
     topic = {"q": question}  # the follow-up-resolved question, set before research.run
+    scope = {"shas": None}  # the papers the question names (papers.resolve); None = every ready paper
 
     def search_fn(q: str) -> list[dict]:  # project and ready-document filters are fixed here, server-side
         if use_pubmed:  # one PubMed search for the topic (the 20 latest papers), whatever sub-question asks: the
@@ -197,9 +199,12 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
                 terms = pubmed.keyword_query(screen_parse(state), topic["q"])  # PubMed ANDs every word of a sentence
                 web_cache["pubmed"] = pubmed.search(terms, api_key=cfg.pubmed_api_key, project_id=project_id)
             return list(web_cache["pubmed"])
-        hits = ask.search(state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
-                          project_id=project_id, question=q, k=RESEARCH_K, rerank_model=cfg.reranker_model,
-                          rerank_api_key=cfg.jena_ai_api_key, sha256_in=ready, hybrid=cfg.hybrid_search)
+        named = scope["shas"]  # 2+ named papers are searched one by one: a comparison needs evidence from each
+        groups = [[s] for s in named] if named and len(named) > 1 else [named or ready]
+        hits = [h for g in groups for h in ask.search(
+            state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
+            project_id=project_id, question=q, k=RESEARCH_K if len(groups) == 1 else max(3, RESEARCH_K // len(groups)),
+            rerank_model=cfg.reranker_model, rerank_api_key=cfg.jena_ai_api_key, sha256_in=g, hybrid=cfg.hybrid_search)]
         if use_web and (find := web.searcher(cfg)):  # opt-in per run; untrusted, quoted exactly like PDF chunks
             if q not in web_cache:  # a run repeats queries (sub-questions, re-checks): pay once per query
                 web_cache[q] = find(q, project_id=project_id, max_results=WEB_RESULTS)
@@ -219,10 +224,20 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
             if use_pubmed:  # search first: an unreachable PubMed fails the run instead of answering "no sources"
                 search_fn(standalone)
                 max_iterations = min(max_iterations, 2)  # a fixed set of 20 abstracts: re-searching adds nothing
-            result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
-                                  fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model,
-                                  question=pubmed.review_question(standalone) if use_pubmed else standalone,
-                                  max_iterations=max_iterations)
+            route, resolved = papers.Route(None, []), None
+            if not (use_pubmed or use_web):  # web and PubMed runs answer from outside the project's papers
+                route, resolved = resolve_papers(state, project_id, ready, standalone)
+                scope["shas"] = route.shas
+            if route.shas == []:  # it names only papers this project lacks: never answer from another paper
+                gap = f"This project has no paper matching: {', '.join(route.missing)}."
+                result = research.finalize(standalone, ask.Answer(claims=[], gaps=gap), [], [], [])
+            else:
+                result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
+                                      fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model,
+                                      question=pubmed.review_question(standalone) if use_pubmed else standalone,
+                                      max_iterations=max_iterations)
+            if resolved:
+                result["log"] = [resolved, *result.get("log", [])]
             answer = "\n".join([c["text"] for c in result.get("claims") or []] + [result.get("gaps") or ""])
             if replaced := rails.check_output(state.openai, cfg.openai_guard_model, question, answer):
                 result = blocked(replaced)
@@ -233,6 +248,23 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
     with state.sessions() as s:
         s.execute(update(db.ResearchRun).where(db.ResearchRun.id == run_id).values(**values, finished_at=db.utcnow()))
         s.commit()
+
+
+def resolve_papers(state: State, project_id: str, ready: list[str], question: str) -> tuple[papers.Route, dict | None]:
+    """The papers `question` names (papers.resolve) and the run-log step recording them. Fails open: any error
+    searches every ready paper, as before the resolver existed."""
+    try:
+        found = papers.cards(state.qdrant, state.settings.qdrant_collection, project_id, ready)
+        model = state.settings.openai_model  # the fast model refused or misrouted 12 of 49 answerable golden cases
+        route = papers.resolve(lambda i, inp, fmt: ask.parse_llm(state.openai, model, i, inp, fmt), question, found)
+    except Exception:
+        log.exception("paper resolver failed; searching every paper")
+        return papers.Route(None, []), None
+    if route.shas == [] and len(found) < len(set(ready)):  # a paper with no card is invisible to the resolver:
+        route = papers.Route(None, [])  # "the project has no such paper" would be a guess, so search everything
+    if route.shas is None:
+        return route, None
+    return route, {"step": "resolve", "matched": [found[s].file for s in route.shas], "unmatched": route.missing}
 
 
 def screen_parse(state: State):

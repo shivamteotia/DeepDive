@@ -200,3 +200,101 @@ def test_a_pubmed_run_has_at_most_two_rounds(api, signup, fake_research, monkeyp
     api.post(f"/api/v1/projects/{pid}/research-runs", headers=h,
              json={"question": "ML for ICU mortality?", "pubmed": True, "max_iterations": 5})
     assert fake_research["max_iterations"] == 2
+
+
+# --- paper resolver (papers.py): route the search to the paper(s) the question names ---
+def stub_resolver(monkeypatch, route, names=None, with_cards=None):
+    """papers.cards -> a Card per ready paper (or only `with_cards`), named from `names`; papers.resolve -> route.
+    Returns the questions the resolver was asked."""
+    import papers
+    calls = []
+    names = names or {}
+    monkeypatch.setattr(jobs.papers, "cards", lambda q, coll, pid, shas: {
+        s: papers.Card(names.get(s, s), "card") for s in shas if with_cards is None or s in with_cards})
+    monkeypatch.setattr(jobs.papers, "resolve", lambda parse, question, cards: calls.append(question) or route)
+    return calls
+
+
+def two_paper_project(api, h):
+    pid = project(api, h, "A")
+    a, b = upload(api, h, pid, PDF_A), upload(api, h, pid, PDF_B)
+    seed_chunks(api, [(pid, a["sha256"], "a.pdf"), (pid, b["sha256"], "b.pdf")])
+    return pid, a["sha256"], b["sha256"]
+
+
+def test_a_named_paper_is_the_only_one_searched(api, signup, fake_research, monkeypatch):
+    import db
+    import papers
+    h = signup()
+    pid, sha_a, _ = two_paper_project(api, h)
+    calls = stub_resolver(monkeypatch, papers.Route([sha_a], []), names={sha_a: "a.pdf"})
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "How big was study A?"})
+    run = api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()
+    assert calls == ["How big was study A?"] and run["status"] == "completed"
+    assert {x["source_filename"] for x in fake_research["hits"]} == {"a.pdf"}
+    with api.maxrim.sessions() as s:  # the API hides the log; the stored audit record keeps the routing step
+        stored = s.get(db.ResearchRun, uuid.UUID(run["id"])).result
+    assert {"step": "resolve", "matched": ["a.pdf"], "unmatched": []} in stored["log"]
+
+
+def test_a_comparison_searches_every_named_paper(api, signup, fake_research, monkeypatch):
+    import papers
+    h = signup()
+    pid, sha_a, sha_b = two_paper_project(api, h)
+    stub_resolver(monkeypatch, papers.Route([sha_a, sha_b], []))
+    api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "Compare A and B"})
+    assert {x["source_filename"] for x in fake_research["hits"]} == {"a.pdf", "b.pdf"}
+
+
+def test_a_paper_the_project_lacks_is_not_answered_from_another(api, signup, fake_research, monkeypatch):
+    import papers
+    h = signup()
+    pid, _, _ = two_paper_project(api, h)
+    stub_resolver(monkeypatch, papers.Route([], ["the stroke study"]))
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "AUC of the stroke study?"})
+    run = api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()
+    assert run["status"] == "completed" and fake_research.get("hits") is None  # research never ran
+    assert run["result"]["claims"] == [] and "no paper matching: the stroke study" in run["result"]["gaps"]
+
+
+def test_no_refusal_while_a_ready_paper_has_no_card(api, signup, fake_research, monkeypatch):
+    # The resolver cannot see a paper without a card, so "the project has no such paper" would be a guess.
+    import papers
+    h = signup()
+    pid, sha_a, _ = two_paper_project(api, h)
+    stub_resolver(monkeypatch, papers.Route([], ["the stroke study"]), with_cards={sha_a})
+    api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "AUC of the stroke study?"})
+    assert {x["source_filename"] for x in fake_research["hits"]} == {"a.pdf", "b.pdf"}  # searched everything
+
+
+def test_a_refusal_still_passes_the_output_rail(api, signup, fake_research, monkeypatch):
+    import papers
+    h = signup()
+    pid, _, _ = two_paper_project(api, h)
+    stub_resolver(monkeypatch, papers.Route([], ["the stroke study"]))
+    seen = []
+    monkeypatch.setattr(jobs.rails, "check_output", lambda oa, m, q, answer: seen.append(answer) or None)
+    api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "AUC of the stroke study?"})
+    assert seen and "no paper matching: the stroke study" in seen[0]
+
+
+def test_a_resolver_failure_searches_every_paper(api, signup, fake_research, monkeypatch):
+    h = signup()
+    pid, _, _ = two_paper_project(api, h)
+
+    def boom(*a, **k):
+        raise RuntimeError("qdrant down")
+    monkeypatch.setattr(jobs.papers, "cards", boom)
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "risks?"})
+    assert api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()["status"] == "completed"
+    assert {x["source_filename"] for x in fake_research["hits"]} == {"a.pdf", "b.pdf"}
+
+
+def test_web_and_pubmed_runs_skip_the_resolver(api, signup, fake_research, monkeypatch):
+    import pubmed
+    h = signup()
+    pid, _, _ = two_paper_project(api, h)
+    calls = stub_resolver(monkeypatch, None)
+    monkeypatch.setattr(pubmed, "search", lambda *a, **k: [])
+    api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "ML for ICU?", "pubmed": True})
+    assert calls == []
