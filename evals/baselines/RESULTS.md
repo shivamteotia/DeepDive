@@ -1,5 +1,46 @@
 # Eval results
 
+## 2026-10-22/23: golden v2 (68 cases, 6 papers); verifier sees the question; paper resolver
+
+Golden v2: 68 cases on 6 papers (`main` 6 PDFs, `isolation` JPan2023 only). All runs on the `_v3` collection, app
+models unchanged (gpt-5.4-mini main/guard, gpt-4o-mini fast). Judge **gpt-4o-mini** for every column below (with
+the correctness fix `ac7b1ee`), so judged scores compare across columns but **not** with run 12 (gpt-5.6-luna).
+Snapshots in `runs/fix-20261022/`: `before.json` (pre-fix answers re-scored), `after-1/2.json` (verifier sees the
+question, `22d0a08`), `after-resolver-1-judged.json` (+ `answers_question` field `b695222` + paper resolver `4e80ff2`).
+
+| Metric | Before | Verifier fix (2 runs) | Both fixes |
+|---|---|---|---|
+| det.abstain.rate | 0.588 | 0.647 / 0.588 | **0.750** |
+| det.fact.rate | 0.891 | 0.957 / 0.913 | 0.913 |
+| det.evidence_hit.rate | 0.932 | 0.977 / 0.909 | 0.955 |
+| det.attribution / safety.isolation / safety.forbidden | 1.00 | 1.00 | 1.00 |
+| det.completed.rate | 1.000 | 1.000 | 0.985 (u03: Qdrant read timeout) |
+| quality.abstention | 0.685 | 0.715 / 0.608 | 0.758 |
+| quality.correctness | 0.684 | 0.705 / 0.673 | 0.723 |
+| quality.faithfulness | 0.931 | 0.898 / 0.926 | 0.879 |
+| quality.premise (n=5) | 0.760 | 0.500 / 0.540 | 0.600 |
+| quality.scope (n=4) | 0.775 | 0.400 / 0.650 | 0.625 |
+| ops.latency p50 / p95 | 12.1 / 18.1 s | 12.1 / 17.2, 12.1 / 15.7 s | **15.1 / 24.1 s** |
+
+- **Why answers were not declined (before).** Two causes, both past the verifier, which never saw the question:
+  "the evidence does not state X" written as a claim (u04, u05, u10), and true facts for a different question
+  (u07 in-hospital for a 90-day question; i01/i04/i05 another paper's numbers with the asked-about name attached).
+  A prose rule alone was ignored; the verdict's own `answers_question` field works.
+- **Paper resolver** (spec `docs/superpowers/specs/2026-10-22-paper-resolver-design.md`): 0 answerable golden
+  questions refused or misrouted across several 68-question checks; i01 is now declined in code ("This project has
+  no paper matching"); i04/i05 still fall back to the verifier. Costs one main-model call, two when it narrows.
+- **Premise and scope "drops" are judge noise.** Reading p01-p05: every answer is as good or better (p04 now
+  corrects the premise instead of accepting it), yet p02's near-identical answer went 1.0 -> 0.3. With 4-5 cases,
+  one swing moves the mean ~0.15. Don't trust these two below 3+ runs or more cases.
+- **Judge.** gpt-4o-mini scores the same answers far lower than gpt-5.6-luna (correctness 0.65 vs 0.96 on 10
+  identical answers) and moves ~0.1 on re-scoring. Groq's free tier (8k tokens/min) is too slow for a full pass.
+- **Vs run 12 on its 26 cases** (det metrics only): abstain 0.70 -> 0.78; fact, evidence hit, isolation all 1.00.
+  Latency p50 9.1 -> 15.1 s: ~3 s from the resolver/verifier, the rest from 6 papers and the harder set.
+- **Retrieval alone** (`evaluate.py`, gold v3, 40 items, 2026-10-21): recall@6 0.88-0.90, MRR 0.64-0.66 (the
+  original 20: 0.90 / 0.72 vs run 12's 1.00 / 0.86, from 4 more papers competing). `evaluate.py` does not use the
+  resolver yet, so app retrieval on paper-named questions is unmeasured.
+- Still failing: u02, u08, s01 (poem), i05 (name attached to the wrong paper), x03/x04 (cross-paper coverage).
+
 ## 2026-10-21: run-to-run spread (5 identical runs) + metric registry
 
 Same code five times (`main` at the memory/answers/guardrails commits; `_v3` collection, judge unchanged), to measure
