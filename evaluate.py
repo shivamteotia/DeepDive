@@ -85,6 +85,9 @@ def report(result: dict) -> str:
                  f'true_rejection_rate={fmt(v["true_rejection_rate"])} (n={v["n_true"]})  '
                  f'excluded (evidence not retrieved)={v["n_excluded_no_evidence"]}')
     lines += [f'  NO-EVIDENCE {i["id"]}: expected passage not retrieved' for i in v["items"] if not i["evidence_retrieved"]]
+    if n := result.get("config", {}).get("rerank_fallbacks"):
+        lines.append(f"  ! {n} searches ran without the reranker (rate-limited or unreachable): "
+                     "these numbers are not a clean reranker measurement")
     lines += [f'  WRONG {i["id"]} ({i["label"]} -> {i["verdict"]}): {i["rationale"]}' for i in v["items"]
               if i["evidence_retrieved"] and (i["label"] == "false") == (i["verdict"] == "SUPPORTED")]
     return "\n".join(lines)
@@ -135,10 +138,12 @@ def run_live(gold_path: Path, k: int, rerank_model: str | None = None, resolve: 
         parse = lambda i, inp, fmt: ask.parse_llm(oa, s.openai_model, i, inp, fmt)
         routed = lambda q, k, sha256_in: search(question=q, k=k, sha256_in=sha256_in)
         search_fn = lambda q: resolved_search(routed, lambda x: papers.resolve(parse, x, found), q, ready, k)
+    fallbacks_before = ask.rerank_fallbacks()
     retrieval_gold = {**gold, "claims": []} if resolve else gold  # claims test the verifier, not routing
     result = evaluate(retrieval_gold, search_fn=search_fn,
                       verify_fn=lambda c, ev: research.verify(oa, s.openai_guard_model, [c], ev)[0])
     result["config"] = {"gold": gold_path.name, "gold_version": gold.get("version"), "k": k, "resolve": resolve,
+                        "rerank_fallbacks": ask.rerank_fallbacks() - fallbacks_before,
                         "rerank_model": rerank_model or None, "hybrid": s.hybrid_search,
                         "embed_model": s.openai_embed_model, "guard_model": s.openai_guard_model,
                         "collection": s.qdrant_collection, "run_at": datetime.now(UTC).isoformat()}

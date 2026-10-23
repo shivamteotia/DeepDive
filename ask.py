@@ -5,7 +5,10 @@ Usage: uv run python ask.py <project_id> "question" [-k 8]
 
 import argparse
 import json
+import logging
+import random
 import re
+import time
 from functools import lru_cache
 
 from pydantic import BaseModel, PrivateAttr, ValidationError
@@ -13,6 +16,8 @@ from qdrant_client import QdrantClient, models
 
 import ingest
 from ingest import embed
+
+log = logging.getLogger(__name__)
 
 INSTRUCTIONS = """You answer research questions using ONLY the evidence passages provided.
 Rules:
@@ -97,10 +102,20 @@ def search(qdrant: QdrantClient, openai_client, *, collection: str, embed_model:
         hits = qdrant.query_points(collection, query=vector, limit=limit, with_payload=True, query_filter=flt).points
     out = [{"point_id": str(h.id), "score": h.score, **h.payload} for h in hits]
     if rerank_model and out:
-        scores = rerank_scores(rerank_model, question, [rerank_text(h["text"]) for h in out], api_key=rerank_api_key)
-        for h, s in zip(out, scores, strict=True):
-            h["rerank_score"] = s
-        out = sorted(out, key=lambda h: h["rerank_score"], reverse=True)[:k]
+        try:
+            scores = rerank_scores(rerank_model, question, [rerank_text(h["text"]) for h in out], api_key=rerank_api_key)
+        except Exception as e:
+            if not _temporary(e):  # a missing key or a wrong model name must fail loudly, not degrade forever
+                raise
+            global _FALLBACKS
+            _FALLBACKS += 1  # ponytail: process-wide counter; evaluate.py reads the difference over its run
+            log.warning("reranker unavailable (%s); keeping the search order", _describe(e))
+            scores = None
+        if scores is not None:
+            for h, s in zip(out, scores, strict=True):
+                h["rerank_score"] = s
+            out = sorted(out, key=lambda h: h["rerank_score"], reverse=True)
+        out = out[:k]
     return [{"eid": f"E{i}", **h} for i, h in enumerate(out, 1)]
 
 
@@ -112,6 +127,29 @@ def _load_cross_encoder(model_name: str):
 
 
 JINA_RERANK_URL = "https://api.jina.ai/v1/rerank"
+JINA_ATTEMPTS = 3
+JINA_TIMEOUT = 10  # seconds per attempt: worst case ~30 s of requests + ~22 s of waits before falling back
+_FALLBACKS = 0
+
+
+def rerank_fallbacks() -> int:
+    """How many searches in this process kept the fused order because the reranker was temporarily unavailable."""
+    return _FALLBACKS
+
+
+def _temporary(e: Exception) -> bool:
+    """Rate limits, server errors and network trouble pass; anything else is a configuration error or a bug."""
+    import httpx
+
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code == 429 or e.response.status_code >= 500
+    return isinstance(e, httpx.TransportError)
+
+
+def _describe(e: Exception) -> str:
+    import httpx
+
+    return f"HTTP {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError) else type(e).__name__
 _LABEL = re.compile(r"^(?:Paper|Document): [^\n]*\n(?:Section: [^\n]*\n)?")  # chunking.label's shapes
 
 
@@ -144,8 +182,19 @@ def _jina_scores(model: str, query: str, texts: list[str], api_key: str) -> list
 
     if not api_key:
         raise ValueError("Jina reranker needs an API key (Jena_AI_API_KEY in .env)")
-    resp = httpx.post(JINA_RERANK_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=30,
-                      json={"model": model, "query": query, "documents": texts, "top_n": len(texts), "return_documents": False})
+    body = {"model": model, "query": query, "documents": texts, "top_n": len(texts), "return_documents": False}
+    for attempt in range(JINA_ATTEMPTS):  # rate limits (429) and 5xx are retried, honouring Retry-After
+        resp = httpx.post(JINA_RERANK_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=JINA_TIMEOUT,
+                          json=body)
+        if resp.status_code != 429 and resp.status_code < 500 or attempt == JINA_ATTEMPTS - 1:
+            break
+        try:
+            wait = float(resp.headers.get("Retry-After", ""))
+        except ValueError:
+            wait = 2.0 ** attempt
+        if not 0 <= wait <= 10:  # negative, NaN or huge: fall back to the capped backoff
+            wait = min(2.0 ** attempt, 10.0)
+        time.sleep(wait + random.uniform(0, 1))  # jitter: parallel searches mustn't retry in lockstep
     resp.raise_for_status()
     scores = [0.0] * len(texts)
     for r in resp.json()["results"]:
