@@ -226,3 +226,21 @@ def test_hybrid_candidates_are_reranked_to_k(hq, monkeypatch):
     monkeypatch.setattr(ask, "rerank_scores", fake_scores)
     assert ids(hsearch(hq, "projA", k=1, hybrid=True, rerank_model="fake")) == ["3"]
     assert seen["n"] == 3  # all of projA's fused candidates, none of projB's
+
+
+def test_rerank_text_drops_the_paper_and_section_header():
+    # Cross-encoders read 512 tokens: the "Paper: ... / Section: ..." label every chunk carries must not use them up.
+    assert ask.rerank_text("Paper: Dynamic Mortality Risk\nSection: Results\nAUROC was 0.86.") == "AUROC was 0.86."
+    assert ask.rerank_text("plain chunk text") == "plain chunk text"
+    # chunking.label also writes "Document:" for non-research documents, and omits Section when there is no heading
+    assert ask.rerank_text("Document: A guideline\nSection: Methods > Data\nbody") == "body"
+    assert ask.rerank_text("Paper: JPan2023\nbody without headings") == "body without headings"
+
+
+def test_only_the_reranker_reads_the_stripped_text(q, monkeypatch):
+    seen = []
+    monkeypatch.setattr(ask, "rerank_scores", lambda m, query, texts, **kw: seen.extend(texts) or [1.0] * len(texts))
+    hits = ask.search(q, FakeOpenAI(), collection=COLL, embed_model="m", project_id="projA", question="?", k=1,
+                      rerank_model="fake")
+    assert all(not t.startswith(("Paper:", "Document:")) for t in seen)
+    assert hits and "text" in hits[0]  # callers still get the full chunk text

@@ -5,6 +5,7 @@ Usage: uv run python ask.py <project_id> "question" [-k 8]
 
 import argparse
 import json
+import re
 from functools import lru_cache
 
 from pydantic import BaseModel, PrivateAttr, ValidationError
@@ -96,7 +97,7 @@ def search(qdrant: QdrantClient, openai_client, *, collection: str, embed_model:
         hits = qdrant.query_points(collection, query=vector, limit=limit, with_payload=True, query_filter=flt).points
     out = [{"point_id": str(h.id), "score": h.score, **h.payload} for h in hits]
     if rerank_model and out:
-        scores = rerank_scores(rerank_model, question, [h["text"] for h in out], api_key=rerank_api_key)
+        scores = rerank_scores(rerank_model, question, [rerank_text(h["text"]) for h in out], api_key=rerank_api_key)
         for h, s in zip(out, scores, strict=True):
             h["rerank_score"] = s
         out = sorted(out, key=lambda h: h["rerank_score"], reverse=True)[:k]
@@ -111,6 +112,13 @@ def _load_cross_encoder(model_name: str):
 
 
 JINA_RERANK_URL = "https://api.jina.ai/v1/rerank"
+_LABEL = re.compile(r"^(?:Paper|Document): [^\n]*\n(?:Section: [^\n]*\n)?")  # chunking.label's shapes
+
+
+def rerank_text(text: str) -> str:
+    """The chunk as a reranker should read it: without the "Paper: ... / Section: ..." label every chunk carries
+    (a cross-encoder reads 512 tokens; the label would use them up and repeat on every candidate)."""
+    return _LABEL.sub("", text, count=1)
 
 
 def rerank_scores(model_name: str, query: str, texts: list[str], batch: int = 16, api_key: str = "") -> list[float]:
