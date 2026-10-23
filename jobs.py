@@ -222,9 +222,15 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
             if use_pubmed:  # search first: an unreachable PubMed fails the run instead of answering "no sources"
                 search_fn(standalone)
                 max_iterations = min(max_iterations, 2)  # a fixed set of 20 abstracts: re-searching adds nothing
-            route, resolved = papers.Route(None, []), None
+            route, resolved, subs = papers.Route(None, []), None, None
             if not (use_pubmed or use_web):  # web and PubMed runs answer from outside the project's papers
-                route, resolved = resolve_papers(state, project_id, ready, standalone)
+                with ThreadPoolExecutor(2) as pool:  # independent calls: plan while the resolver runs
+                    planned = pool.submit(research.plan, state.openai, cfg.openai_fast_model, standalone)
+                    route, resolved = resolve_papers(state, project_id, ready, standalone)
+                    try:
+                        subs = planned.result()
+                    except Exception:  # planning ahead is an optimisation; research.run plans itself
+                        log.warning("early planning failed; research.run will plan", exc_info=True)
                 scope["shas"] = route.shas
             if route.shas == []:  # it names only papers this project lacks: never answer from another paper
                 gap = f"This project has no paper matching: {', '.join(route.missing)}."
@@ -233,7 +239,7 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
                 result = research.run(state.openai, search_fn=search_fn, project_id=project_id, model=cfg.openai_model,
                                       fast_model=cfg.openai_fast_model, guard_model=cfg.openai_guard_model,
                                       question=pubmed.review_question(standalone) if use_pubmed else standalone,
-                                      max_iterations=max_iterations)
+                                      max_iterations=max_iterations, sub_questions=subs)
             if resolved:
                 result["log"] = [resolved, *result.get("log", [])]
             answer = "\n".join([c["text"] for c in result.get("claims") or []] + [result.get("gaps") or ""])

@@ -106,6 +106,17 @@ def test_run_passes_the_question_to_the_verifier(monkeypatch):
     assert seen == ["What was the 90-day mortality?"]
 
 
+def test_run_can_take_sub_questions_planned_elsewhere():
+    # The API plans while the paper resolver runs (they don't depend on each other); run must not plan again.
+    searched = []
+    oa = FakeOpenAI({r.Plan: [r.Plan(sub_questions=["never used"])],
+                     ask.Answer: [ask.Answer(claims=[], gaps="nothing")]})
+    out = r.run(oa, search_fn=lambda q: searched.append(q) or [hit("p1")], project_id="demo", model="m",
+                fast_model="f", guard_model="g", question="q", sub_questions=["s1", "s2"])
+    assert searched == ["s1", "s2"] and oa.inputs[r.Plan] == []
+    assert out["log"][0] == {"step": "plan", "sub_questions": ["s1", "s2"]}
+
+
 def test_all_supported_first_pass_is_verified():
     oa = FakeOpenAI({
         r.Plan: [r.Plan(sub_questions=["risks"])],

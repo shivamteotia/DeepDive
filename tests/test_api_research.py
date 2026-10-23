@@ -298,3 +298,31 @@ def test_web_and_pubmed_runs_skip_the_resolver(api, signup, fake_research, monke
     monkeypatch.setattr(pubmed, "search", lambda *a, **k: [])
     api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "ML for ICU?", "pubmed": True})
     assert calls == []
+
+
+def test_the_plan_is_made_while_papers_are_resolved(api, signup, monkeypatch):
+    # Latency: planning (fast model) and the resolver (main model) don't depend on each other, so they overlap.
+    import threading
+
+    import papers
+    h = signup()
+    pid, _, _ = two_paper_project(api, h)
+    both = threading.Barrier(2, timeout=5)  # each side waits for the other: passes only if they run concurrently
+
+    def resolve(parse, question, cards):
+        both.wait()
+        return papers.Route(None, [])
+
+    def plan(oa, model, question):
+        both.wait()
+        return ["planned sub-question"]
+    seen = {}
+    stub_resolver(monkeypatch, None)
+    monkeypatch.setattr(jobs.papers, "resolve", resolve)
+    monkeypatch.setattr(jobs.research, "plan", plan)
+    monkeypatch.setattr(jobs.research, "run", lambda oa, **kw: seen.update(kw) or {
+        "question": kw["question"], "status": "verified", "claims": [], "gaps": "", "evidence": [], "log": [],
+        "removed_claims": []})
+    r = api.post(f"/api/v1/projects/{pid}/research-runs", headers=h, json={"question": "risks?"})
+    assert api.get(f"/api/v1/research-runs/{r.json()['id']}", headers=h).json()["status"] == "completed"
+    assert seen["sub_questions"] == ["planned sub-question"]

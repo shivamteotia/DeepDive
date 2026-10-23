@@ -128,11 +128,12 @@ def verify(openai_client, model: str, claims: list[ask.Claim], evidence: list[di
 
 
 def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: str, guard_model: str, question: str,
-        max_iterations: int = 3) -> dict:
+        max_iterations: int = 3, sub_questions: list[str] | None = None) -> dict:
+    """sub_questions: the planner's output when it was already run (the API plans while it resolves papers)."""
     if max_iterations < 1:
         raise ValueError("max_iterations must be >= 1")
     log: list[dict] = []
-    subs = plan(openai_client, fast_model, question)
+    subs = sub_questions or plan(openai_client, fast_model, question)
     log.append({"step": "plan", "sub_questions": subs})
 
     evidence: list[dict] = []
