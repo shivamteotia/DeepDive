@@ -1,5 +1,35 @@
 # Eval results
 
+## 2026-10-24: all fixes together + Jina reranker (`runs/fix-20261022/jina-2.json`, no judge)
+
+Models: gpt-5.4-mini main/guard, gpt-5.4-nano fast, gpt-4.1-nano context;
+`RERANKER_MODEL=jina:jina-reranker-v2-base-multilingual`. On top of the 2026-10-22/23 fixes:
+- glyph repair at ingest; CMugisha2022 and Changze2025 re-indexed
+- two-reply verifier
+- guardrails that block poem/code requests and pass project actions
+- planner and resolver run in parallel
+- Jina retry and fallback
+
+| Metric | Before (10-22) | Fixes run 1 | **Now** |
+|---|---|---|---|
+| det.abstain.rate | 0.588 | 0.750 | **0.882** (15/17) |
+| det.evidence_hit.rate | 0.932 | 0.955 | **0.977** |
+| det.fact.rate | 0.891 | 0.913 | 0.913 |
+| det.completed / attribution / isolation / forbidden | 1.00 | 0.99 / 1 / 1 / 1 | 1.00 |
+| p50 / p95 latency | 12.1 / 18.1 s | 15.1 / 24.1 s | 13.7 / 33.2 s |
+
+- **Retrieval alone** (`evaluate.py --resolve`, gold v3): no reranker 0.95 / 0.67, Jina **0.97 / 0.73**, MedCPT
+  0.80 / 0.49. bge-reranker-v2-m3 was too slow on CPU and aborted after ~40 min. Jina had lost recall on
+  2026-10-15; the difference now is the stripped Paper/Section label plus the 6-paper set.
+- **Jina's rate limit:** an earlier run (`jina-1`, before retry/fallback) failed 16 of 68 questions with 429.
+  With retry and fallback, 8 searches out of ~200 kept the fused order and no question failed.
+- **Still failing:**
+  - u03 (adult numbers for a children question)
+  - i05 (asked-about study name attached to the wrong paper)
+  - x03 (cross-paper coverage)
+  - fact misses m04, st02, n01, n04 (st02 and n04 passed in earlier runs)
+- One run; earlier runs moved ±0.1 on abstain. Confirm before calling 0.88 the baseline.
+
 ## 2026-10-22/23: golden v2 (68 cases, 6 papers); verifier sees the question; paper resolver
 
 Golden v2: 68 cases on 6 papers (`main` 6 PDFs, `isolation` JPan2023 only). All runs on the `_v3` collection, app
