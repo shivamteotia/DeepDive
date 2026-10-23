@@ -199,12 +199,10 @@ def run_research(state: State, run_id: uuid.UUID) -> None:
                 terms = pubmed.keyword_query(screen_parse(state), topic["q"])  # PubMed ANDs every word of a sentence
                 web_cache["pubmed"] = pubmed.search(terms, api_key=cfg.pubmed_api_key, project_id=project_id)
             return list(web_cache["pubmed"])
-        named = scope["shas"]  # 2+ named papers are searched one by one: a comparison needs evidence from each
-        groups = [[s] for s in named] if named and len(named) > 1 else [named or ready]
-        hits = [h for g in groups for h in ask.search(
+        hits = papers.search_named(lambda question, k, sha256_in: ask.search(
             state.qdrant, state.openai, collection=cfg.qdrant_collection, embed_model=cfg.openai_embed_model,
-            project_id=project_id, question=q, k=RESEARCH_K if len(groups) == 1 else max(3, RESEARCH_K // len(groups)),
-            rerank_model=cfg.reranker_model, rerank_api_key=cfg.jena_ai_api_key, sha256_in=g, hybrid=cfg.hybrid_search)]
+            project_id=project_id, question=question, k=k, rerank_model=cfg.reranker_model,
+            rerank_api_key=cfg.jena_ai_api_key, sha256_in=sha256_in, hybrid=cfg.hybrid_search), q, scope["shas"], ready, RESEARCH_K)
         if use_web and (find := web.searcher(cfg)):  # opt-in per run; untrusted, quoted exactly like PDF chunks
             if q not in web_cache:  # a run repeats queries (sub-questions, re-checks): pay once per query
                 web_cache[q] = find(q, project_id=project_id, max_results=WEB_RESULTS)

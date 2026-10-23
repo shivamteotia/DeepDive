@@ -75,3 +75,12 @@ def test_live_eval_meets_baseline():
     assert res["retrieval"]["recall_at_k"] >= 0.8
     assert res["verifier"]["catch_rate"] >= 0.9
     assert res["verifier"]["true_rejection_rate"] <= 0.2
+
+
+def test_resolved_search_searches_as_the_app_does():
+    import papers
+    calls = []
+    search = lambda q, k, sha256_in: calls.append(sha256_in) or [{"source_filename": s} for s in sha256_in]
+    named = ev.resolved_search(search, lambda q: papers.Route(["b"], []), "the B study?", ["a", "b"], 6)
+    declined = ev.resolved_search(search, lambda q: papers.Route([], ["X"]), "the X study?", ["a", "b"], 6)
+    assert named == [{"source_filename": "b"}] and declined == [] and calls == [["b"]]

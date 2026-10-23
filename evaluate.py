@@ -90,8 +90,17 @@ def report(result: dict) -> str:
     return "\n".join(lines)
 
 
-def run_live(gold_path: Path, k: int, rerank_model: str | None = None) -> dict:
-    """rerank_model: None = use RERANKER_MODEL from settings; "" = no reranking; otherwise that model."""
+def resolved_search(search, resolve, question: str, ready: list[str], k: int) -> list[dict]:
+    """Retrieval as the app runs it: the paper resolver routes the question (papers.resolve), then papers.search_named
+    searches the named paper(s), every paper, or nothing when the question names a paper the project lacks."""
+    import papers
+
+    return papers.search_named(search, question, resolve(question).shas, ready, k)
+
+
+def run_live(gold_path: Path, k: int, rerank_model: str | None = None, resolve: bool = False) -> dict:
+    """rerank_model: None = use RERANKER_MODEL from settings; "" = no reranking; otherwise that model.
+    resolve: route retrieval questions through the paper resolver, as the API does (main-model calls)."""
     from functools import partial
 
     from openai import OpenAI
@@ -107,9 +116,29 @@ def run_live(gold_path: Path, k: int, rerank_model: str | None = None) -> dict:
     search = partial(ask.search, qdrant, oa, collection=s.qdrant_collection, embed_model=s.openai_embed_model,
                      project_id=gold["project_id"], k=k, rerank_model=rerank_model, rerank_api_key=s.jena_ai_api_key,
                      hybrid=s.hybrid_search)
-    result = evaluate(gold, search_fn=lambda q: search(question=q),
+    search_fn = lambda q: search(question=q)
+    if resolve:
+        from qdrant_client import models
+
+        import papers
+
+        pts, ready, nxt = [], set(), None
+        while True:  # every paper of the gold project (the API passes its ready documents)
+            pts, nxt = qdrant.scroll(s.qdrant_collection, limit=256, offset=nxt, with_payload=["document_sha256"],
+                                     scroll_filter=models.Filter(must=[models.FieldCondition(
+                                         key="project_id", match=models.MatchValue(value=gold["project_id"]))]))
+            ready |= {p.payload["document_sha256"] for p in pts}
+            if nxt is None:
+                break
+        ready = sorted(ready)
+        found = papers.cards(qdrant, s.qdrant_collection, gold["project_id"], ready)
+        parse = lambda i, inp, fmt: ask.parse_llm(oa, s.openai_model, i, inp, fmt)
+        routed = lambda q, k, sha256_in: search(question=q, k=k, sha256_in=sha256_in)
+        search_fn = lambda q: resolved_search(routed, lambda x: papers.resolve(parse, x, found), q, ready, k)
+    retrieval_gold = {**gold, "claims": []} if resolve else gold  # claims test the verifier, not routing
+    result = evaluate(retrieval_gold, search_fn=search_fn,
                       verify_fn=lambda c, ev: research.verify(oa, s.openai_guard_model, [c], ev)[0])
-    result["config"] = {"gold": gold_path.name, "gold_version": gold.get("version"), "k": k,
+    result["config"] = {"gold": gold_path.name, "gold_version": gold.get("version"), "k": k, "resolve": resolve,
                         "rerank_model": rerank_model or None, "hybrid": s.hybrid_search,
                         "embed_model": s.openai_embed_model, "guard_model": s.openai_guard_model,
                         "collection": s.qdrant_collection, "run_at": datetime.now(UTC).isoformat()}
@@ -126,9 +155,10 @@ def main() -> None:
     ap.add_argument("--gold", type=Path, default=ROOT / "eval" / "gold.json")
     ap.add_argument("-k", type=int, default=6)
     ap.add_argument("--rerank-model", default=None, help='override RERANKER_MODEL; "none" disables reranking')
+    ap.add_argument("--resolve", action="store_true", help="route questions through the paper resolver, as the API does")
     args = ap.parse_args()
     rerank = "" if args.rerank_model == "none" else args.rerank_model
-    result = run_live(args.gold.resolve(), args.k, rerank)
+    result = run_live(args.gold.resolve(), args.k, rerank, resolve=args.resolve)
     print(f'rerank_model: {result["config"]["rerank_model"]}')
     print(report(result))
     print(f"\nSaved: {result['saved_to']}")

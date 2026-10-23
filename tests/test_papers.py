@@ -144,6 +144,22 @@ def test_cards_come_from_each_papers_front_matter_and_abstract():
     assert papers.cards(q, "c", "other-project", ["sha-ea"]) == {}  # point ids are project-scoped
 
 
+def test_search_named_scopes_and_splits_the_search():
+    # One function for the API run and evaluate.py, so retrieval is measured the way the app searches.
+    calls = []
+    search = lambda q, k, sha256_in: calls.append((k, sha256_in)) or [{"sha": s} for s in sha256_in]
+    papers.search_named(search, "q", None, ["a", "b", "c"], 6)  # names nothing: every ready paper, full k
+    papers.search_named(search, "q", ["b"], ["a", "b", "c"], 6)  # one paper: only it, full k
+    hits = papers.search_named(search, "q", ["a", "c"], ["a", "b", "c"], 6)  # a comparison: each paper, k split
+    assert calls == [(6, ["a", "b", "c"]), (6, ["b"]), (3, ["a"]), (3, ["c"])]
+    assert hits == [{"sha": "a"}, {"sha": "c"}]
+    assert papers.search_named(search, "q", [], ["a"], 6) == []  # declined: nothing is searched
+    calls.clear()
+    papers.search_named(search, "q", ["a", "not-ready"], ["a", "b"], 6)  # a paper outside ready is dropped
+    papers.search_named(search, "q", ["not-ready"], ["a", "b"], 6)  # ...and if none is left, every ready paper
+    assert calls == [(6, ["a"]), (6, ["a", "b"])]
+
+
 def test_resolver_schema_has_no_defaults():
     from openai.lib._pydantic import to_strict_json_schema
     assert '"default"' not in json.dumps(to_strict_json_schema(papers.Resolution))  # OpenAI strict mode forbids them
