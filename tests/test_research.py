@@ -26,6 +26,11 @@ def hit(pid, text="t", name="a.pdf", page=1):
             "page_numbers": [page], "section_headings": []}
 
 
+def rounds(*vs):
+    """Verifier replies for research.run: with a question every round asks twice, here with the same answer."""
+    return [v for v in vs for _ in range(2)]
+
+
 def claim(text, *ids):
     return ask.Claim(text=text, evidence_ids=list(ids))
 
@@ -88,11 +93,39 @@ def test_a_claim_that_does_not_answer_the_question_is_unsupported():
     ev = [{**hit("p1", "in-hospital mortality 21%"), "eid": "E1"}]
     off = r.Verification(verdicts=[r.Verdict(claim_index=0, rationale="text says in-hospital",
                                              answers_question=False, verdict="SUPPORTED")])
-    (v,) = r.verify(FakeOpenAI({r.Verification: [off]}), "g", [claim("In-hospital mortality was 21%", "E1")], ev,
+    (v,) = r.verify(FakeOpenAI({r.Verification: [off, off]}), "g", [claim("In-hospital mortality was 21%", "E1")], ev,
                     question="What was the 90-day mortality?")
     assert v.verdict == "UNSUPPORTED" and "question" in v.rationale
     (v,) = r.verify(FakeOpenAI({r.Verification: [off]}), "g", [claim("In-hospital mortality was 21%", "E1")], ev)
     assert v.verdict == "SUPPORTED"  # no question (evaluate.py's claim check): the field is ignored
+
+
+def test_with_a_question_a_claim_needs_two_agreeing_verdicts():
+    # Measured: the same model passed "in-hospital 21%" for a 90-day question in one run and rejected it in another.
+    # Two independent replies, the stricter wins; claim-only checks (evaluate.py) stay one call.
+    ev = [{**hit("p1", "in-hospital mortality 21%"), "eid": "E1"}]
+    ok = r.Verification(verdicts=[r.Verdict(claim_index=0, rationale="r", answers_question=True, verdict="SUPPORTED")])
+    off = r.Verification(verdicts=[r.Verdict(claim_index=0, rationale="r", answers_question=False, verdict="SUPPORTED")])
+    oa = FakeOpenAI({r.Verification: [ok, off]})
+    (v,) = r.verify(oa, "g", [claim("In-hospital mortality was 21%", "E1")], ev, question="90-day mortality?")
+    assert v.verdict == "UNSUPPORTED" and len(oa.inputs[r.Verification]) == 2
+    oa = FakeOpenAI({r.Verification: [ok, ok]})
+    (v,) = r.verify(oa, "g", [claim("In-hospital mortality was 21%", "E1")], ev, question="in-hospital mortality?")
+    assert v.verdict == "SUPPORTED"
+    oa = FakeOpenAI({r.Verification: [ok, off]})
+    r.verify(oa, "g", [claim("x", "E1")], ev)
+    assert len(oa.inputs[r.Verification]) == 1
+
+
+def test_a_claim_one_reply_skipped_fails_closed():
+    ev = [{**hit("p1", "t"), "eid": "E1"}]
+    ok = r.Verification(verdicts=[r.Verdict(claim_index=0, rationale="r", answers_question=True, verdict="SUPPORTED")])
+    no = r.Verification(verdicts=[r.Verdict(claim_index=0, rationale="the text says 30-day", answers_question=True,
+                                            verdict="UNSUPPORTED")])
+    (v,) = r.verify(FakeOpenAI({r.Verification: [ok, None]}), "g", [claim("x", "E1")], ev, question="q?")
+    assert v.verdict == "UNSUPPORTED"  # a reply that never judged the claim can't approve it
+    (v,) = r.verify(FakeOpenAI({r.Verification: [no, None]}), "g", [claim("x", "E1")], ev, question="q?")
+    assert v.verdict == "UNSUPPORTED" and v.rationale == "the text says 30-day"  # the real reason survives
 
 
 def test_run_passes_the_question_to_the_verifier(monkeypatch):
@@ -121,7 +154,7 @@ def test_all_supported_first_pass_is_verified():
     oa = FakeOpenAI({
         r.Plan: [r.Plan(sub_questions=["risks"])],
         ask.Answer: [ask.Answer(claims=[claim("privacy risk", "E1")], gaps="")],
-        r.Verification: [verdicts("SUPPORTED")],
+        r.Verification: rounds(verdicts("SUPPORTED")),
     })
     res = run(oa)
     assert res["status"] == "verified"
@@ -136,7 +169,7 @@ def test_injected_unsupported_claim_is_caught_revised_and_logged():
             ask.Answer(claims=[claim("privacy risk", "E1"), claim("banned by the FDA", "E2")], gaps=""),
             ask.Answer(claims=[claim("privacy risk", "E1"), claim("FDA issued guidance", "E2")], gaps=""),
         ],
-        r.Verification: [verdicts("SUPPORTED", "UNSUPPORTED"), verdicts("SUPPORTED", "SUPPORTED")],
+        r.Verification: rounds(verdicts("SUPPORTED", "UNSUPPORTED"), verdicts("SUPPORTED", "SUPPORTED")),
     })
     res = run(oa)
     assert "banned by the FDA" in oa.inputs[ask.Answer][1]  # rejection fed back to synthesizer
@@ -155,7 +188,7 @@ def test_budget_exhausted_never_auto_approves():
     oa = FakeOpenAI({
         r.Plan: [r.Plan(sub_questions=["risks"])],
         ask.Answer: [ask.Answer(claims=[claim("big risk", "E1"), claim("made up", "E1")], gaps="")] * 2,
-        r.Verification: [verdicts("THINLY_SUPPORTED", "UNSUPPORTED")] * 2,
+        r.Verification: rounds(verdicts("THINLY_SUPPORTED", "UNSUPPORTED"), verdicts("THINLY_SUPPORTED", "UNSUPPORTED")),
     })
     res = run(oa, search_fn=search_fn, max_iterations=2)
     assert "big risk" in searches  # thin claim triggered extra research
@@ -223,7 +256,7 @@ def test_empty_answer_mid_loop_keeps_earlier_claims():
     oa = FakeOpenAI({
         r.Plan: [r.Plan(sub_questions=["risks"])],
         ask.Answer: [ask.Answer(claims=[claim("privacy risk", "E1"), claim("made up", "E1")], gaps=""), None, None],
-        r.Verification: [verdicts("SUPPORTED", "UNSUPPORTED")],
+        r.Verification: rounds(verdicts("SUPPORTED", "UNSUPPORTED")),
     })
     res = run(oa)
     assert len(oa.inputs[ask.Answer]) == 3  # NO_ANSWER retried while budget remained
@@ -238,7 +271,7 @@ def test_audit_log_and_feedback_carry_rejected_claim_details():
         ask.Answer: [ask.Answer(claims=[claim('banned "by" FDA', "E2")], gaps=""),
                      ask.Answer(claims=[claim("other", "E2")], gaps=""),
                      ask.Answer(claims=[claim("guidance", "E2")], gaps="")],
-        r.Verification: [verdicts("UNSUPPORTED"), verdicts("UNSUPPORTED"), verdicts("SUPPORTED")],
+        r.Verification: rounds(verdicts("UNSUPPORTED"), verdicts("UNSUPPORTED"), verdicts("SUPPORTED")),
     })
     res = run(oa)
     first = next(e for e in res["log"] if e["step"] == "verify")
@@ -258,7 +291,7 @@ def test_keeps_round_with_most_supported_claims():
         r.Plan: [r.Plan(sub_questions=["risks"])],
         ask.Answer: [ask.Answer(claims=[claim("a", "E1"), claim("b", "E1"), claim("x", "E1")], gaps=""),
                      ask.Answer(claims=[claim("c", "E1"), claim("y", "E1")], gaps="")],
-        r.Verification: [verdicts("SUPPORTED", "SUPPORTED", "UNSUPPORTED"), verdicts("UNSUPPORTED", "UNSUPPORTED")],
+        r.Verification: rounds(verdicts("SUPPORTED", "SUPPORTED", "UNSUPPORTED"), verdicts("UNSUPPORTED", "UNSUPPORTED")),
     })
     res = run(oa, max_iterations=2)
     assert [c["text"] for c in res["claims"]] == ["a", "b"]
@@ -268,7 +301,7 @@ def test_all_invented_citations_are_retried():
     oa = FakeOpenAI({
         r.Plan: [r.Plan(sub_questions=["risks"])],
         ask.Answer: [ask.Answer(claims=[claim("fake", "E99")], gaps=""), ask.Answer(claims=[claim("ok", "E1")], gaps="")],
-        r.Verification: [verdicts("SUPPORTED")],
+        r.Verification: rounds(verdicts("SUPPORTED")),
     })
     res = run(oa)
     assert len(oa.inputs[ask.Answer]) == 2 and [c["text"] for c in res["claims"]] == ["ok"]

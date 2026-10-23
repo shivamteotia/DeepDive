@@ -7,6 +7,7 @@ Each run is saved to data/runs/ as an audit record.
 import argparse
 import json
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -115,16 +116,25 @@ def verify(openai_client, model: str, claims: list[ask.Claim], evidence: list[di
         for i, c in enumerate(claims)
     ]
     payload = {"question": question, "claims": items} if question else items
-    v = ask.parse_llm(openai_client, model, VERIFIER, json.dumps(payload, ensure_ascii=False, indent=1), Verification)
+    body = json.dumps(payload, ensure_ascii=False, indent=1)
+    call = lambda: ask.parse_llm(openai_client, model, VERIFIER, body, Verification)
+    if question:  # two independent replies, the stricter wins: one reply alone flip-flops on "answers the question"
+        with ThreadPoolExecutor(2) as pool:
+            replies = list(pool.map(lambda _: call(), range(2)))
+    else:
+        replies = [call()]
+    covered = [{x.claim_index for x in v.verdicts} if v else set() for v in replies]
     got: dict[int, Verdict] = {}
-    for x in v.verdicts if v else []:
+    for x in (x for v in replies if v for x in v.verdicts):
         if question and not x.answers_question:
             x = Verdict(claim_index=x.claim_index, answers_question=False, verdict="UNSUPPORTED", rationale="does not answer the question: " + x.rationale)
         # Duplicate verdicts for one claim: the most severe wins (fail closed).
         if 0 <= x.claim_index < len(claims) and SEVERITY[x.verdict] >= SEVERITY[got[x.claim_index].verdict if x.claim_index in got else "SUPPORTED"]:
             got[x.claim_index] = x
-    return [got.get(i) or Verdict(claim_index=i, answers_question=True, verdict="UNSUPPORTED", rationale="verifier returned no verdict")
-            for i in range(len(claims))]
+    missing = Verdict(claim_index=0, answers_question=True, verdict="UNSUPPORTED", rationale="verifier returned no verdict")
+    return [got[i] if i in got and (all(i in c for c in covered) or got[i].verdict == "UNSUPPORTED")
+            else missing.model_copy(update={"claim_index": i})  # a claim either reply skipped fails closed,
+            for i in range(len(claims))]  # keeping a real rejection's reason when there is one
 
 
 def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: str, guard_model: str, question: str,
