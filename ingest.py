@@ -8,6 +8,7 @@ Usage: uv run python ingest.py <project_id> <pdf>
 
 import argparse
 import hashlib
+import logging
 import re
 import uuid
 import zlib
@@ -105,6 +106,84 @@ def piece_from_chunk(c, title: str = "") -> chunking.Piece:
                           content_type="table" if any(it.label.value == "table" for it in items) else "text")
 
 
+log = logging.getLogger(__name__)
+
+_BROKEN = re.compile(r"\S*\ufffd\S*")
+_LIGATURES = {"fi", "fl", "ff", "ffi", "ffl"}
+_FOLD = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl",
+                       "ﬅ": "st", "ﬆ": "st"})  # ligature code points only: NFKC would also turn m² into m2
+
+
+def _lost(glyph: str) -> bool:
+    """What Docling's text layer can have lost as one U+FFFD: a ligature or a non-ASCII symbol (+-, >=). Plain ASCII
+    it decodes fine, so a word, a number or "=" in that slot is a wrong match, never a repair."""
+    return glyph in _LIGATURES or (glyph != "" and all(ord(c) > 127 for c in glyph))
+
+
+def repair_glyphs(text: str, reference: str) -> str:
+    """Restore characters Docling's text layer lost as U+FFFD (the "fi"/"fl" ligatures, +-, >=) from `reference`, the
+    same PDF read by pypdfium, which decodes them. Each broken word is placed in the reference by whole-word
+    neighbours (both, then the previous one, then the next one, then its own letters if it has 4 or more). A
+    placement counts only if every match in the paper gives the same glyphs and each one is something Docling
+    could have lost; otherwise the word is left as it is: an unrepaired word is better than invented content."""
+    if "\ufffd" not in text:
+        return text
+    ref = " ".join(reference.split())
+    out, last = [], 0
+    for m in _BROKEN.finditer(text):
+        whole = m.group()
+        word = whole.rstrip(".,;:")  # Docling glues a sentence's full stop onto a table cell; pdfium doesn't
+        tail = whole[len(word):]
+        parts = word.split("\ufffd")
+        core = r"(\S{1,3}?)".join(re.escape(p) for p in parts)
+        b = re.search(r"(?<!\S)(\S+)\s+$", text[:m.start()])
+        a = re.match(r"\s+(\S+)", text[m.end():])
+        before, after = (b.group(1) if b else None), (a.group(1) if a else None)
+        tries = [(before, after)] if before and after else []
+        if "".join(parts):  # a bare symbol has no letters: one neighbour could pick another symbol in the paper
+            tries += ([(before, None)] if before else []) + ([(None, after)] if after else [])
+        if len("".join(parts)) >= 4:  # long enough to place on its own letters
+            tries.append((None, None))
+        fixed = None
+        for prev, nxt in tries:
+            pat = (r"(?<!\S)" + re.escape(prev) + r"\s+" if prev else r"(?<!\S)") + core + \
+                (r"\s+" + re.escape(nxt) + r"(?=[.,;:]*(?:\s|$))" if nxt else r"(?=[.,;:]*(?:\s|$))")
+            found = {tuple(x.translate(_FOLD) for x in (g if isinstance(g, tuple) else (g,)))  # "fi" == U+FB01
+                     for g in re.findall(pat, ref)}
+            glyphs = next(iter(found)) if len(found) == 1 else ()
+            if glyphs and all(_lost(g) for g in glyphs):
+                fixed = "".join(p + g for p, g in zip(parts, (*glyphs, ""))).translate(_FOLD)
+                break
+            if found:  # ambiguous or impossible here: a looser anchor can only be worse
+                break
+        out += [text[last:m.start()], (fixed or word) + tail]
+        last = m.end()
+    return "".join(out + [text[last:]])
+
+
+def _pdfium_text(path: Path) -> str:
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(path))
+    try:  # U+FFFE marks a line-break hyphen in pdfium text: a soft hyphen, dropped
+        return " ".join(doc[i].get_textpage().get_text_range().replace("￾", "") for i in range(len(doc)))
+    finally:
+        doc.close()
+
+
+def repair_pieces(pieces: list[chunking.Piece], path: Path) -> list[chunking.Piece]:
+    """repair_glyphs on every piece that lost characters (a word with U+FFFD is unsearchable), against pypdfium's
+    reading of the same PDF. Best-effort: if pypdfium can't read a PDF Docling could, the text goes in unrepaired."""
+    if not any("�" in p.text for p in pieces):
+        return pieces
+    try:
+        reference = _pdfium_text(path)
+        return [p.model_copy(update={"text": repair_glyphs(p.text, reference)}) for p in pieces]
+    except Exception:
+        log.exception("glyph repair failed for %s; ingesting unrepaired text", path.name)
+        return pieces
+
+
 def parse_pdf(path: Path, filename: str, embed_model: str) -> ParsedDoc:
     """Docling parse + HybridChunker pieces (text without headings), the title and the page count."""
     from docling.chunking import HybridChunker
@@ -116,6 +195,7 @@ def parse_pdf(path: Path, filename: str, embed_model: str) -> ParsedDoc:
                                                       max_tokens=chunking.CHUNK_MAX_TOKENS))
     docling_title = next((t.text for t in doc.texts if t.label.value == "title"), "")
     pieces = [piece_from_chunk(c, docling_title) for c in chunker.chunk(doc)]
+    pieces = repair_pieces(pieces, path)
     return ParsedDoc(pieces, chunking.resolve_title(docling_title, _pdf_meta_title(path), filename), doc.num_pages())
 
 

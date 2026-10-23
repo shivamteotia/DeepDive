@@ -347,6 +347,15 @@ def judge_case(judge, r: dict) -> tuple[dict, dict]:
 
 
 # ---- run ----
+def app_models(s, report: dict | None = None):
+    """The models that made the answers: today's settings for a live run; for --from-report, the ones the report
+    recorded (re-judging saved answers must not credit them to whatever .env says now)."""
+    if report is not None:
+        return report.get("app_models", "unknown (re-scored report without models)")
+    return {"model": s.openai_model, "fast": s.openai_fast_model, "guard": s.openai_guard_model,
+            "embed": s.openai_embed_model}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--baseline", action="store_true", help="write baselines/baseline.json instead of candidate.json")
@@ -362,8 +371,10 @@ def main() -> None:
     from config import Settings
     s = Settings()
 
+    source = None
     if args.from_report:
-        rows = json.loads(args.from_report.read_text(encoding="utf-8"))["cases"]
+        source = json.loads(args.from_report.read_text(encoding="utf-8"))
+        rows = source["cases"]
     else:
         cases = load_golden()
         if args.only:
@@ -402,7 +413,9 @@ def main() -> None:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     report = BASELINES / "runs" / f"{stamp}{'-only' if args.only else ''}.json"
     report.parent.mkdir(parents=True, exist_ok=True)
-    report.write_text(json.dumps({"cases": rows, "judged": judged, "reasons": reasons}, indent=1, ensure_ascii=False,
+    models = app_models(s, source)
+    report.write_text(json.dumps({"cases": rows, "judged": judged, "reasons": reasons, "app_models": models}, indent=1,
+                                 ensure_ascii=False,
                                  default=str), encoding="utf-8")
     if judged and not any(v is not None for sc in judged.values() for v in sc.values()):
         sys.exit(f"every judged metric failed, no snapshot written (report: {report}). "
@@ -416,8 +429,7 @@ def main() -> None:
         golden = json.loads((HERE / "golden.json").read_text(encoding="utf-8"))
         meta = {"judge_model": None if args.no_judge else (s.judge_model or s.openai_fast_model),
                 "golden_version": golden.get("version"), "n_cases": len(rows),
-                "app_models": {"model": s.openai_model, "fast": s.openai_fast_model, "guard": s.openai_guard_model,
-                               "embed": s.openai_embed_model}}
+                "app_models": models}
         snap = snapshot(rows, judged, args.label, meta)
         path = args.out or BASELINES / ("baseline.json" if args.baseline else "candidate.json")
         path.parent.mkdir(parents=True, exist_ok=True)

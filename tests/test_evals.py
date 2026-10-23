@@ -203,3 +203,14 @@ def test_only_correctness_is_told_the_expected_answers_source_papers():
     # (metric_suites/judge_case are not called: importing deepeval loads .env into os.environ, leaking into tests.)
     assert "comes from EA2022.pdf" in ev.correctness_criteria(["EA2022.pdf"])
     assert "comes from" not in ev.correctness_criteria([])
+
+
+def test_a_rescored_snapshot_keeps_the_models_that_made_its_answers():
+    # --from-report re-judges saved answers: the snapshot must name the models that answered, not today's .env
+    # (a re-score after OPENAI_MODEL changed claimed gpt-4o-mini for answers made by gpt-5.4-mini).
+    from types import SimpleNamespace
+    now = SimpleNamespace(openai_model="today", openai_fast_model="f", openai_guard_model="g", openai_embed_model="e")
+    made = {"model": "then", "fast": "f0", "guard": "g0", "embed": "e0"}
+    assert ev.app_models(now) == {"model": "today", "fast": "f", "guard": "g", "embed": "e"}
+    assert ev.app_models(now, {"cases": [], "app_models": made}) == made
+    assert ev.app_models(now, {"cases": []}) == "unknown (re-scored report without models)"

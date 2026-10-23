@@ -413,3 +413,79 @@ def test_new_collection_indexes_the_section_field(monkeypatch):
     monkeypatch.setattr(q, "create_payload_index", lambda coll, field, schema: fields.append(field) or real(coll, field, schema))
     ingest.ensure_collection(q, "c", 3)
     assert "section" in fields
+
+
+def test_repair_glyphs_restores_what_docling_lost_from_the_pdf_text():
+    # Docling's text layer turned the "fi"/"fl" ligatures and some symbols into U+FFFD (CMugisha2022: "extreme
+    # preprocessing �ltering", "�ve models"; Changze2025: "mean�25"); pypdfium reads them correctly.
+    reference = "extreme preprocessing filtering only medical terms. We then used these in five models; age " \
+                "was 63 ± 12 years, mean±25 days, and the workﬂow was classified."
+    broken = "extreme preprocessing �ltering only medical terms. We then used these in �ve models; " \
+             "mean�25 days, and the work�ow was classi�ed."
+    assert ingest.repair_glyphs(broken, reference) == (
+        "extreme preprocessing filtering only medical terms. We then used these in five models; "
+        "mean±25 days, and the workflow was classified.")  # ligatures folded: searchable
+
+
+def test_repair_glyphs_leaves_what_it_cannot_place():
+    assert ingest.repair_glyphs("no match �here at all", "completely different text") == \
+        "no match �here at all"
+    assert ingest.repair_glyphs("clean text", "anything") == "clean text"
+
+
+def test_repair_glyphs_places_table_cells_with_trailing_punctuation():
+    # Docling glues a sentence's full stop onto a table cell: "= 70.8�[62.8,82.4]." vs pdfium "70.8±[62.8,82.4] 54.5"
+    reference = "Age 70.8±[62.8,82.4] 54.5±[39.8,67.2] 16.3"
+    assert ingest.repair_glyphs("n=37 = 70.8�[62.8,82.4]. Age", reference) == "n=37 = 70.8±[62.8,82.4]. Age"
+
+
+def test_repair_glyphs_never_invents_content():
+    # A lost glyph is a ligature (fi/fl/ff/ffi/ffl) or a non-ASCII symbol: Docling decodes plain ASCII fine, so a
+    # word, number or "=" in that slot is a wrong match (code-checker counterexamples).
+    assert ingest.repair_glyphs("the age � years", "the age was 63 years old") == "the age � years"
+    assert ingest.repair_glyphs("p � 0.05 here", "p = 0.05 was used") == "p � 0.05 here"
+
+
+def test_repair_glyphs_needs_an_unambiguous_match():
+    # The same neighbours twice with different symbols: don't guess.
+    ref = "p ≤ 0.05 was used, later p ≥ 0.05 here"
+    assert ingest.repair_glyphs("p � 0.05 here", ref) == "p � 0.05 here"  # one word each side: ambiguous
+
+
+def test_repair_glyphs_anchors_on_whole_words_and_folds_ligatures():
+    # "age" inside "average", "days" inside "daysx": parts of longer words are no anchors
+    assert ingest.repair_glyphs("in average �12 days", "mean age ±12 daysx") == "in average �12 days"
+    assert ingest.repair_glyphs("the work�ow ran", "the workﬂow ran") == "the workflow ran"
+
+
+def test_repair_glyphs_a_bare_symbol_needs_both_neighbours():
+    # "�" alone has no letters of its own: with one neighbour it would grab another symbol elsewhere in the paper.
+    assert ingest.repair_glyphs("the age � years", "the age ±years and the age ≥ 65") == "the age � years"
+    assert ingest.repair_glyphs("aged � 65 years", "patients aged ≥ 65 years") == "aged ≥ 65 years"
+
+
+def test_repair_glyphs_folds_only_ligatures():
+    # NFKC would turn "kg/m²" into "kg/m2": fold the ligature code points (U+FB00-FB06) and nothing else.
+    assert ingest.repair_glyphs("BMI in kg/m� here", "BMI in kg/m² here") == "BMI in kg/m² here"
+    assert ingest.repair_glyphs("an e�cient model", "an eﬃcient model") == "an efficient model"
+
+
+def test_repair_pieces_is_best_effort(monkeypatch):
+    broken, clean = chunking.Piece(text="the classi\ufffdcation step"), chunking.Piece(text="clean")
+
+    def boom(path):
+        raise RuntimeError("pdfium cannot open this file")
+    monkeypatch.setattr(ingest, "_pdfium_text", boom)
+    assert ingest.repair_pieces([broken, clean], Path("x.pdf")) == [broken, clean]  # ingested, just not repaired
+    monkeypatch.setattr(ingest, "_pdfium_text", lambda path: "the classification step")
+    assert [p.text for p in ingest.repair_pieces([broken, clean], Path("x.pdf"))] == ["the classification step",
+                                                                                      "clean"]
+    calls = []
+    monkeypatch.setattr(ingest, "_pdfium_text", lambda path: calls.append(path) or "")
+    ingest.repair_pieces([clean], Path("x.pdf"))
+    assert calls == []  # nothing lost: pypdfium is never opened
+
+
+def test_repair_glyphs_treats_both_spellings_of_a_ligature_as_one():
+    ref = "a classification b and c classiﬁcation d"
+    assert ingest.repair_glyphs("x classi�cation y", ref) == "x classification y"
