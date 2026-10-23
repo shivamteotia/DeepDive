@@ -38,6 +38,11 @@ Section outline (2026-10-20, chunker v3, `sections.py`): one context-model call 
 canonical section per chunk. Run 12 on `<collection>_v3`: recall 1.00 / MRR 0.86, e2e REVIEW (one noisy premise case,
 passes on re-run). Shipped 2026-10-20: `QDRANT_COLLECTION` = the _v3 collection, `--sync-counts` run, run 12 promoted.
 LlamaParse (agentic) tested once as the parser (run 13): recall 0.95 / MRR 0.81, a wrong-paper answer — keep Docling.
+Golden v2 (2026-10-22, `evals/golden.json`, 68 cases on 6 papers) + retrieval gold v3 (40 items). Paper resolver
+(`papers.py`, spec `docs/superpowers/specs/2026-10-22-paper-resolver-design.md`) and the verifier's `answers_question`
+field: abstain 0.59 → 0.75, nothing else regressed. With 6 papers, retrieval is recall 0.88 / MRR 0.65
+(`evaluate.py --resolve`: 0.90 / 0.66). Judge for the v2 comparisons: gpt-4o-mini (Groq's free tier is too slow for
+a full pass); its scores swing a lot on single cases.
 
 **Deferred until needed:** Celery/Redis (use FastAPI `BackgroundTasks`), S3 (local `data/`), MLflow (JSON results), Alembic (db.ADDED_COLUMNS for now).
 

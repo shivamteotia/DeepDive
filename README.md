@@ -1,6 +1,6 @@
 # MaxRIM — Research Intelligence & Management
 
-> **Status (2026-10-20):** Backend, web UI, screening funnel and LangGraph assistant implemented · 480 unit tests passing · eval baseline run 12 (recall@k 1.00, MRR 0.86) · see [§15 Current status](#15-current-status)
+> **Status (2026-10-23):** Backend, web UI, screening funnel and LangGraph assistant implemented · paper resolver + question-aware verifier · 559 unit tests passing · golden v2 (68 cases, 6 papers): abstain 0.59 → 0.75 · see [§15 Current status](#15-current-status)
 
 **MaxRIM** is a proposed AI-assisted research intelligence and management platform designed for healthcare researchers and research teams. It brings project-specific literature, incremental document ingestion, evidence retrieval, and citation-verified report generation into one auditable workflow.
 
@@ -193,9 +193,12 @@ flowchart TD
     GI -->|blocked| B([blocked: refusal])
     GI --> RW[rewrite follow-up<br/>to a standalone question]
     RW --> P[Planner<br/>sub-questions]
-    P --> S[Researcher<br/>project PDFs in Qdrant, hybrid search<br/>or PubMed latest 20, plus optional web]
+    RW --> R{Paper resolver<br/>which papers does it name?<br/>runs alongside the planner}
+    R -->|names a paper the project lacks| N([no paper matching: X])
+    R -->|named papers, or none| S
+    P --> S[Researcher<br/>named papers only, else every paper<br/>hybrid search; or PubMed latest 20, plus optional web]
     S --> A[Synthesizer<br/>claims citing evidence ids]
-    A --> V[Verifier<br/>guard model per claim]
+    A --> V[Verifier<br/>guard model per claim:<br/>supported by its evidence? answers the question?]
     V -->|thin or unsupported, rounds left| S
     V -->|done| GO{output rail}
     GO --> F([verified answer + gaps + sources])
@@ -203,6 +206,23 @@ flowchart TD
 
 PubMed runs search PubMed once per run (a fast-model step turns the question into keywords), frame the task as a
 literature summary, and stop after 2 rounds. Every claim cites PMIDs, pages or URLs that exist in the run's evidence.
+
+**Paper resolver (`papers.py`)** (project-document runs only). Each ready paper gets a card: its title, front matter and
+abstract, read from its first chunks in Qdrant. The main model matches the papers the question names against those
+cards, and the run then follows one of four routes:
+- **One paper named:** only that paper is searched.
+- **A comparison:** each named paper is searched separately.
+- **"Which studies…" questions, or the resolver is unsure:** every paper is searched, as before.
+- **Only papers the project lacks are named:** the run answers "This project has no paper matching: X" and searches
+  nothing. This needs two conditions: no distinctive word of that name appears on any card, and every ready paper
+  has a card.
+
+Narrowing the search needs two resolver replies that agree. Any error falls back to searching every paper.
+Design: `docs/superpowers/specs/2026-10-22-paper-resolver-design.md`.
+
+**Verifier.** Each verdict has an `answers_question` field. A claim that only says the evidence is silent, or that
+reports a different study, cohort, outcome or time window than the question asks about, is rejected, even when
+its passage states it.
 
 The workflow below (5.1 to 5.6) is the original target design; the research loop above implements its core.
 
@@ -530,7 +550,7 @@ uv run python -m evals.run && uv run python -m evals.compare   # end-to-end eval
 
 ## 15. Current status
 
-Updated 2026-10-20 (`main` includes the `screening-funnel` work). Sections 1 to 14 remain the target design; this
+Updated 2026-10-23 (`main` includes the `screening-funnel` work). Sections 1 to 14 remain the target design; this
 section is what is built and measured.
 
 **Implemented**
@@ -538,13 +558,30 @@ section is what is built and measured.
 | Area | What works |
 |---|---|
 | Ingestion | Docling, smart chunking (document type, front/back matter), **section outline** (one LLM call per document: heading tree + canonical section per chunk, chunker v3), OpenAI embeddings + bm25 into Qdrant; hash-idempotent; crash-isolated worker |
-| Retrieval & answers | project-filtered hybrid search; planner / researcher / synthesizer / verifier research runs with cited claims; chat memory with follow-up rewriting; optional web (Firecrawl or Tavily) and **PubMed** evidence |
+| Retrieval & answers | project-filtered hybrid search; planner / researcher / synthesizer / verifier research runs with cited claims; **paper resolver** (search the paper(s) a question names; decline papers the project lacks); verifier rejects claims that don't answer the question; chat memory with follow-up rewriting; optional web (Firecrawl or Tavily) and **PubMed** evidence |
 | Screening funnel | import PubMed `.nbib`, Europe PMC/BibTeX `.bib`, RIS, CSV, Excel (Scopus, WoS, Embase, Cochrane); deduplication with a possible-duplicates review; versioned criteria; 20-paper test; AI screening with verified quotes (never excludes without evidence); blind labelling; free full text (Europe PMC, Unpaywall) and upload matching |
 | Extraction & outputs | extraction columns with per-paper quotes, from full text when ingested; free filters and counts; CSV / Excel export |
 | Assistant | LangGraph screening assistant with 15 tools (§5.0); paid steps only after Confirm |
 | Guardrails | input and output self-check rails on research questions and the assistant (fail open); untrusted text always quoted as data; server-side project filter on every query |
 
-**Unit tests:** `uv run pytest -m "not live"`: **480 passed** (4 live tests deselected), ruff clean.
+**Unit tests:** `uv run pytest -m "not live"`: **559 passed** (4 live tests deselected), ruff clean.
+
+**Golden v2** (2026-10-22/23, `evals.run`, 68 cases on 6 papers, including cross-paper, wrong-paper, decline,
+false-premise and injection cases; judge gpt-4o-mini, so the judged scores are **not** comparable with the run 12
+tables below):
+
+| Metric | Before | Verifier sees the question + paper resolver |
+|---|---|---|
+| det.abstain (declines when it should) | 0.59 | **0.75** |
+| det.fact / det.evidence_hit | 0.89 / 0.93 | 0.91 / 0.95 |
+| attribution, isolation, forbidden content | 1.00 | 1.00 |
+| correctness / abstention (judge) | 0.68 / 0.69 | 0.72 / 0.76 |
+| p50 / p95 latency | 12.1 / 18.1 s | 15.1 / 24.1 s (before running the planner and resolver in parallel) |
+
+On run 12's own 26 cases the deterministic scores are as good or better: abstain 0.70 → 0.78; fact, evidence,
+isolation 1.00. Retrieval alone (`evaluate.py`, gold v3, 40 items): recall@6 0.88, MRR 0.65; through the
+resolver as the app searches (`--resolve`), 0.90 / 0.66. Verifier: catch rate 1.00, true-claim rejection 0.00.
+The drop from run 12's 1.00 / 0.86 comes from four more papers competing, not a code change.
 
 **Retrieval eval** (`evaluate.py`, gold.json v1, 20 questions, k=6, hybrid search):
 
@@ -576,8 +613,15 @@ with quotes; 13 free PDFs found (Europe PMC + Unpaywall).
 **PubMed summary (live):** "machine learning for early ICU mortality prediction": 20 latest papers (2026), 37
 findings, 36 supported and 1 thinly supported by the verifier, each citing its PMID.
 
-**Known limits / next:** cross-chat memory for the assistant; a screening recall gate (needs about 150 blind labels);
-PubMed results are not yet importable into the project; PRISMA counts and exclusion reasons in exports.
+**Known limits / next:**
+- Retrieval ranking within a paper: the right passage often lands at rank 2–6. Next: native BM25 and stemming.
+- Two isolation cases (i04, i05) still rely on the verifier rather than the resolver.
+- gpt-4o-mini judge noise: premise and scope have only 4–5 cases each. Groq's free tier is too slow for a full
+  judge pass.
+- Cross-chat memory for the assistant.
+- A screening recall gate (needs about 150 blind labels).
+- PubMed results are not yet importable into the project.
+- PRISMA counts and exclusion reasons in exports.
 
 ---
 
