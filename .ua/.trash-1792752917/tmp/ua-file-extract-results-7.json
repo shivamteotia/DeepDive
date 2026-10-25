@@ -1,0 +1,339 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 5,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 5,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 5
+    }
+  },
+  "results": [
+    {
+      "path": "docs/superpowers/plans/2026-10-15-api.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1598,
+      "nonEmptyLines": 1200,
+      "sections": [
+        {
+          "heading": "MaxRIM Step 5 API Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Global Constraints",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Review Focus",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "File Structure",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "Task 1: Foundation — dependencies, config, Postgres, models",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "Task 2: Auth — hashing, tokens, app skeleton, register/login",
+          "level": 3,
+          "line": 250
+        },
+        {
+          "heading": "Task 3: Projects and ownership",
+          "level": 3,
+          "line": 614
+        },
+        {
+          "heading": "Task 4: Documents — upload, crash-isolated ingestion, restart recovery",
+          "level": 3,
+          "line": 732
+        },
+        {
+          "heading": "Task 5: Research runs",
+          "level": 3,
+          "line": 1214
+        },
+        {
+          "heading": "Task 6: Live acceptance test, docs, review",
+          "level": 3,
+          "line": 1488
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 605,
+      "nonEmptyLines": 451,
+      "sections": [
+        {
+          "heading": "Hybrid Keyword + Vector Retrieval Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Global Constraints",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Review Focus",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Task 1: `sparse_vector`",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "Task 2: Collection schema + ingest writes both vectors",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "Task 3: Migration (`ingest.py --migrate-to`)",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "Task 4: Hybrid search in `ask.search`",
+          "level": 3,
+          "line": 347
+        },
+        {
+          "heading": "Task 5: `HYBRID_SEARCH` setting wired into every caller",
+          "level": 3,
+          "line": 480
+        },
+        {
+          "heading": "Task 6: Live migration and evaluation (costs money — confirm with the user before starting)",
+          "level": 3,
+          "line": 560
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-16-smart-chunking.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1139,
+      "nonEmptyLines": 872,
+      "sections": [
+        {
+          "heading": "Smart Parsing and Chunking Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Global Constraints",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Review Focus",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Task 1: `chunking.py` — pieces and document-type classification",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "Task 2: `regroup` — type-specific merging, dropping, tiny merges, size split",
+          "level": 3,
+          "line": 293
+        },
+        {
+          "heading": "Task 3: labels, titles, contextual retrieval, `build_chunks`",
+          "level": 3,
+          "line": 484
+        },
+        {
+          "heading": "Task 4: wire smart chunking into ingest, settings, API and Postgres",
+          "level": 3,
+          "line": 638
+        },
+        {
+          "heading": "Task 5: `ingest.py --reindex-to` (re-chunk every ready document once per file)",
+          "level": 3,
+          "line": 920
+        },
+        {
+          "heading": "Task 6: live re-index, context-model spot check, evals (costs money — confirm with the user first)",
+          "level": 3,
+          "line": 1084
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-19-screening-funnel.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 219,
+      "nonEmptyLines": 161,
+      "sections": [
+        {
+          "heading": "Screening Funnel Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Global Constraints",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Review Focus",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Task 1: `references.py` — parse `.nbib` and `.bib`, normalise",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "Task 2: `dedup.py` — group records into papers",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "Task 3: tables, import API and paper listing",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "Task 4: `screening.py` — criteria, AI verdicts, decision rule",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "Task 5: criteria versions, test run, screen-all job, decisions API",
+          "level": 3,
+          "line": 164
+        },
+        {
+          "heading": "Task 6: `fulltext.py` — open-access fetch and upload matching",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "Task 7: `agent.py` — chat agent with tools",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "Task 8: UI — chat with confirm cards, table, review queue, blind mode",
+          "level": 3,
+          "line": 194
+        },
+        {
+          "heading": "Task 9: screening eval and the live check (paid — confirm with the user first)",
+          "level": 3,
+          "line": 201
+        },
+        {
+          "heading": "Task 10: extracted columns + filters (spec addendum 2026-10-20)",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "Task 11: extract_column (spec addendum \"extract_column\")",
+          "level": 3,
+          "line": 215
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-19-section-outline.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 195,
+      "nonEmptyLines": 146,
+      "sections": [
+        {
+          "heading": "Section Outline Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Global Constraints",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Review Focus",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Task 1: `sections.py` — collect, outline, repair, apply",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "Task 2: wire the outline into chunking and ingest",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "Task 3: re-chunk and evaluate (paid — confirm with the user first)",
+          "level": 3,
+          "line": 190
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    }
+  ]
+}

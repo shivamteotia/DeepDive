@@ -1,0 +1,991 @@
+{
+ "nodes": [
+  {
+   "id": "file:tests/test_api_auth.py",
+   "type": "file",
+   "name": "test_api_auth.py",
+   "filePath": "tests/test_api_auth.py",
+   "summary": "API tests for health, registration, login, token validation and the JWT secret length guard.",
+   "tags": [
+    "test",
+    "authentication",
+    "api",
+    "security"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_auth.py:test_bad_tokens_get_401",
+   "type": "function",
+   "name": "test_bad_tokens_get_401",
+   "filePath": "tests/test_api_auth.py",
+   "lineRange": [
+    37,
+    52
+   ],
+   "summary": "Tests that bad tokens get 401.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tests/test_api_concurrency.py",
+   "type": "file",
+   "name": "test_api_concurrency.py",
+   "filePath": "tests/test_api_concurrency.py",
+   "summary": "API test proving uploads queue on the ingest executor without blocking other requests.",
+   "tags": [
+    "test",
+    "concurrency",
+    "api",
+    "background-jobs"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_concurrency.py:test_uploads_queue_without_blocking_requests",
+   "type": "function",
+   "name": "test_uploads_queue_without_blocking_requests",
+   "filePath": "tests/test_api_concurrency.py",
+   "lineRange": [
+    24,
+    52
+   ],
+   "summary": "Tests that uploads queue without blocking requests.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tests/test_api_conversations.py",
+   "type": "file",
+   "name": "test_api_conversations.py",
+   "filePath": "tests/test_api_conversations.py",
+   "summary": "API tests for conversations: CRUD, follow-up rewriting and history, ownership scoping, opt-in web search, web-only chats and UI serving.",
+   "tags": [
+    "test",
+    "api",
+    "conversations",
+    "web-search"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:fake_research",
+   "type": "function",
+   "name": "fake_research",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    15,
+    31
+   ],
+   "summary": "Test helper: fake research.",
+   "tags": [
+    "test",
+    "pytest",
+    "fixture"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:test_conversation_crud_and_title_from_first_question",
+   "type": "function",
+   "name": "test_conversation_crud_and_title_from_first_question",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    47,
+    59
+   ],
+   "summary": "Tests that conversation crud and title from first question.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:test_followup_uses_earlier_turns_and_stores_standalone_question",
+   "type": "function",
+   "name": "test_followup_uses_earlier_turns_and_stores_standalone_question",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    62,
+    75
+   ],
+   "summary": "Tests that followup uses earlier turns and stores standalone question.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:test_web_hits_join_the_evidence_when_enabled",
+   "type": "function",
+   "name": "test_web_hits_join_the_evidence_when_enabled",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    103,
+    126
+   ],
+   "summary": "Tests that web hits join the evidence when enabled.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:test_followup_waits_for_the_running_turn",
+   "type": "function",
+   "name": "test_followup_waits_for_the_running_turn",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    140,
+    150
+   ],
+   "summary": "Tests that followup waits for the running turn.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:test_history_includes_a_turn_with_the_same_timestamp",
+   "type": "function",
+   "name": "test_history_includes_a_turn_with_the_same_timestamp",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    153,
+    166
+   ],
+   "summary": "Tests that history includes a turn with the same timestamp.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:web_api",
+   "type": "function",
+   "name": "web_api",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    170,
+    185
+   ],
+   "summary": "Test helper: web api.",
+   "tags": [
+    "test",
+    "pytest",
+    "fixture"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_conversations.py:test_papers_uploaded_mid_chat_are_searched_by_later_turns",
+   "type": "function",
+   "name": "test_papers_uploaded_mid_chat_are_searched_by_later_turns",
+   "filePath": "tests/test_api_conversations.py",
+   "lineRange": [
+    208,
+    217
+   ],
+   "summary": "Tests that papers uploaded mid chat are searched by later turns.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tests/test_api_documents.py",
+   "type": "file",
+   "name": "test_api_documents.py",
+   "filePath": "tests/test_api_documents.py",
+   "summary": "API tests for document upload: indexing to ready, dedup, per-project documents, redacted failures, restart recovery, input validation and privacy.",
+   "tags": [
+    "test",
+    "api",
+    "documents",
+    "ingestion"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tests/test_api_documents.py:test_upload_indexes_and_reports_ready",
+   "type": "function",
+   "name": "test_upload_indexes_and_reports_ready",
+   "filePath": "tests/test_api_documents.py",
+   "lineRange": [
+    23,
+    33
+   ],
+   "summary": "Tests that upload indexes and reports ready.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_documents.py:test_failed_ingest_is_recorded_redacted_and_retryable",
+   "type": "function",
+   "name": "test_failed_ingest_is_recorded_redacted_and_retryable",
+   "filePath": "tests/test_api_documents.py",
+   "lineRange": [
+    51,
+    62
+   ],
+   "summary": "Tests that failed ingest is recorded redacted and retryable.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_documents.py:test_restart_mid_processing_then_reupload_recovers",
+   "type": "function",
+   "name": "test_restart_mid_processing_then_reupload_recovers",
+   "filePath": "tests/test_api_documents.py",
+   "lineRange": [
+    65,
+    75
+   ],
+   "summary": "Tests that restart mid processing then reupload recovers.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tests/test_api_research.py",
+   "type": "file",
+   "name": "test_api_research.py",
+   "filePath": "tests/test_api_research.py",
+   "summary": "API tests for research runs: ready-document requirement, project-scoped search, hybrid search, PubMed runs and the paper resolver routing and refusals.",
+   "tags": [
+    "test",
+    "api",
+    "research",
+    "project-isolation"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tests/test_api_research.py:seed_chunks",
+   "type": "function",
+   "name": "seed_chunks",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    25,
+    34
+   ],
+   "summary": "Test helper: seed chunks.",
+   "tags": [
+    "test",
+    "pytest",
+    "fixture"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:fake_research",
+   "type": "function",
+   "name": "fake_research",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    38,
+    55
+   ],
+   "summary": "Test helper: fake research.",
+   "tags": [
+    "test",
+    "pytest",
+    "fixture"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_run_completes_only_searches_ready_docs_of_its_project",
+   "type": "function",
+   "name": "test_run_completes_only_searches_ready_docs_of_its_project",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    67,
+    85
+   ],
+   "summary": "Tests that run completes only searches ready docs of its project.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_api_research_uses_hybrid_search_when_enabled",
+   "type": "function",
+   "name": "test_api_research_uses_hybrid_search_when_enabled",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    117,
+    142
+   ],
+   "summary": "Tests that api research uses hybrid search when enabled.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_a_pubmed_run_needs_no_papers_and_searches_pubmed",
+   "type": "function",
+   "name": "test_a_pubmed_run_needs_no_papers_and_searches_pubmed",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    145,
+    162
+   ],
+   "summary": "Tests that a pubmed run needs no papers and searches pubmed.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_a_pubmed_run_asks_for_a_literature_summary",
+   "type": "function",
+   "name": "test_a_pubmed_run_asks_for_a_literature_summary",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    165,
+    175
+   ],
+   "summary": "Tests that a pubmed run asks for a literature summary.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_a_pubmed_run_rejects_web_too_and_reports_pubmed_failures",
+   "type": "function",
+   "name": "test_a_pubmed_run_rejects_web_too_and_reports_pubmed_failures",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    178,
+    192
+   ],
+   "summary": "Tests that a pubmed run rejects web too and reports pubmed failures.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:stub_resolver",
+   "type": "function",
+   "name": "stub_resolver",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    206,
+    215
+   ],
+   "summary": "Test helper: stub resolver.",
+   "tags": [
+    "test",
+    "pytest",
+    "fixture"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_a_named_paper_is_the_only_one_searched",
+   "type": "function",
+   "name": "test_a_named_paper_is_the_only_one_searched",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    225,
+    237
+   ],
+   "summary": "Tests that a named paper is the only one searched.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_a_resolver_failure_searches_every_paper",
+   "type": "function",
+   "name": "test_a_resolver_failure_searches_every_paper",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    281,
+    290
+   ],
+   "summary": "Tests that a resolver failure searches every paper.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_api_research.py:test_the_plan_is_made_while_papers_are_resolved",
+   "type": "function",
+   "name": "test_the_plan_is_made_while_papers_are_resolved",
+   "filePath": "tests/test_api_research.py",
+   "lineRange": [
+    303,
+    328
+   ],
+   "summary": "Tests that the plan is made while papers are resolved.",
+   "tags": [
+    "test",
+    "pytest",
+    "api-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tests/test_auth.py",
+   "type": "file",
+   "name": "test_auth.py",
+   "filePath": "tests/test_auth.py",
+   "summary": "Unit tests for scrypt password hashing and JWT token roundtrip and rejection.",
+   "tags": [
+    "test",
+    "authentication",
+    "security",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_auth.py:test_token_roundtrip_and_rejections",
+   "type": "function",
+   "name": "test_token_roundtrip_and_rejections",
+   "filePath": "tests/test_auth.py",
+   "lineRange": [
+    22,
+    31
+   ],
+   "summary": "Tests that token roundtrip and rejections.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:tests/test_api_auth.py",
+   "target": "function:tests/test_api_auth.py:test_bad_tokens_get_401",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_auth.py",
+   "target": "function:tests/test_api_auth.py:test_bad_tokens_get_401",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_auth.py",
+   "target": "file:app.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_auth.py",
+   "target": "file:tests/conftest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_concurrency.py",
+   "target": "function:tests/test_api_concurrency.py:test_uploads_queue_without_blocking_requests",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_concurrency.py",
+   "target": "function:tests/test_api_concurrency.py:test_uploads_queue_without_blocking_requests",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_concurrency.py",
+   "target": "file:app.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_concurrency.py",
+   "target": "file:tests/conftest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:fake_research",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:fake_research",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_conversation_crud_and_title_from_first_question",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_conversation_crud_and_title_from_first_question",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_followup_uses_earlier_turns_and_stores_standalone_question",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_followup_uses_earlier_turns_and_stores_standalone_question",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_web_hits_join_the_evidence_when_enabled",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_web_hits_join_the_evidence_when_enabled",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_followup_waits_for_the_running_turn",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_followup_waits_for_the_running_turn",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_history_includes_a_turn_with_the_same_timestamp",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_history_includes_a_turn_with_the_same_timestamp",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:web_api",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:web_api",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_papers_uploaded_mid_chat_are_searched_by_later_turns",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "function:tests/test_api_conversations.py:test_papers_uploaded_mid_chat_are_searched_by_later_turns",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "file:app.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "file:jobs.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "file:tests/conftest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_conversations.py",
+   "target": "file:tests/test_api_research.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "function:tests/test_api_documents.py:test_upload_indexes_and_reports_ready",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "function:tests/test_api_documents.py:test_upload_indexes_and_reports_ready",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "function:tests/test_api_documents.py:test_failed_ingest_is_recorded_redacted_and_retryable",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "function:tests/test_api_documents.py:test_failed_ingest_is_recorded_redacted_and_retryable",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "function:tests/test_api_documents.py:test_restart_mid_processing_then_reupload_recovers",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "function:tests/test_api_documents.py:test_restart_mid_processing_then_reupload_recovers",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "file:app.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_documents.py",
+   "target": "file:jobs.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:seed_chunks",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:seed_chunks",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:fake_research",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:fake_research",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_run_completes_only_searches_ready_docs_of_its_project",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_run_completes_only_searches_ready_docs_of_its_project",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_api_research_uses_hybrid_search_when_enabled",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_api_research_uses_hybrid_search_when_enabled",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_pubmed_run_needs_no_papers_and_searches_pubmed",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_pubmed_run_needs_no_papers_and_searches_pubmed",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_pubmed_run_asks_for_a_literature_summary",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_pubmed_run_asks_for_a_literature_summary",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_pubmed_run_rejects_web_too_and_reports_pubmed_failures",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_pubmed_run_rejects_web_too_and_reports_pubmed_failures",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:stub_resolver",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:stub_resolver",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_named_paper_is_the_only_one_searched",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_named_paper_is_the_only_one_searched",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_resolver_failure_searches_every_paper",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_a_resolver_failure_searches_every_paper",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_the_plan_is_made_while_papers_are_resolved",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "function:tests/test_api_research.py:test_the_plan_is_made_while_papers_are_resolved",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "file:app.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "file:ask.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "file:ingest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "file:jobs.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_research.py",
+   "target": "file:tests/conftest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_auth.py",
+   "target": "function:tests/test_auth.py:test_token_roundtrip_and_rejections",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_auth.py",
+   "target": "function:tests/test_auth.py:test_token_roundtrip_and_rejections",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_auth.py",
+   "target": "file:auth.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  }
+ ]
+}

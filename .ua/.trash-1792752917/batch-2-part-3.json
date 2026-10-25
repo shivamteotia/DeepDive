@@ -1,0 +1,507 @@
+{
+ "nodes": [
+  {
+   "id": "file:tests/test_jobs.py",
+   "type": "file",
+   "name": "test_jobs.py",
+   "filePath": "tests/test_jobs.py",
+   "summary": "Unit tests for jobs: ingest runner crash/timeout/shutdown handling, interrupted-work recovery, document claiming and error redaction.",
+   "tags": [
+    "test",
+    "background-jobs",
+    "multiprocessing",
+    "unit-test"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tests/test_jobs.py:add_doc",
+   "type": "function",
+   "name": "add_doc",
+   "filePath": "tests/test_jobs.py",
+   "lineRange": [
+    35,
+    48
+   ],
+   "summary": "Test helper: add doc.",
+   "tags": [
+    "test",
+    "pytest",
+    "fixture"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_jobs.py:test_recover_interrupted_fails_only_unfinished_work",
+   "type": "function",
+   "name": "test_recover_interrupted_fails_only_unfinished_work",
+   "filePath": "tests/test_jobs.py",
+   "lineRange": [
+    51,
+    62
+   ],
+   "summary": "Tests that recover interrupted fails only unfinished work.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_jobs.py:test_ingest_document_records_success_and_failure",
+   "type": "function",
+   "name": "test_ingest_document_records_success_and_failure",
+   "filePath": "tests/test_jobs.py",
+   "lineRange": [
+    73,
+    89
+   ],
+   "summary": "Tests that ingest document records success and failure.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_jobs.py:test_shutdown_kills_running_child_and_refuses_new_work",
+   "type": "function",
+   "name": "test_shutdown_kills_running_child_and_refuses_new_work",
+   "filePath": "tests/test_jobs.py",
+   "lineRange": [
+    124,
+    145
+   ],
+   "summary": "Tests that shutdown kills running child and refuses new work.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tests/test_pubmed.py",
+   "type": "file",
+   "name": "test_pubmed.py",
+   "filePath": "tests/test_pubmed.py",
+   "summary": "Unit tests for the PubMed client using a mocked HTTP transport: evidence shaping, failures, keyword queries and API key handling.",
+   "tags": [
+    "test",
+    "pubmed",
+    "mocking",
+    "unit-test"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tests/test_pubmed.py:test_latest_papers_become_cited_evidence",
+   "type": "function",
+   "name": "test_latest_papers_become_cited_evidence",
+   "filePath": "tests/test_pubmed.py",
+   "lineRange": [
+    30,
+    41
+   ],
+   "summary": "Tests that latest papers become cited evidence.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_pubmed.py:test_a_question_becomes_a_keyword_query",
+   "type": "function",
+   "name": "test_a_question_becomes_a_keyword_query",
+   "filePath": "tests/test_pubmed.py",
+   "lineRange": [
+    60,
+    70
+   ],
+   "summary": "Tests that a question becomes a keyword query.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tests/test_web.py",
+   "type": "file",
+   "name": "test_web.py",
+   "filePath": "tests/test_web.py",
+   "summary": "Unit tests for Tavily and Firecrawl web search shaping, failure fallbacks and searcher selection.",
+   "tags": [
+    "test",
+    "web-search",
+    "mocking",
+    "unit-test"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tests/test_web.py:test_results_become_project_scoped_web_evidence",
+   "type": "function",
+   "name": "test_results_become_project_scoped_web_evidence",
+   "filePath": "tests/test_web.py",
+   "lineRange": [
+    13,
+    25
+   ],
+   "summary": "Tests that results become project scoped web evidence.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tests/test_web.py:test_firecrawl_results_become_the_same_web_evidence",
+   "type": "function",
+   "name": "test_firecrawl_results_become_the_same_web_evidence",
+   "filePath": "tests/test_web.py",
+   "lineRange": [
+    49,
+    66
+   ],
+   "summary": "Tests that firecrawl results become the same web evidence.",
+   "tags": [
+    "test",
+    "pytest",
+    "unit-test"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:web.py",
+   "type": "file",
+   "name": "web.py",
+   "filePath": "web.py",
+   "summary": "Web search via Firecrawl (preferred) or Tavily, shaping results as project-scoped untrusted web evidence and selecting the configured searcher.",
+   "tags": [
+    "service",
+    "external-api",
+    "web-search",
+    "evidence"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:web.py:_hit",
+   "type": "function",
+   "name": "_hit",
+   "filePath": "web.py",
+   "lineRange": [
+    15,
+    18
+   ],
+   "summary": "Builds one project-scoped web evidence hit.",
+   "tags": [
+    "service",
+    "external-api",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:web.py:_post",
+   "type": "function",
+   "name": "_post",
+   "filePath": "web.py",
+   "lineRange": [
+    21,
+    30
+   ],
+   "summary": "POSTs to a search API, returning parsed JSON or None on failure.",
+   "tags": [
+    "service",
+    "external-api",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:web.py:search",
+   "type": "function",
+   "name": "search",
+   "filePath": "web.py",
+   "lineRange": [
+    33,
+    52
+   ],
+   "summary": "Searches Tavily and returns web evidence hits.",
+   "tags": [
+    "service",
+    "external-api",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:web.py:firecrawl",
+   "type": "function",
+   "name": "firecrawl",
+   "filePath": "web.py",
+   "lineRange": [
+    55,
+    73
+   ],
+   "summary": "Searches (and optionally scrapes) via Firecrawl and returns web evidence hits.",
+   "tags": [
+    "service",
+    "external-api",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:web.py:searcher",
+   "type": "function",
+   "name": "searcher",
+   "filePath": "web.py",
+   "lineRange": [
+    76,
+    82
+   ],
+   "summary": "Selects Firecrawl, Tavily or no web searcher based on settings.",
+   "tags": [
+    "service",
+    "external-api",
+    "function"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:add_doc",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:add_doc",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:test_recover_interrupted_fails_only_unfinished_work",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:test_recover_interrupted_fails_only_unfinished_work",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:test_ingest_document_records_success_and_failure",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:test_ingest_document_records_success_and_failure",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:test_shutdown_kills_running_child_and_refuses_new_work",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "function:tests/test_jobs.py:test_shutdown_kills_running_child_and_refuses_new_work",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "file:jobs.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_jobs.py",
+   "target": "file:tests/conftest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_pubmed.py",
+   "target": "function:tests/test_pubmed.py:test_latest_papers_become_cited_evidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_pubmed.py",
+   "target": "function:tests/test_pubmed.py:test_latest_papers_become_cited_evidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_pubmed.py",
+   "target": "function:tests/test_pubmed.py:test_a_question_becomes_a_keyword_query",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_pubmed.py",
+   "target": "function:tests/test_pubmed.py:test_a_question_becomes_a_keyword_query",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_pubmed.py",
+   "target": "file:pubmed.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_web.py",
+   "target": "function:tests/test_web.py:test_results_become_project_scoped_web_evidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_web.py",
+   "target": "function:tests/test_web.py:test_results_become_project_scoped_web_evidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_web.py",
+   "target": "function:tests/test_web.py:test_firecrawl_results_become_the_same_web_evidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_web.py",
+   "target": "function:tests/test_web.py:test_firecrawl_results_become_the_same_web_evidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tests/test_web.py",
+   "target": "file:web.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:_hit",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:_hit",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:_post",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:_post",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:search",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:search",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:firecrawl",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:firecrawl",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:searcher",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:web.py",
+   "target": "function:web.py:searcher",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:web.py",
+   "target": "file:tests/test_web.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

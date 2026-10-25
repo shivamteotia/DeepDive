@@ -1,0 +1,171 @@
+[
+  {
+    "id": "layer:api",
+    "name": "API & Background Jobs",
+    "description": "FastAPI app factory with JWT/scrypt auth and the crash-isolated ingest job runner that wraps ingestion, research, chat and screening functions.",
+    "nodeIds": [
+      "file:app.py",
+      "file:auth.py",
+      "file:jobs.py"
+    ]
+  },
+  {
+    "id": "layer:ui",
+    "name": "Web UI",
+    "description": "Vanilla-JS single-page app served at / for projects, PDF upload, chat with cited research runs, and the screening funnel views.",
+    "nodeIds": [
+      "file:static/app.js",
+      "file:static/index.html",
+      "file:static/screening.js",
+      "file:static/styles.css"
+    ]
+  },
+  {
+    "id": "layer:retrieval",
+    "name": "Ingestion & Retrieval",
+    "description": "Docling PDF parsing, smart chunking and section outlines, embedding plus bm25 upsert into Qdrant, project-filtered hybrid search and the paper resolver.",
+    "nodeIds": [
+      "file:ask.py",
+      "file:chunking.py",
+      "file:ingest.py",
+      "file:papers.py",
+      "file:sections.py"
+    ]
+  },
+  {
+    "id": "layer:research",
+    "name": "Research & Agent",
+    "description": "Verified planner/researcher/synthesizer/verifier loop, LangGraph screening assistant, LLM guardrails, and PubMed / web evidence sources.",
+    "nodeIds": [
+      "file:agent.py",
+      "file:rails.py",
+      "file:pubmed.py",
+      "file:web.py",
+      "file:research.py"
+    ]
+  },
+  {
+    "id": "layer:screening",
+    "name": "Systematic Review Funnel",
+    "description": "Reference parsing, union-find dedup, LLM title/abstract screening, open-access full-text retrieval, data extraction, the funnel DB service, and CSV/XLSX/Word exports.",
+    "nodeIds": [
+      "file:answers.py",
+      "file:outputs.py",
+      "file:dedup.py",
+      "file:extraction.py",
+      "file:fulltext.py",
+      "file:funnel.py",
+      "file:references.py",
+      "file:screening.py"
+    ]
+  },
+  {
+    "id": "layer:data",
+    "name": "Data & Configuration",
+    "description": "SQLAlchemy ORM schema for users, projects, documents and funnel records, the single pydantic-settings Settings class, and project/tool configuration.",
+    "nodeIds": [
+      "file:db.py",
+      "file:config.py",
+      "config:pyproject.toml",
+      "config:.ua/config.json"
+    ]
+  },
+  {
+    "id": "layer:evaluation",
+    "name": "Evaluation Harness",
+    "description": "Retrieval/verifier metrics (evaluate.py), dedup and screening evals, the end-to-end API eval with golden sets, baselines, regression gate and noise measurement.",
+    "nodeIds": [
+      "file:evaluate_dedup.py",
+      "file:evaluate_screening.py",
+      "file:evaluate.py",
+      "file:evals/__init__.py",
+      "file:evals/compare.py",
+      "file:evals/metrics.py",
+      "file:evals/spread.py",
+      "config:evals/agent_golden.json",
+      "config:evals/golden.json",
+      "config:evals/golden_v1.json",
+      "document:evals/golden_v2_review.md",
+      "document:evals/baselines/RESULTS.md",
+      "config:evals/baselines/baseline.json",
+      "config:evals/baselines/candidate.json",
+      "file:evals/agent_run.py",
+      "file:evals/check_golden.py",
+      "file:evals/run.py",
+      "config:eval/gold.json"
+    ]
+  },
+  {
+    "id": "layer:test",
+    "name": "Test Suite",
+    "description": "Pytest unit and API tests with mocked OpenAI/Qdrant, covering project isolation, idempotency, screening, agents and eval tooling, plus paid live acceptance tests.",
+    "nodeIds": [
+      "file:tests/test_agent.py",
+      "file:tests/test_answers.py",
+      "file:tests/test_api_extraction.py",
+      "file:tests/test_api_references.py",
+      "file:tests/test_api_screening.py",
+      "file:tests/test_carry.py",
+      "file:tests/test_db.py",
+      "file:tests/test_filters.py",
+      "file:tests/test_fulltext.py",
+      "file:tests/test_memory.py",
+      "file:tests/test_outputs.py",
+      "file:tests/test_rails.py",
+      "file:tests/conftest.py",
+      "file:tests/test_api_auth.py",
+      "file:tests/test_api_concurrency.py",
+      "file:tests/test_api_conversations.py",
+      "file:tests/test_api_documents.py",
+      "file:tests/test_api_research.py",
+      "file:tests/test_auth.py",
+      "file:tests/test_jobs.py",
+      "file:tests/test_pubmed.py",
+      "file:tests/test_web.py",
+      "file:tests/test_dedup.py",
+      "file:tests/test_evaluate_screening.py",
+      "file:tests/test_extraction.py",
+      "file:tests/test_label_sample.py",
+      "file:tests/test_references.py",
+      "file:tests/test_references_tabular.py",
+      "file:tests/test_screening.py",
+      "file:tests/test_ask.py",
+      "file:tests/test_chunking.py",
+      "file:tests/test_evaluate.py",
+      "file:tests/test_ingest.py",
+      "file:tests/test_papers.py",
+      "file:tests/test_research.py",
+      "file:tests/test_sections.py",
+      "file:tests/test_agent_eval.py",
+      "file:tests/test_check_golden.py",
+      "file:tests/test_compare.py",
+      "file:tests/test_evals.py",
+      "file:tests/test_metric_registry.py",
+      "file:tests/test_api_live.py",
+      "file:tests/test_api_projects.py"
+    ]
+  },
+  {
+    "id": "layer:documentation",
+    "name": "Documentation",
+    "description": "Project README and design docs, the agent build guide in CLAUDE.md, and dated superpowers design specs and implementation plans.",
+    "nodeIds": [
+      "document:CLAUDE.md",
+      "document:README.md",
+      "document:README_Evindra_AI.md",
+      "document:docs/superpowers/plans/2026-10-15-api.md",
+      "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+      "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+      "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+      "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+      "document:docs/superpowers/specs/2026-10-15-api-design.md",
+      "document:docs/superpowers/specs/2026-10-15-eval-harness-design.md",
+      "document:docs/superpowers/specs/2026-10-15-frontend-chat-web-design.md",
+      "document:docs/superpowers/specs/2026-10-16-hybrid-retrieval-design.md",
+      "document:docs/superpowers/specs/2026-10-16-smart-chunking-design.md",
+      "document:docs/superpowers/specs/2026-10-19-screening-funnel-design.md",
+      "document:docs/superpowers/specs/2026-10-19-section-outline-design.md",
+      "document:docs/superpowers/specs/2026-10-22-paper-resolver-design.md"
+    ]
+  }
+]

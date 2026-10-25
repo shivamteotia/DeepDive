@@ -1,0 +1,119 @@
+{
+ "nodes": [
+  {
+   "id": "document:evals/baselines/RESULTS.md",
+   "type": "document",
+   "name": "RESULTS.md",
+   "filePath": "evals/baselines/RESULTS.md",
+   "summary": "Chronological log of end-to-end eval runs (runs 1-14, golden v2 with 68 cases, run-to-run spread study, LlamaParse comparison, screening-funnel live runs), recording metric deltas, PASS/FAIL/REVIEW verdicts, failure analyses and which run is the current baseline.",
+   "tags": [
+    "documentation",
+    "evaluation",
+    "results-log",
+    "benchmarking",
+    "changelog"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "config:evals/baselines/baseline.json",
+   "type": "config",
+   "name": "baseline.json",
+   "filePath": "evals/baselines/baseline.json",
+   "summary": "Promoted E2E eval baseline (run12-section-outline, 26 cases) holding app/judge model metadata and aggregate deterministic, quality (DeepEval judge) and ops latency metrics that candidate runs are compared against.",
+   "tags": [
+    "evaluation",
+    "baseline",
+    "metrics",
+    "configuration"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "config:evals/baselines/candidate.json",
+   "type": "config",
+   "name": "candidate.json",
+   "filePath": "evals/baselines/candidate.json",
+   "summary": "Latest E2E eval candidate run (run14-guardrails, 26 cases) with the same metadata and metric schema as the baseline, written by evals.run and checked by evals.compare.",
+   "tags": [
+    "evaluation",
+    "candidate",
+    "metrics",
+    "configuration"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "document:evals/baselines/RESULTS.md",
+   "target": "file:evals/compare.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:evals/baselines/RESULTS.md",
+   "target": "file:evals/run.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:evals/baselines/RESULTS.md",
+   "target": "file:evals/metrics.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:evals/baselines/RESULTS.md",
+   "target": "file:evals/spread.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:evals/baselines/RESULTS.md",
+   "target": "file:evaluate.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:evals/baselines/RESULTS.md",
+   "target": "config:evals/baselines/baseline.json",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "config:evals/baselines/baseline.json",
+   "target": "file:evals/compare.py",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:evals/baselines/candidate.json",
+   "target": "file:evals/compare.py",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "config:evals/baselines/candidate.json",
+   "target": "file:evals/run.py",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "config:evals/baselines/candidate.json",
+   "target": "config:evals/baselines/baseline.json",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

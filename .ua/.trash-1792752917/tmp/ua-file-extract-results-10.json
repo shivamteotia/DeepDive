@@ -1,0 +1,172 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 3,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "results": [
+    {
+      "path": "evals/baselines/RESULTS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 371,
+      "nonEmptyLines": 313,
+      "sections": [
+        {
+          "heading": "Eval results",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "2026-10-22/23: golden v2 (68 cases, 6 papers); verifier sees the question; paper resolver",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "2026-10-21: run-to-run spread (5 identical runs) + metric registry",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "2026-10-20: run 14 (candidate): input/output guardrails",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "2026-10-20: run 13 (one-off comparison, rejected): LlamaParse instead of Docling",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "2026-10-20: run 12 (current baseline): section outline (chunker v3)",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "2026-10-16: run 8 (superseded): smart parsing and chunking + contextual retrieval",
+          "level": 2,
+          "line": 144
+        },
+        {
+          "heading": "2026-10-16: run 7 (superseded): hybrid keyword + vector retrieval (`HYBRID_SEARCH=true`)",
+          "level": 2,
+          "line": 169
+        },
+        {
+          "heading": "2026-10-16: run 6 (superseded): prompt fixes, round 2",
+          "level": 2,
+          "line": 196
+        },
+        {
+          "heading": "2026-10-16: run 5 (superseded): prompt fixes, round 1",
+          "level": 2,
+          "line": 219
+        },
+        {
+          "heading": "2026-10-15: run 4 (superseded): guard model gpt-4o-mini -> gpt-5.4-mini",
+          "level": 2,
+          "line": 235
+        },
+        {
+          "heading": "2026-10-15: run 3 (superseded): gaps show counts only, /verification hides rejected text, det.fact checks claims only",
+          "level": 2,
+          "line": 253
+        },
+        {
+          "heading": "2026-10-15: run 2 (superseded)",
+          "level": 2,
+          "line": 267
+        },
+        {
+          "heading": "2026-10-15: run 1 (superseded)",
+          "level": 2,
+          "line": 301
+        },
+        {
+          "heading": "What failed and why",
+          "level": 3,
+          "line": 324
+        },
+        {
+          "heading": "Suggested next steps (not done)",
+          "level": 3,
+          "line": 348
+        },
+        {
+          "heading": "Screening funnel — first live runs (2026-10-20, branch screening-funnel)",
+          "level": 2,
+          "line": 356
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "evals/baselines/baseline.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 55,
+      "nonEmptyLines": 55,
+      "sections": [
+        {
+          "heading": "metadata",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "metrics",
+          "level": 1,
+          "line": 14
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    },
+    {
+      "path": "evals/baselines/candidate.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 55,
+      "nonEmptyLines": 55,
+      "sections": [
+        {
+          "heading": "metadata",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "metrics",
+          "level": 1,
+          "line": 14
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    }
+  ]
+}

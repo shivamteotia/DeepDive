@@ -1,0 +1,1086 @@
+{
+ "nodes": [
+  {
+   "id": "config:.ua/config.json",
+   "type": "config",
+   "name": "config.json",
+   "filePath": ".ua/config.json",
+   "summary": "Understand-Anything analysis tool config setting the knowledge-graph output language to English; not part of the application.",
+   "tags": [
+    "configuration",
+    "tooling",
+    "analysis"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "config:eval/gold.json",
+   "type": "config",
+   "name": "gold.json",
+   "filePath": "eval/gold.json",
+   "summary": "Gold question set (v3) for evaluate.py: retrieval questions with expected chunk strings plus verifier fact/trap items across six healthcare papers, scoped to the demo project.",
+   "tags": [
+    "evaluation",
+    "test-data",
+    "gold-set",
+    "retrieval"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:evals/agent_run.py",
+   "type": "file",
+   "name": "agent_run.py",
+   "filePath": "evals/agent_run.py",
+   "summary": "Tool-routing eval of the screening assistant through the running API: sends one message per golden case in a fresh project and scores which tools each turn called, writing a candidate snapshot.",
+   "tags": [
+    "evaluation",
+    "entry-point",
+    "agent",
+    "cli",
+    "screening"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/agent_run.py:score",
+   "type": "function",
+   "name": "score",
+   "filePath": "evals/agent_run.py",
+   "lineRange": [
+    52,
+    65
+   ],
+   "summary": "Scores one assistant turn against a case: required tools called, forbidden tools avoided, step count.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evals/agent_run.py:setup",
+   "type": "function",
+   "name": "setup",
+   "filePath": "evals/agent_run.py",
+   "lineRange": [
+    87,
+    98
+   ],
+   "summary": "Logs in and creates a fresh timestamped eval-agent project with screening criteria and references.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evals/agent_run.py:run_case",
+   "type": "function",
+   "name": "run_case",
+   "filePath": "evals/agent_run.py",
+   "lineRange": [
+    101,
+    114
+   ],
+   "summary": "Runs one golden case as a single message in a new conversation and returns its scored result.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evals/agent_run.py:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "evals/agent_run.py",
+   "lineRange": [
+    117,
+    156
+   ],
+   "summary": "CLI entry: parses args, runs cases concurrently, aggregates routing/forbidden/steps metrics and writes the snapshot.",
+   "tags": [
+    "evaluation",
+    "entry-point",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:evals/check_golden.py",
+   "type": "file",
+   "name": "check_golden.py",
+   "filePath": "evals/check_golden.py",
+   "summary": "Free local check that every golden case's quote appears verbatim on its stated PDF page and its facts appear in its source PDFs, with whitespace/dash/hyphenation normalization.",
+   "tags": [
+    "evaluation",
+    "validation",
+    "cli",
+    "pdf"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/check_golden.py:problems",
+   "type": "function",
+   "name": "problems",
+   "filePath": "evals/check_golden.py",
+   "lineRange": [
+    38,
+    57
+   ],
+   "summary": "Returns why a golden case fails: missing PDFs, quote not on its page, or facts absent from source PDFs.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/check_golden.py:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "evals/check_golden.py",
+   "lineRange": [
+    60,
+    69
+   ],
+   "summary": "CLI entry that checks every golden case and exits 1 if any fail.",
+   "tags": [
+    "evaluation",
+    "entry-point",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:evals/run.py",
+   "type": "file",
+   "name": "run.py",
+   "filePath": "evals/run.py",
+   "summary": "End-to-end eval of the running MaxRIM API: runs golden questions as research runs, computes deterministic checks and DeepEval judge metrics, and writes baseline/candidate snapshots.",
+   "tags": [
+    "evaluation",
+    "entry-point",
+    "cli",
+    "llm-judge",
+    "api-client"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:evals/run.py:validate",
+   "type": "function",
+   "name": "validate",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    47,
+    64
+   ],
+   "summary": "Validates golden-case structure before a paid run.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:det_checks",
+   "type": "function",
+   "name": "det_checks",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    82,
+    104
+   ],
+   "summary": "Deterministic checks on an answer: expected facts, citations, abstention behaviour.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:snapshot",
+   "type": "function",
+   "name": "snapshot",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    108,
+    132
+   ],
+   "summary": "Builds the run snapshot of per-case results and aggregate metrics with run metadata.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:setup",
+   "type": "function",
+   "name": "setup",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    176,
+    201
+   ],
+   "summary": "Logs in, creates eval projects and uploads their papers, waiting until documents are ready.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:ask_case",
+   "type": "function",
+   "name": "ask_case",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    204,
+    225
+   ],
+   "summary": "Submits one golden question as a research run and polls until it finishes, returning answer and evidence.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:make_judge",
+   "type": "function",
+   "name": "make_judge",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    229,
+    258
+   ],
+   "summary": "Builds the DeepEval judge model (OpenAI or Groq via JUDGE_MODEL).",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:metric_suites",
+   "type": "function",
+   "name": "metric_suites",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    272,
+    314
+   ],
+   "summary": "Constructs the DeepEval metric suites (correctness GEval, faithfulness, relevancy) for judging.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:judge_case",
+   "type": "function",
+   "name": "judge_case",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    331,
+    346
+   ],
+   "summary": "Runs the judge metrics on one judgeable case and records scores and reasons.",
+   "tags": [
+    "evaluation",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:evals/run.py:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    350,
+    429
+   ],
+   "summary": "CLI entry: runs all golden cases through the API concurrently, judges them and writes baseline or candidate JSON.",
+   "tags": [
+    "evaluation",
+    "entry-point",
+    "function"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "class:evals/run.py:Api",
+   "type": "class",
+   "name": "Api",
+   "filePath": "evals/run.py",
+   "lineRange": [
+    136,
+    173
+   ],
+   "summary": "Thread-local httpx client for the eval: retries hung requests on a fresh connection and logs in (registering on first use) with a derived password.",
+   "tags": [
+    "evaluation",
+    "api-client",
+    "http",
+    "class"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:static/app.js",
+   "type": "file",
+   "name": "app.js",
+   "filePath": "static/app.js",
+   "summary": "Main vanilla-JS single-page app: auth, projects, PDF upload, conversations, research-run polling and cited answer/source cards, all over the /api/v1 REST API.",
+   "tags": [
+    "frontend",
+    "component",
+    "entry-point",
+    "api-client",
+    "chat"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:static/app.js:h",
+   "type": "function",
+   "name": "h",
+   "filePath": "static/app.js",
+   "lineRange": [
+    36,
+    49
+   ],
+   "summary": "Tiny DOM builder that creates elements with attributes and textContent children (XSS-safe rendering).",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:api",
+   "type": "function",
+   "name": "api",
+   "filePath": "static/app.js",
+   "lineRange": [
+    60,
+    72
+   ],
+   "summary": "Fetch wrapper adding the bearer token, JSON/form bodies and error handling for /api/v1 calls.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:submitAuth",
+   "type": "function",
+   "name": "submitAuth",
+   "filePath": "static/app.js",
+   "lineRange": [
+    89,
+    107
+   ],
+   "summary": "Submits login or registration and stores the access token.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:loadProjects",
+   "type": "function",
+   "name": "loadProjects",
+   "filePath": "static/app.js",
+   "lineRange": [
+    117,
+    126
+   ],
+   "summary": "Loads the user's projects, creating a default one when none exist.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:promptInline",
+   "type": "function",
+   "name": "promptInline",
+   "filePath": "static/app.js",
+   "lineRange": [
+    138,
+    151
+   ],
+   "summary": "Inline text prompt used instead of window.prompt for naming items.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:loadDocuments",
+   "type": "function",
+   "name": "loadDocuments",
+   "filePath": "static/app.js",
+   "lineRange": [
+    153,
+    163
+   ],
+   "summary": "Fetches a project's documents and refreshes the document list.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:renderDocuments",
+   "type": "function",
+   "name": "renderDocuments",
+   "filePath": "static/app.js",
+   "lineRange": [
+    169,
+    184
+   ],
+   "summary": "Renders the document list with ingestion status.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:upload",
+   "type": "function",
+   "name": "upload",
+   "filePath": "static/app.js",
+   "lineRange": [
+    186,
+    199
+   ],
+   "summary": "Uploads selected PDFs to the current project as multipart form data.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:renderConversations",
+   "type": "function",
+   "name": "renderConversations",
+   "filePath": "static/app.js",
+   "lineRange": [
+    207,
+    221
+   ],
+   "summary": "Renders the sidebar conversation list.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:openConversation",
+   "type": "function",
+   "name": "openConversation",
+   "filePath": "static/app.js",
+   "lineRange": [
+    223,
+    243
+   ],
+   "summary": "Loads a conversation and rebuilds its thread of turns.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:newChat",
+   "type": "function",
+   "name": "newChat",
+   "filePath": "static/app.js",
+   "lineRange": [
+    251,
+    260
+   ],
+   "summary": "Resets state for a fresh conversation.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:ask",
+   "type": "function",
+   "name": "ask",
+   "filePath": "static/app.js",
+   "lineRange": [
+    263,
+    298
+   ],
+   "summary": "Sends a question: creates the conversation if needed, starts a research run and begins polling.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:poll",
+   "type": "function",
+   "name": "poll",
+   "filePath": "static/app.js",
+   "lineRange": [
+    300,
+    316
+   ],
+   "summary": "Polls a research run until it completes, then loads its evidence and fills the turn.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:renderThread",
+   "type": "function",
+   "name": "renderThread",
+   "filePath": "static/app.js",
+   "lineRange": [
+    329,
+    340
+   ],
+   "summary": "Renders all turns of the current conversation.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:fillTurn",
+   "type": "function",
+   "name": "fillTurn",
+   "filePath": "static/app.js",
+   "lineRange": [
+    352,
+    370
+   ],
+   "summary": "Fills a chat turn with run status, answer and sources.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:answerCards",
+   "type": "function",
+   "name": "answerCards",
+   "filePath": "static/app.js",
+   "lineRange": [
+    376,
+    434
+   ],
+   "summary": "Renders the cited answer as claim cards linked to evidence source cards.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:static/app.js:sourceCard",
+   "type": "function",
+   "name": "sourceCard",
+   "filePath": "static/app.js",
+   "lineRange": [
+    440,
+    466
+   ],
+   "summary": "Renders one evidence source card (filename, page, quote or safe web URL).",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:openProject",
+   "type": "function",
+   "name": "openProject",
+   "filePath": "static/app.js",
+   "lineRange": [
+    485,
+    494
+   ],
+   "summary": "Switches the active project and reloads documents and conversations.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:static/app.js:boot",
+   "type": "function",
+   "name": "boot",
+   "filePath": "static/app.js",
+   "lineRange": [
+    496,
+    512
+   ],
+   "summary": "Startup: restores the session, loads config and projects, or shows auth.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:static/app.js:wire",
+   "type": "function",
+   "name": "wire",
+   "filePath": "static/app.js",
+   "lineRange": [
+    515,
+    536
+   ],
+   "summary": "Attaches all DOM event listeners for the UI.",
+   "tags": [
+    "frontend",
+    "function"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:score",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:score",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:setup",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:setup",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:run_case",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:run_case",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "function:evals/agent_run.py:main",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/check_golden.py",
+   "target": "function:evals/check_golden.py:problems",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/check_golden.py",
+   "target": "function:evals/check_golden.py:problems",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/check_golden.py",
+   "target": "function:evals/check_golden.py:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/check_golden.py",
+   "target": "function:evals/check_golden.py:main",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:validate",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:validate",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:det_checks",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:det_checks",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:snapshot",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:snapshot",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:setup",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:setup",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:ask_case",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:ask_case",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:make_judge",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:make_judge",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:metric_suites",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:metric_suites",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:judge_case",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:judge_case",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "function:evals/run.py:main",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "class:evals/run.py:Api",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "class:evals/run.py:Api",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:h",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:api",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:submitAuth",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:loadProjects",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:promptInline",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:loadDocuments",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:renderDocuments",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:upload",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:renderConversations",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:openConversation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:newChat",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:ask",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:poll",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:renderThread",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:fillTurn",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:answerCards",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:sourceCard",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:openProject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:boot",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:static/app.js",
+   "target": "function:static/app.js:wire",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "file:evals/compare.py",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "file:evals/metrics.py",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "file:evals/metrics.py",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:evals/run.py",
+   "target": "file:app.py",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:evals/agent_run.py",
+   "target": "file:app.py",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:evals/check_golden.py",
+   "target": "file:evals/run.py",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "config:eval/gold.json",
+   "target": "file:evaluate.py",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  }
+ ]
+}

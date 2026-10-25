@@ -1,0 +1,230 @@
+{
+ "nodes": [
+  {
+   "id": "document:CLAUDE.md",
+   "type": "document",
+   "name": "CLAUDE.md",
+   "filePath": "CLAUDE.md",
+   "summary": "Agent-facing build guide for MaxRIM: the five-step build order (ingest, ask, verify, eval, API), current eval baselines and retrieval experiments, stack rules, commands, and hard rules on secrets, project isolation, idempotency and citations.",
+   "tags": [
+    "documentation",
+    "development",
+    "conventions",
+    "evaluation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "document:README.md",
+   "type": "document",
+   "name": "README.md",
+   "filePath": "README.md",
+   "summary": "Full target design for MaxRIM: problem and vision, architecture, Docling-to-Qdrant ingestion, the LangGraph Planner/Researcher/Synthesizer/Verifier loop, data model, API contract, roadmap, evaluation, security and current status.",
+   "tags": [
+    "documentation",
+    "entry-point",
+    "architecture",
+    "overview"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "document:README_Evindra_AI.md",
+   "type": "document",
+   "name": "README_Evindra_AI.md",
+   "filePath": "README_Evindra_AI.md",
+   "summary": "Design document for 'Evidra AI', a systematic-review pipeline from reference import, dedup and screening through Docling parsing, section-aware chunking, Qdrant/Postgres evidence stores, hybrid RAG with Text-to-SQL, and export, with per-stage implementation status.",
+   "tags": [
+    "documentation",
+    "systematic-review",
+    "architecture",
+    "roadmap"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "config:pyproject.toml",
+   "type": "config",
+   "name": "pyproject.toml",
+   "filePath": "pyproject.toml",
+   "summary": "uv project definition for maxrim (Python 3.12) declaring runtime deps (Docling, FastAPI, LangGraph, OpenAI, Qdrant, SQLAlchemy/psycopg), dev deps (pytest, ruff, deepeval), pytest markers excluding live tests by default, and ruff line length.",
+   "tags": [
+    "configuration",
+    "build-system",
+    "dependencies",
+    "testing"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:ask.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:research.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:evaluate.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:app.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:config.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:jobs.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:chunking.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "file:sections.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:research.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:evaluate.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:config.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:agent.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README_Evindra_AI.md",
+   "target": "file:screening.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README_Evindra_AI.md",
+   "target": "file:dedup.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README_Evindra_AI.md",
+   "target": "file:sections.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README_Evindra_AI.md",
+   "target": "file:chunking.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README_Evindra_AI.md",
+   "target": "file:references.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "config:pyproject.toml",
+   "target": "file:app.py",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "config:pyproject.toml",
+   "target": "file:config.py",
+   "type": "configures",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "document:README.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README_Evindra_AI.md",
+   "target": "document:README.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "config:pyproject.toml",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

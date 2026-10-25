@@ -1,0 +1,2096 @@
+{
+ "nodes": [
+  {
+   "id": "file:ask.py",
+   "type": "file",
+   "name": "ask.py",
+   "filePath": "ask.py",
+   "summary": "Retrieval and answer step: project-filtered Qdrant search (dense or hybrid bm25+RRF, optional cross-encoder/Jina reranking), LLM answer with structured claims citing evidence ids, and citation checking that strips invented ids. Also a CLI printing filename + page sources.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "citation-check",
+    "entry-point",
+    "service"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:chunking.py",
+   "type": "file",
+   "name": "chunking.py",
+   "filePath": "chunking.py",
+   "summary": "Smart chunking: classifies a parsed PDF as article/report/generic, regroups Docling HybridChunker pieces by section within token budgets, labels chunks with paper and section, and adds per-chunk LLM search context via an injected parser.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "pure-functions",
+    "nlp",
+    "utility"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:evaluate.py",
+   "type": "file",
+   "name": "evaluate.py",
+   "filePath": "evaluate.py",
+   "summary": "Offline evaluation harness measuring retrieval recall@k and MRR plus verifier false-claim catch rate and true-claim rejection against eval/gold.json, optionally routing through the paper resolver; results saved to data/evals/.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "entry-point",
+    "retrieval",
+    "verifier"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:ingest.py",
+   "type": "file",
+   "name": "ingest.py",
+   "filePath": "ingest.py",
+   "summary": "PDF ingestion pipeline: Docling parse, smart chunking, OpenAI embeddings and bm25 sparse vectors, idempotent Qdrant upsert with uuid5 point ids and hash-skip; also collection migration, re-chunking reindex, and Postgres chunk-count sync CLIs.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "embeddings",
+    "entry-point",
+    "idempotency"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:papers.py",
+   "type": "file",
+   "name": "papers.py",
+   "filePath": "papers.py",
+   "summary": "Paper resolver: builds per-paper cards from front-matter chunks, asks the LLM which project papers a question names (requiring agreeing replies), and scopes or splits searches to those papers, declining papers the project lacks.",
+   "tags": [
+    "paper-resolver",
+    "routing",
+    "retrieval",
+    "llm",
+    "service"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:ask.py:search",
+   "type": "function",
+   "name": "search",
+   "filePath": "ask.py",
+   "lineRange": [
+    61,
+    103
+   ],
+   "summary": "Top-k project-filtered Qdrant search (dense, or hybrid bm25+dense with RRF), optional sha filter and reranking; raises a migration hint on unmigrated collections.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:ask.py:rerank_scores",
+   "type": "function",
+   "name": "rerank_scores",
+   "filePath": "ask.py",
+   "lineRange": [
+    116,
+    131
+   ],
+   "summary": "Scores (query, text) pairs with a local cross-encoder or hosted Jina reranker, returning scores in input order.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:_jina_scores",
+   "type": "function",
+   "name": "_jina_scores",
+   "filePath": "ask.py",
+   "lineRange": [
+    134,
+    145
+   ],
+   "summary": "Calls the Jina rerank API and maps returned scores back to input order.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:format_evidence",
+   "type": "function",
+   "name": "format_evidence",
+   "filePath": "ask.py",
+   "lineRange": [
+    148,
+    151
+   ],
+   "summary": "Formats evidence passages as quoted, id-tagged blocks for the LLM prompt.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:parse_llm",
+   "type": "function",
+   "name": "parse_llm",
+   "filePath": "ask.py",
+   "lineRange": [
+    157,
+    162
+   ],
+   "summary": "Structured OpenAI call validated by a Pydantic model; returns None on refusal, truncation, or malformed output.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:answer",
+   "type": "function",
+   "name": "answer",
+   "filePath": "ask.py",
+   "lineRange": [
+    165,
+    172
+   ],
+   "summary": "Synthesizes a cited Answer from evidence, optionally with verifier feedback.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:check_citations",
+   "type": "function",
+   "name": "check_citations",
+   "filePath": "ask.py",
+   "lineRange": [
+    175,
+    187
+   ],
+   "summary": "Removes invented evidence ids and drops claims left uncited, recording them in gaps.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:cite",
+   "type": "function",
+   "name": "cite",
+   "filePath": "ask.py",
+   "lineRange": [
+    193,
+    197
+   ],
+   "summary": "Formats one evidence record as filename plus page(s).",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:render",
+   "type": "function",
+   "name": "render",
+   "filePath": "ask.py",
+   "lineRange": [
+    200,
+    208
+   ],
+   "summary": "Renders an answer's claims with their cited sources as text.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ask.py:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "ask.py",
+   "lineRange": [
+    211,
+    231
+   ],
+   "summary": "CLI entry: searches a project and prints a cited answer.",
+   "tags": [
+    "retrieval",
+    "rag",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:chunking.py:take_tokens",
+   "type": "function",
+   "name": "take_tokens",
+   "filePath": "chunking.py",
+   "lineRange": [
+    95,
+    104
+   ],
+   "summary": "Joins texts in order while staying within a token budget.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:chunking.py:classify",
+   "type": "function",
+   "name": "classify",
+   "filePath": "chunking.py",
+   "lineRange": [
+    107,
+    142
+   ],
+   "summary": "Classifies a document as article, report, or generic via heuristics, using the LLM only to break ties.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:chunking.py:_group_chunks",
+   "type": "function",
+   "name": "_group_chunks",
+   "filePath": "chunking.py",
+   "lineRange": [
+    160,
+    173
+   ],
+   "summary": "Merges a section group's pieces into chunks, splitting at piece boundaries to respect CHUNK_MAX_TOKENS.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:chunking.py:_merge_tiny",
+   "type": "function",
+   "name": "_merge_tiny",
+   "filePath": "chunking.py",
+   "lineRange": [
+    176,
+    205
+   ],
+   "summary": "Merges very small body chunks into a neighbouring chunk with the same top heading.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:chunking.py:regroup",
+   "type": "function",
+   "name": "regroup",
+   "filePath": "chunking.py",
+   "lineRange": [
+    208,
+    255
+   ],
+   "summary": "Regroups pieces by document type: merges front matter and declarations, drops references/contents where appropriate.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:chunking.py:label",
+   "type": "function",
+   "name": "label",
+   "filePath": "chunking.py",
+   "lineRange": [
+    268,
+    271
+   ],
+   "summary": "Builds the 'Paper / Section' label prefix for a chunk.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:chunking.py:resolve_title",
+   "type": "function",
+   "name": "resolve_title",
+   "filePath": "chunking.py",
+   "lineRange": [
+    274,
+    278
+   ],
+   "summary": "Picks the document title from Docling, then PDF metadata, then filename.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:chunking.py:contextualize",
+   "type": "function",
+   "name": "contextualize",
+   "filePath": "chunking.py",
+   "lineRange": [
+    281,
+    293
+   ],
+   "summary": "Generates a search-only context per chunk in parallel, quoting the document first.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:chunking.py:build_chunks",
+   "type": "function",
+   "name": "build_chunks",
+   "filePath": "chunking.py",
+   "lineRange": [
+    296,
+    312
+   ],
+   "summary": "Top-level chunking: applies the section outline, classifies, regroups, labels, and optionally contextualizes chunks.",
+   "tags": [
+    "chunking",
+    "document-processing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evaluate.py:retrieval_metrics",
+   "type": "function",
+   "name": "retrieval_metrics",
+   "filePath": "evaluate.py",
+   "lineRange": [
+    31,
+    35
+   ],
+   "summary": "Computes recall@k and MRR from first-relevant ranks.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evaluate.py:verifier_metrics",
+   "type": "function",
+   "name": "verifier_metrics",
+   "filePath": "evaluate.py",
+   "lineRange": [
+    38,
+    48
+   ],
+   "summary": "Computes false-claim catch rate and true-claim rejection rate from verifier verdicts.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evaluate.py:evaluate",
+   "type": "function",
+   "name": "evaluate",
+   "filePath": "evaluate.py",
+   "lineRange": [
+    51,
+    73
+   ],
+   "summary": "Runs gold questions through injected search and verify functions and aggregates metrics.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evaluate.py:report",
+   "type": "function",
+   "name": "report",
+   "filePath": "evaluate.py",
+   "lineRange": [
+    80,
+    90
+   ],
+   "summary": "Formats an evaluation result as a readable report.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evaluate.py:resolved_search",
+   "type": "function",
+   "name": "resolved_search",
+   "filePath": "evaluate.py",
+   "lineRange": [
+    93,
+    98
+   ],
+   "summary": "Retrieval as the API runs it: resolves named papers then calls papers.search_named.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:evaluate.py:run_live",
+   "type": "function",
+   "name": "run_live",
+   "filePath": "evaluate.py",
+   "lineRange": [
+    101,
+    150
+   ],
+   "summary": "Live evaluation against Qdrant and OpenAI with configured models, reranker and optional resolver.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "function"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:evaluate.py:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "evaluate.py",
+   "lineRange": [
+    153,
+    164
+   ],
+   "summary": "CLI entry that runs the live evaluation and saves results.",
+   "tags": [
+    "evaluation",
+    "metrics",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:sha256_file",
+   "type": "function",
+   "name": "sha256_file",
+   "filePath": "ingest.py",
+   "lineRange": [
+    32,
+    37
+   ],
+   "summary": "Computes a file's SHA-256 digest in streamed blocks.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:point_id",
+   "type": "function",
+   "name": "point_id",
+   "filePath": "ingest.py",
+   "lineRange": [
+    40,
+    41
+   ],
+   "summary": "Deterministic uuid5 point id from project, document hash, and chunk index.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:doc_filter",
+   "type": "function",
+   "name": "doc_filter",
+   "filePath": "ingest.py",
+   "lineRange": [
+    44,
+    48
+   ],
+   "summary": "Qdrant filter selecting one document's points in one project.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:already_indexed",
+   "type": "function",
+   "name": "already_indexed",
+   "filePath": "ingest.py",
+   "lineRange": [
+    51,
+    61
+   ],
+   "summary": "True only when every chunk of the document exists at the current chunker version.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:_plain_encoding",
+   "type": "function",
+   "name": "_plain_encoding",
+   "filePath": "ingest.py",
+   "lineRange": [
+    70,
+    79
+   ],
+   "summary": "Builds a tiktoken encoding tolerant of special tokens for the embed model.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:piece_from_chunk",
+   "type": "function",
+   "name": "piece_from_chunk",
+   "filePath": "ingest.py",
+   "lineRange": [
+    96,
+    105
+   ],
+   "summary": "Converts a Docling chunk into a chunking.Piece with headings, pages, and table flag.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:parse_pdf",
+   "type": "function",
+   "name": "parse_pdf",
+   "filePath": "ingest.py",
+   "lineRange": [
+    108,
+    119
+   ],
+   "summary": "Docling parse plus HybridChunker pieces, resolved title, and page count.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:llm_parser",
+   "type": "function",
+   "name": "llm_parser",
+   "filePath": "ingest.py",
+   "lineRange": [
+    122,
+    125
+   ],
+   "summary": "Builds the injected structured-LLM parse function for chunking.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:embed",
+   "type": "function",
+   "name": "embed",
+   "filePath": "ingest.py",
+   "lineRange": [
+    133,
+    138
+   ],
+   "summary": "Embeds texts with the OpenAI embedding model in batches.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:sparse_vector",
+   "type": "function",
+   "name": "sparse_vector",
+   "filePath": "ingest.py",
+   "lineRange": [
+    141,
+    148
+   ],
+   "summary": "Hashes tokens into a BM25-style sparse keyword vector for hybrid search.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:ensure_collection",
+   "type": "function",
+   "name": "ensure_collection",
+   "filePath": "ingest.py",
+   "lineRange": [
+    158,
+    169
+   ],
+   "summary": "Creates the Qdrant collection with dense and bm25 vectors and keyword payload indexes.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:ingest",
+   "type": "function",
+   "name": "ingest",
+   "filePath": "ingest.py",
+   "lineRange": [
+    172,
+    190
+   ],
+   "summary": "Ingests one PDF into a project; returns points written, 0 if already indexed.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:prepare_document",
+   "type": "function",
+   "name": "prepare_document",
+   "filePath": "ingest.py",
+   "lineRange": [
+    199,
+    207
+   ],
+   "summary": "Parses, chunks, contextualizes, and embeds a PDF without writing to Qdrant.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:write_document",
+   "type": "function",
+   "name": "write_document",
+   "filePath": "ingest.py",
+   "lineRange": [
+    210,
+    228
+   ],
+   "summary": "Upserts a prepared document's points and removes stale extra chunks.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:migrate",
+   "type": "function",
+   "name": "migrate",
+   "filePath": "ingest.py",
+   "lineRange": [
+    231,
+    254
+   ],
+   "summary": "Copies a collection's points into a new one, adding bm25 keyword vectors.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:prepare_in_child",
+   "type": "function",
+   "name": "prepare_in_child",
+   "filePath": "ingest.py",
+   "lineRange": [
+    257,
+    265
+   ],
+   "summary": "Runs prepare_document inside a crash-isolating child process with its own OpenAI client.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:reindex",
+   "type": "function",
+   "name": "reindex",
+   "filePath": "ingest.py",
+   "lineRange": [
+    268,
+    310
+   ],
+   "summary": "Re-chunks every ready document from stored PDFs into a new collection, reporting parser crashes.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:ingest.py:sync_counts",
+   "type": "function",
+   "name": "sync_counts",
+   "filePath": "ingest.py",
+   "lineRange": [
+    313,
+    333
+   ],
+   "summary": "Updates Postgres chunk counts and doc types from the live collection.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:ingest.py:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "ingest.py",
+   "lineRange": [
+    336,
+    392
+   ],
+   "summary": "CLI entry for ingest, migrate, reindex, and sync-counts modes.",
+   "tags": [
+    "ingestion",
+    "qdrant",
+    "function"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:papers.py:cards",
+   "type": "function",
+   "name": "cards",
+   "filePath": "papers.py",
+   "lineRange": [
+    57,
+    72
+   ],
+   "summary": "Builds a card per paper from its first chunks via deterministic point id retrieval.",
+   "tags": [
+    "paper-resolver",
+    "routing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:papers.py:resolve",
+   "type": "function",
+   "name": "resolve",
+   "filePath": "papers.py",
+   "lineRange": [
+    75,
+    93
+   ],
+   "summary": "Routes a question to the named papers, requiring agreeing LLM replies and failing open.",
+   "tags": [
+    "paper-resolver",
+    "routing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:papers.py:_route",
+   "type": "function",
+   "name": "_route",
+   "filePath": "papers.py",
+   "lineRange": [
+    112,
+    126
+   ],
+   "summary": "Converts one resolver reply into a Route of matched papers or missing names.",
+   "tags": [
+    "paper-resolver",
+    "routing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:papers.py:search_named",
+   "type": "function",
+   "name": "search_named",
+   "filePath": "papers.py",
+   "lineRange": [
+    129,
+    139
+   ],
+   "summary": "Runs a search scoped to all ready papers, one paper, or split per paper for comparisons.",
+   "tags": [
+    "paper-resolver",
+    "routing",
+    "function"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:ask.py:Claim",
+   "type": "class",
+   "name": "Claim",
+   "filePath": "ask.py",
+   "lineRange": [
+    41,
+    43
+   ],
+   "summary": "Pydantic claim with text and cited evidence ids.",
+   "tags": [
+    "data-model",
+    "retrieval",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:ask.py:Answer",
+   "type": "class",
+   "name": "Answer",
+   "filePath": "ask.py",
+   "lineRange": [
+    46,
+    54
+   ],
+   "summary": "Pydantic answer of claims and gaps, keeping dropped uncited text privately for audit.",
+   "tags": [
+    "data-model",
+    "retrieval",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:chunking.py:Piece",
+   "type": "class",
+   "name": "Piece",
+   "filePath": "chunking.py",
+   "lineRange": [
+    31,
+    40
+   ],
+   "summary": "One HybridChunker chunk before regrouping: text, headings, pages, outline path and section.",
+   "tags": [
+    "data-model",
+    "chunking",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:chunking.py:Chunk",
+   "type": "class",
+   "name": "Chunk",
+   "filePath": "chunking.py",
+   "lineRange": [
+    145,
+    150
+   ],
+   "summary": "A regrouped chunk with text, headings, pages, and section.",
+   "tags": [
+    "data-model",
+    "chunking",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:ingest.py:ParsedDoc",
+   "type": "class",
+   "name": "ParsedDoc",
+   "filePath": "ingest.py",
+   "lineRange": [
+    64,
+    67
+   ],
+   "summary": "NamedTuple of parsed pieces, title, and page count.",
+   "tags": [
+    "data-model",
+    "ingestion",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:ingest.py:Prepared",
+   "type": "class",
+   "name": "Prepared",
+   "filePath": "ingest.py",
+   "lineRange": [
+    193,
+    196
+   ],
+   "summary": "NamedTuple holding a prepared document's chunks, vectors and metadata for writing.",
+   "tags": [
+    "data-model",
+    "ingestion",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:papers.py:Resolution",
+   "type": "class",
+   "name": "Resolution",
+   "filePath": "papers.py",
+   "lineRange": [
+    41,
+    44
+   ],
+   "summary": "LLM schema for which papers a question names.",
+   "tags": [
+    "data-model",
+    "paper-resolver",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:papers.py:Route",
+   "type": "class",
+   "name": "Route",
+   "filePath": "papers.py",
+   "lineRange": [
+    47,
+    49
+   ],
+   "summary": "Resolved route: matched paper shas and names the project lacks.",
+   "tags": [
+    "data-model",
+    "paper-resolver",
+    "schema"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "class:papers.py:Card",
+   "type": "class",
+   "name": "Card",
+   "filePath": "papers.py",
+   "lineRange": [
+    52,
+    54
+   ],
+   "summary": "Per-paper card: file name and front-matter text.",
+   "tags": [
+    "data-model",
+    "paper-resolver",
+    "schema"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:ask.py",
+   "target": "file:ingest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "file:sections.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "file:ask.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "file:research.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "file:chunking.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:papers.py",
+   "target": "file:ingest.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:search",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:search",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:rerank_scores",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:rerank_scores",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:_jina_scores",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:format_evidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:format_evidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:parse_llm",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:parse_llm",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:answer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:answer",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:check_citations",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:check_citations",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:cite",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:cite",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:render",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:render",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "function:ask.py:main",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:take_tokens",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:take_tokens",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:classify",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:classify",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:_group_chunks",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:_merge_tiny",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:regroup",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:regroup",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:label",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:label",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:resolve_title",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:resolve_title",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:contextualize",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:contextualize",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:build_chunks",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "function:chunking.py:build_chunks",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:retrieval_metrics",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:retrieval_metrics",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:verifier_metrics",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:verifier_metrics",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:evaluate",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:evaluate",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:report",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:report",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:resolved_search",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:resolved_search",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:run_live",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:run_live",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "function:evaluate.py:main",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:sha256_file",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:sha256_file",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:point_id",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:point_id",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:doc_filter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:doc_filter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:already_indexed",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:already_indexed",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:_plain_encoding",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:piece_from_chunk",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:piece_from_chunk",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:parse_pdf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:parse_pdf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:llm_parser",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:llm_parser",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:embed",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:embed",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:sparse_vector",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:sparse_vector",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:ensure_collection",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:ensure_collection",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:ingest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:ingest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:prepare_document",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:prepare_document",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:write_document",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:write_document",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:migrate",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:migrate",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:prepare_in_child",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:prepare_in_child",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:reindex",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:reindex",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:sync_counts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:sync_counts",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "function:ingest.py:main",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:papers.py",
+   "target": "function:papers.py:cards",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:papers.py",
+   "target": "function:papers.py:cards",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:papers.py",
+   "target": "function:papers.py:resolve",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:papers.py",
+   "target": "function:papers.py:resolve",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:papers.py",
+   "target": "function:papers.py:_route",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:papers.py",
+   "target": "function:papers.py:search_named",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:papers.py",
+   "target": "function:papers.py:search_named",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "class:ask.py:Claim",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "class:ask.py:Claim",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ask.py",
+   "target": "class:ask.py:Answer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ask.py",
+   "target": "class:ask.py:Answer",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "class:chunking.py:Piece",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "class:chunking.py:Piece",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "class:chunking.py:Chunk",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "class:chunking.py:Chunk",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "class:ingest.py:ParsedDoc",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "class:ingest.py:ParsedDoc",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "class:ingest.py:Prepared",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "class:ingest.py:Prepared",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:papers.py",
+   "target": "class:papers.py:Resolution",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:papers.py",
+   "target": "class:papers.py:Resolution",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:papers.py",
+   "target": "class:papers.py:Route",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:papers.py",
+   "target": "class:papers.py:Route",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:papers.py",
+   "target": "class:papers.py:Card",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:papers.py",
+   "target": "class:papers.py:Card",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ask.py:search",
+   "target": "function:ingest.py:sparse_vector",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ask.py:search",
+   "target": "function:ingest.py:embed",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ask.py:search",
+   "target": "function:ask.py:rerank_scores",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ask.py:answer",
+   "target": "function:ask.py:parse_llm",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:chunking.py:build_chunks",
+   "target": "function:sections.py:apply_outline",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:chunking.py:build_chunks",
+   "target": "function:chunking.py:classify",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:chunking.py:build_chunks",
+   "target": "function:chunking.py:regroup",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:chunking.py:build_chunks",
+   "target": "function:chunking.py:contextualize",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:parse_pdf",
+   "target": "function:chunking.py:resolve_title",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:parse_pdf",
+   "target": "function:ingest.py:piece_from_chunk",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:prepare_document",
+   "target": "function:chunking.py:build_chunks",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:prepare_document",
+   "target": "function:ingest.py:parse_pdf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:ingest",
+   "target": "function:ingest.py:write_document",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:ingest",
+   "target": "function:ingest.py:prepare_document",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:ingest",
+   "target": "function:ingest.py:already_indexed",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:ingest.py:reindex",
+   "target": "function:ingest.py:write_document",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:papers.py:cards",
+   "target": "function:ingest.py:point_id",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:papers.py:resolve",
+   "target": "function:papers.py:_route",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:evaluate.py:resolved_search",
+   "target": "function:papers.py:search_named",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:evaluate.py:run_live",
+   "target": "function:ask.py:search",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:evaluate.py:run_live",
+   "target": "function:research.py:verify",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:evaluate.py:run_live",
+   "target": "function:papers.py:cards",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:evaluate.py:run_live",
+   "target": "function:papers.py:resolve",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:evaluate.py:run_live",
+   "target": "function:evaluate.py:evaluate",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "file:papers.py",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:ask.py",
+   "target": "file:tests/test_ask.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:chunking.py",
+   "target": "file:tests/test_chunking.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:evaluate.py",
+   "target": "file:tests/test_evaluate.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:ingest.py",
+   "target": "file:tests/test_ingest.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:papers.py",
+   "target": "file:tests/test_papers.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

@@ -1,0 +1,239 @@
+{
+ "nodes": [
+  {
+   "id": "file:tests/test_filters.py",
+   "type": "file",
+   "name": "test_filters.py",
+   "filePath": "tests/test_filters.py",
+   "summary": "Tests the assistant's paper filtering and counting tools by year, database, decision and extracted value, including superseded papers and error messages.",
+   "tags": [
+    "test",
+    "agent",
+    "filtering"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_fulltext.py",
+   "type": "file",
+   "name": "test_fulltext.py",
+   "filePath": "tests/test_fulltext.py",
+   "summary": "Tests open-access full-text discovery (Europe PMC, Unpaywall), safe PDF download (private hosts, size cap, deadline) and matching uploads to papers.",
+   "tags": [
+    "test",
+    "full-text",
+    "security",
+    "network"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "class:tests/test_fulltext.py:Web",
+   "type": "class",
+   "name": "Web",
+   "filePath": "tests/test_fulltext.py",
+   "lineRange": [
+    24,
+    54
+   ],
+   "summary": "Fake HTTP client serving canned Europe PMC/Unpaywall responses and PDFs.",
+   "tags": [
+    "mock",
+    "test-double",
+    "test"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_memory.py",
+   "type": "file",
+   "name": "test_memory.py",
+   "filePath": "tests/test_memory.py",
+   "summary": "Tests the assistant's project briefing and project notes: proposal vs save, forgetting, ownership, bounds and briefing robustness.",
+   "tags": [
+    "test",
+    "agent",
+    "memory"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_outputs.py",
+   "type": "file",
+   "name": "test_outputs.py",
+   "filePath": "tests/test_outputs.py",
+   "summary": "Tests CSV/XLSX export formula neutralisation and the project-scoped tab export offered by the agent.",
+   "tags": [
+    "test",
+    "export",
+    "security"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_rails.py",
+   "type": "file",
+   "name": "test_rails.py",
+   "filePath": "tests/test_rails.py",
+   "summary": "Tests input/output guardrails: quoting, fail-open behaviour, blocked research questions and assistant messages, and exclusion of blocked runs from history.",
+   "tags": [
+    "test",
+    "guardrails",
+    "security"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "class:tests/test_rails.py:Guard",
+   "type": "class",
+   "name": "Guard",
+   "filePath": "tests/test_rails.py",
+   "lineRange": [
+    13,
+    23
+   ],
+   "summary": "Fake guard model returning configurable block verdicts.",
+   "tags": [
+    "mock",
+    "test-double",
+    "test"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:tests/test_filters.py",
+   "target": "file:agent.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_filters.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_filters.py",
+   "target": "file:tests/test_agent.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_filters.py",
+   "target": "file:tests/test_api_extraction.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_fulltext.py",
+   "target": "class:tests/test_fulltext.py:Web",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_fulltext.py",
+   "target": "file:fulltext.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_fulltext.py",
+   "target": "file:tests/test_api_screening.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_memory.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_memory.py",
+   "target": "file:tests/test_agent.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_memory.py",
+   "target": "file:tests/test_api_screening.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_outputs.py",
+   "target": "file:outputs.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_outputs.py",
+   "target": "file:tests/test_agent.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_outputs.py",
+   "target": "file:tests/test_api_extraction.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_rails.py",
+   "target": "class:tests/test_rails.py:Guard",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_rails.py",
+   "target": "file:rails.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_rails.py",
+   "target": "file:tests/test_agent.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_rails.py",
+   "target": "file:tests/test_api_research.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_rails.py",
+   "target": "file:tests/test_api_screening.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_fulltext.py",
+   "target": "file:fulltext.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

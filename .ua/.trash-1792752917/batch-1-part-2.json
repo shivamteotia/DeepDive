@@ -1,0 +1,236 @@
+{
+ "nodes": [
+  {
+   "id": "file:tests/test_answers.py",
+   "type": "file",
+   "name": "test_answers.py",
+   "filePath": "tests/test_answers.py",
+   "summary": "Tests answer exports (CSV, Word), chart value filtering, number parsing, formula neutralisation and owner-only access to latest answers.",
+   "tags": [
+    "test",
+    "export",
+    "charting"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_api_extraction.py",
+   "type": "file",
+   "name": "test_api_extraction.py",
+   "filePath": "tests/test_api_extraction.py",
+   "summary": "API tests for data extraction columns: creation, confirmed fills over included papers, full-text rereads, billing safeguards, retries and project isolation; exports helpers reused by other tests.",
+   "tags": [
+    "test",
+    "api",
+    "extraction"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_api_references.py",
+   "type": "file",
+   "name": "test_api_references.py",
+   "filePath": "tests/test_api_references.py",
+   "summary": "API tests for reference import and deduplication: cross-file dedup, merges, splits, possible duplicates, preprint supersession and project scoping.",
+   "tags": [
+    "test",
+    "api",
+    "deduplication",
+    "references"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_api_screening.py",
+   "type": "file",
+   "name": "test_api_screening.py",
+   "filePath": "tests/test_api_screening.py",
+   "summary": "API tests for screening criteria drafting, test runs, confirmed screen-all actions, human overrides, blind labelling and rescreening, using a FakeLLM; provides shared fixtures for other tests.",
+   "tags": [
+    "test",
+    "api",
+    "screening",
+    "fixtures"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "class:tests/test_api_screening.py:FakeLLM",
+   "type": "class",
+   "name": "FakeLLM",
+   "filePath": "tests/test_api_screening.py",
+   "lineRange": [
+    29,
+    58
+   ],
+   "summary": "Fake structured-output LLM that answers criteria drafts and screening verdicts deterministically.",
+   "tags": [
+    "mock",
+    "test-double",
+    "test"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_carry.py",
+   "type": "file",
+   "name": "test_carry.py",
+   "filePath": "tests/test_carry.py",
+   "summary": "Tests that a paper's screening work (decisions, blind labels, extracted values, PDF link) survives regrouping and duplicate merges.",
+   "tags": [
+    "test",
+    "deduplication",
+    "data-integrity"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tests/test_db.py",
+   "type": "file",
+   "name": "test_db.py",
+   "filePath": "tests/test_db.py",
+   "summary": "Tests document defaults, per-project unique SHA, JSON roundtrip of research results and isolated SQLite session factories.",
+   "tags": [
+    "test",
+    "database",
+    "orm"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:tests/test_answers.py",
+   "target": "file:answers.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_answers.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_answers.py",
+   "target": "file:tests/test_agent.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_answers.py",
+   "target": "file:tests/test_api_research.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_answers.py",
+   "target": "file:tests/test_api_screening.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_extraction.py",
+   "target": "file:extraction.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_extraction.py",
+   "target": "file:jobs.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_extraction.py",
+   "target": "file:tests/test_api_screening.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_screening.py",
+   "target": "class:tests/test_api_screening.py:FakeLLM",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:tests/test_api_screening.py",
+   "target": "file:rails.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_screening.py",
+   "target": "file:screening.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_screening.py",
+   "target": "file:tests/test_api_references.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_carry.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_carry.py",
+   "target": "file:tests/test_api_extraction.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_carry.py",
+   "target": "file:tests/test_api_references.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_carry.py",
+   "target": "file:tests/test_api_screening.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_db.py",
+   "target": "file:db.py",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tests/test_api_screening.py",
+   "target": "file:screening.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tests/test_api_extraction.py",
+   "target": "file:extraction.py",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

@@ -1,0 +1,843 @@
+{
+ "batchIndex": 2,
+ "files": [
+  {
+   "path": "app.py",
+   "language": "python",
+   "sizeLines": 738,
+   "fileCategory": "code"
+  },
+  {
+   "path": "auth.py",
+   "language": "python",
+   "sizeLines": 49,
+   "fileCategory": "code"
+  },
+  {
+   "path": "config.py",
+   "language": "python",
+   "sizeLines": 35,
+   "fileCategory": "code"
+  },
+  {
+   "path": "jobs.py",
+   "language": "python",
+   "sizeLines": 483,
+   "fileCategory": "code"
+  },
+  {
+   "path": "pubmed.py",
+   "language": "python",
+   "sizeLines": 111,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/conftest.py",
+   "language": "python",
+   "sizeLines": 76,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_api_auth.py",
+   "language": "python",
+   "sizeLines": 57,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_api_concurrency.py",
+   "language": "python",
+   "sizeLines": 52,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_api_conversations.py",
+   "language": "python",
+   "sizeLines": 217,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_api_documents.py",
+   "language": "python",
+   "sizeLines": 104,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_api_research.py",
+   "language": "python",
+   "sizeLines": 328,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_auth.py",
+   "language": "python",
+   "sizeLines": 31,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_jobs.py",
+   "language": "python",
+   "sizeLines": 145,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_pubmed.py",
+   "language": "python",
+   "sizeLines": 89,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tests/test_web.py",
+   "language": "python",
+   "sizeLines": 87,
+   "fileCategory": "code"
+  },
+  {
+   "path": "web.py",
+   "language": "python",
+   "sizeLines": 82,
+   "fileCategory": "code"
+  }
+ ],
+ "batchImportData": {
+  "app.py": [
+   "agent.py",
+   "answers.py",
+   "auth.py",
+   "config.py",
+   "db.py",
+   "extraction.py",
+   "funnel.py",
+   "jobs.py",
+   "outputs.py",
+   "screening.py",
+   "web.py"
+  ],
+  "auth.py": [],
+  "config.py": [],
+  "jobs.py": [
+   "ask.py",
+   "config.py",
+   "db.py",
+   "extraction.py",
+   "fulltext.py",
+   "funnel.py",
+   "papers.py",
+   "pubmed.py",
+   "rails.py",
+   "research.py",
+   "screening.py",
+   "web.py"
+  ],
+  "pubmed.py": [],
+  "tests/conftest.py": [
+   "app.py",
+   "config.py"
+  ],
+  "tests/test_api_auth.py": [
+   "app.py",
+   "tests/conftest.py"
+  ],
+  "tests/test_api_concurrency.py": [
+   "app.py",
+   "tests/conftest.py"
+  ],
+  "tests/test_api_conversations.py": [
+   "app.py",
+   "db.py",
+   "jobs.py",
+   "tests/conftest.py",
+   "tests/test_api_research.py"
+  ],
+  "tests/test_api_documents.py": [
+   "app.py",
+   "db.py",
+   "jobs.py"
+  ],
+  "tests/test_api_research.py": [
+   "app.py",
+   "ask.py",
+   "ingest.py",
+   "jobs.py",
+   "tests/conftest.py"
+  ],
+  "tests/test_auth.py": [
+   "auth.py"
+  ],
+  "tests/test_jobs.py": [
+   "db.py",
+   "jobs.py",
+   "tests/conftest.py"
+  ],
+  "tests/test_pubmed.py": [
+   "pubmed.py"
+  ],
+  "tests/test_web.py": [
+   "web.py"
+  ],
+  "web.py": []
+ },
+ "neighborMap": {
+  "app.py": [
+   {
+    "path": "agent.py",
+    "batchIndex": 1,
+    "symbols": [
+     "_Args",
+     "NoArgs",
+     "SentenceArgs",
+     "CriteriaArgs",
+     "ActionArgs",
+     "ColumnArgs",
+     "ColumnIdArgs",
+     "_Filtered",
+     "PapersArgs",
+     "CountArgs",
+     "ExportArgs",
+     "QuestionArgs",
+     "WebArgs",
+     "ToolContext",
+     "Tool",
+     "_count",
+     "_imports",
+     "_dedup",
+     "_status",
+     "_draft",
+     "_update",
+     "_test",
+     "_propose",
+     "_add_column",
+     "_get_column",
+     "_papers",
+     "_count_papers",
+     "_export",
+     "_web",
+     "AnswerExportArgs",
+     "ChartArgs",
+     "_latest_answer",
+     "_export_answer",
+     "_chart_answer",
+     "NoteArgs",
+     "NoteIdArgs",
+     "_remember",
+     "_forget",
+     "_pubmed",
+     "_ask",
+     "tool_specs",
+     "call_tool",
+     "_item",
+     "TurnState",
+     "Turn",
+     "_reply",
+     "_guard_input",
+     "briefing",
+     "_load_memory",
+     "_model",
+     "_tools",
+     "_guard_output",
+     "_build",
+     "run_turn"
+    ]
+   },
+   {
+    "path": "answers.py",
+    "batchIndex": 1,
+    "symbols": [
+     "ChartPoint",
+     "ChartSpec",
+     "_key",
+     "_sources",
+     "_clean",
+     "_label",
+     "rows",
+     "to_docx",
+     "to_csv",
+     "_numbers",
+     "make_chart"
+    ]
+   },
+   {
+    "path": "db.py",
+    "batchIndex": 1,
+    "symbols": [
+     "utcnow",
+     "as_utc",
+     "Base",
+     "User",
+     "Project",
+     "Document",
+     "Conversation",
+     "ResearchRun",
+     "AgentMessage",
+     "ReferenceImport",
+     "Paper",
+     "Reference",
+     "PossibleDuplicate",
+     "CriteriaSet",
+     "ScreeningDecision",
+     "ExtractColumn",
+     "ExtractValue",
+     "ProjectNote",
+     "LabelSample",
+     "PendingAction",
+     "make_sessions"
+    ]
+   },
+   {
+    "path": "extraction.py",
+    "batchIndex": 3,
+    "symbols": [
+     "_words",
+     "_in_quote",
+     "Column",
+     "Answer",
+     "Extracted",
+     "validate",
+     "_value",
+     "extract_one",
+     "estimate"
+    ]
+   },
+   {
+    "path": "funnel.py",
+    "batchIndex": 3,
+    "symbols": [
+     "Conflict",
+     "lock",
+     "_records",
+     "_paper_fields",
+     "paper_out",
+     "_drop_papers",
+     "carry",
+     "_reuse_ids",
+     "_save_group",
+     "regroup",
+     "_counts",
+     "import_summary",
+     "import_file",
+     "_final",
+     "_decision_join",
+     "decision_fields",
+     "list_papers",
+     "_blinded",
+     "_paper_in",
+     "_refs_of",
+     "split",
+     "resolve_duplicate",
+     "latest_version",
+     "criteria_set",
+     "criteria_out",
+     "save_criteria",
+     "_criteria",
+     "_decisions",
+     "_screenable",
+     "_test_items",
+     "run_test",
+     "set_feedback",
+     "_history",
+     "_carry",
+     "_current_row",
+     "set_decision",
+     "_same",
+     "_screen_plan",
+     "screen_estimate",
+     "_write_batch",
+     "screen_all",
+     "action_out",
+     "Invalid",
+     "NotFound",
+     "propose",
+     "included_without_pdf",
+     "linked_elsewhere",
+     "link_document",
+     "match_document",
+     "extracted_counts",
+     "column_out",
+     "add_column",
+     "project_column",
+     "list_columns",
+     "column_values",
+     "_papers_in_tab",
+     "_naive",
+     "extract_targets",
+     "save_value",
+     "paper_columns",
+     "_tab_data",
+     "_column_name",
+     "_filtered",
+     "find_papers",
+     "count_papers",
+     "export_table",
+     "make_label_sample"
+    ]
+   },
+   {
+    "path": "outputs.py",
+    "batchIndex": 1,
+    "symbols": [
+     "_cell",
+     "to_csv",
+     "to_xlsx"
+    ]
+   },
+   {
+    "path": "screening.py",
+    "batchIndex": 3,
+    "symbols": [
+     "_fill_missing",
+     "Criterion",
+     "CriteriaDraft",
+     "Verdict",
+     "AiScreen",
+     "_valid_metadata",
+     "_languages",
+     "check_metadata",
+     "_norm",
+     "quote_words",
+     "_quote_ok",
+     "_meta_or_error",
+     "_key",
+     "_option",
+     "apply_extract",
+     "reapply_extract",
+     "_model_view",
+     "screen_paper",
+     "screen_many",
+     "excludes",
+     "decide",
+     "validate_criteria",
+     "draft_criteria",
+     "test_sample",
+     "estimate"
+    ]
+   }
+  ],
+  "jobs.py": [
+   {
+    "path": "ask.py",
+    "batchIndex": 4,
+    "symbols": [
+     "Claim",
+     "Answer",
+     "search",
+     "_load_cross_encoder",
+     "rerank_scores",
+     "_jina_scores",
+     "format_evidence",
+     "parse_llm",
+     "answer",
+     "check_citations",
+     "cite",
+     "render",
+     "main"
+    ]
+   },
+   {
+    "path": "db.py",
+    "batchIndex": 1,
+    "symbols": [
+     "utcnow",
+     "as_utc",
+     "Base",
+     "User",
+     "Project",
+     "Document",
+     "Conversation",
+     "ResearchRun",
+     "AgentMessage",
+     "ReferenceImport",
+     "Paper",
+     "Reference",
+     "PossibleDuplicate",
+     "CriteriaSet",
+     "ScreeningDecision",
+     "ExtractColumn",
+     "ExtractValue",
+     "ProjectNote",
+     "LabelSample",
+     "PendingAction",
+     "make_sessions"
+    ]
+   },
+   {
+    "path": "extraction.py",
+    "batchIndex": 3,
+    "symbols": [
+     "_words",
+     "_in_quote",
+     "Column",
+     "Answer",
+     "Extracted",
+     "validate",
+     "_value",
+     "extract_one",
+     "estimate"
+    ]
+   },
+   {
+    "path": "fulltext.py",
+    "batchIndex": 3,
+    "symbols": [
+     "Found",
+     "client",
+     "public_ip",
+     "host_ok",
+     "_get_json",
+     "_europepmc",
+     "_unpaywall",
+     "find_pdfs",
+     "download",
+     "_title_on_page",
+     "match_upload",
+     "first_page_text"
+    ]
+   },
+   {
+    "path": "funnel.py",
+    "batchIndex": 3,
+    "symbols": [
+     "Conflict",
+     "lock",
+     "_records",
+     "_paper_fields",
+     "paper_out",
+     "_drop_papers",
+     "carry",
+     "_reuse_ids",
+     "_save_group",
+     "regroup",
+     "_counts",
+     "import_summary",
+     "import_file",
+     "_final",
+     "_decision_join",
+     "decision_fields",
+     "list_papers",
+     "_blinded",
+     "_paper_in",
+     "_refs_of",
+     "split",
+     "resolve_duplicate",
+     "latest_version",
+     "criteria_set",
+     "criteria_out",
+     "save_criteria",
+     "_criteria",
+     "_decisions",
+     "_screenable",
+     "_test_items",
+     "run_test",
+     "set_feedback",
+     "_history",
+     "_carry",
+     "_current_row",
+     "set_decision",
+     "_same",
+     "_screen_plan",
+     "screen_estimate",
+     "_write_batch",
+     "screen_all",
+     "action_out",
+     "Invalid",
+     "NotFound",
+     "propose",
+     "included_without_pdf",
+     "linked_elsewhere",
+     "link_document",
+     "match_document",
+     "extracted_counts",
+     "column_out",
+     "add_column",
+     "project_column",
+     "list_columns",
+     "column_values",
+     "_papers_in_tab",
+     "_naive",
+     "extract_targets",
+     "save_value",
+     "paper_columns",
+     "_tab_data",
+     "_column_name",
+     "_filtered",
+     "find_papers",
+     "count_papers",
+     "export_table",
+     "make_label_sample"
+    ]
+   },
+   {
+    "path": "papers.py",
+    "batchIndex": 4,
+    "symbols": [
+     "Mention",
+     "Resolution",
+     "Route",
+     "Card",
+     "cards",
+     "resolve",
+     "_on_a_card",
+     "_route",
+     "search_named"
+    ]
+   },
+   {
+    "path": "rails.py",
+    "batchIndex": 1,
+    "symbols": [
+     "Check",
+     "_blocked",
+     "check_input",
+     "check_output"
+    ]
+   },
+   {
+    "path": "research.py",
+    "batchIndex": 4,
+    "symbols": [
+     "Plan",
+     "Standalone",
+     "rewrite_followup",
+     "Verdict",
+     "Verification",
+     "plan",
+     "add_evidence",
+     "verify",
+     "run",
+     "finalize",
+     "render",
+     "audit_record",
+     "save",
+     "main"
+    ]
+   },
+   {
+    "path": "screening.py",
+    "batchIndex": 3,
+    "symbols": [
+     "_fill_missing",
+     "Criterion",
+     "CriteriaDraft",
+     "Verdict",
+     "AiScreen",
+     "_valid_metadata",
+     "_languages",
+     "check_metadata",
+     "_norm",
+     "quote_words",
+     "_quote_ok",
+     "_meta_or_error",
+     "_key",
+     "_option",
+     "apply_extract",
+     "reapply_extract",
+     "_model_view",
+     "screen_paper",
+     "screen_many",
+     "excludes",
+     "decide",
+     "validate_criteria",
+     "draft_criteria",
+     "test_sample",
+     "estimate"
+    ]
+   },
+   {
+    "path": "tests/test_api_extraction.py",
+    "batchIndex": 1,
+    "symbols": [
+     "with_extraction",
+     "screened",
+     "add",
+     "extract",
+     "test_columns_are_created_listed_and_validated",
+     "test_extraction_needs_confirm_and_fills_the_included_papers",
+     "test_full_text_is_read_when_the_pdf_is_ingested_and_rerun_fills_only_what_is_missing",
+     "test_other_projects_cannot_see_or_fill_a_column",
+     "test_blind_listing_hides_extracted_values",
+     "test_failed_calls_are_retried_and_counted",
+     "test_extraction_refuses_the_duplicates_tab_and_duplicate_names",
+     "test_a_run_never_grows_past_the_confirmed_papers",
+     "test_a_pdf_without_passages_is_not_billed_again",
+     "test_a_reread_with_the_same_answer_is_not_billed_a_third_time",
+     "test_a_full_text_not_stated_keeps_the_value_found_in_the_abstract"
+    ]
+   }
+  ],
+  "tests/test_api_conversations.py": [
+   {
+    "path": "db.py",
+    "batchIndex": 1,
+    "symbols": [
+     "utcnow",
+     "as_utc",
+     "Base",
+     "User",
+     "Project",
+     "Document",
+     "Conversation",
+     "ResearchRun",
+     "AgentMessage",
+     "ReferenceImport",
+     "Paper",
+     "Reference",
+     "PossibleDuplicate",
+     "CriteriaSet",
+     "ScreeningDecision",
+     "ExtractColumn",
+     "ExtractValue",
+     "ProjectNote",
+     "LabelSample",
+     "PendingAction",
+     "make_sessions"
+    ]
+   }
+  ],
+  "tests/test_api_documents.py": [
+   {
+    "path": "db.py",
+    "batchIndex": 1,
+    "symbols": [
+     "utcnow",
+     "as_utc",
+     "Base",
+     "User",
+     "Project",
+     "Document",
+     "Conversation",
+     "ResearchRun",
+     "AgentMessage",
+     "ReferenceImport",
+     "Paper",
+     "Reference",
+     "PossibleDuplicate",
+     "CriteriaSet",
+     "ScreeningDecision",
+     "ExtractColumn",
+     "ExtractValue",
+     "ProjectNote",
+     "LabelSample",
+     "PendingAction",
+     "make_sessions"
+    ]
+   }
+  ],
+  "tests/test_api_research.py": [
+   {
+    "path": "ask.py",
+    "batchIndex": 4,
+    "symbols": [
+     "Claim",
+     "Answer",
+     "search",
+     "_load_cross_encoder",
+     "rerank_scores",
+     "_jina_scores",
+     "format_evidence",
+     "parse_llm",
+     "answer",
+     "check_citations",
+     "cite",
+     "render",
+     "main"
+    ]
+   },
+   {
+    "path": "ingest.py",
+    "batchIndex": 4,
+    "symbols": [
+     "sha256_file",
+     "point_id",
+     "doc_filter",
+     "already_indexed",
+     "ParsedDoc",
+     "_plain_encoding",
+     "token_counter",
+     "_pdf_meta_title",
+     "piece_from_chunk",
+     "parse_pdf",
+     "llm_parser",
+     "embed_text",
+     "embed",
+     "sparse_vector",
+     "has_sparse",
+     "ensure_collection",
+     "ingest",
+     "Prepared",
+     "prepare_document",
+     "write_document",
+     "migrate",
+     "prepare_in_child",
+     "reindex",
+     "sync_counts",
+     "main"
+    ]
+   },
+   {
+    "path": "tests/test_answers.py",
+    "batchIndex": 1,
+    "symbols": [
+     "run_in",
+     "test_an_answer_exports_as_csv_with_one_row_per_finding",
+     "test_an_answer_exports_as_a_word_report",
+     "test_answer_export_is_owner_only_and_needs_a_finished_answer",
+     "test_a_chart_keeps_only_values_its_finding_states",
+     "test_the_assistant_saves_and_charts_the_chats_latest_answer",
+     "test_numbers_match_ranges_leading_dots_and_thousands_only",
+     "test_csv_cells_cannot_run_as_formulas_and_docx_survives_control_characters",
+     "test_sources_are_numbered_like_the_ui_one_number_per_page_or_url",
+     "test_points_past_the_limit_count_as_dropped",
+     "test_another_chats_answer_is_never_the_latest"
+    ]
+   },
+   {
+    "path": "tests/test_rails.py",
+    "batchIndex": 1,
+    "symbols": [
+     "Guard",
+     "client",
+     "test_input_rail_blocks_and_passes_the_text_as_quoted_data",
+     "test_output_rail_replaces_a_blocked_answer",
+     "test_rails_fail_open",
+     "_research",
+     "test_a_blocked_research_question_is_refused_without_searching",
+     "test_a_blocked_research_answer_is_replaced",
+     "test_the_screening_assistant_refuses_a_blocked_message_before_its_tools",
+     "test_the_screening_assistants_reply_is_checked",
+     "test_a_blocked_message_never_reaches_the_model_later",
+     "test_blocked_research_runs_are_left_out_of_follow_up_history",
+     "test_the_guard_call_does_not_retry",
+     "test_a_blocked_turn_stops_at_the_input_rail",
+     "test_a_blocked_reply_is_replaced_not_saved"
+    ]
+   }
+  ],
+  "tests/test_jobs.py": [
+   {
+    "path": "db.py",
+    "batchIndex": 1,
+    "symbols": [
+     "utcnow",
+     "as_utc",
+     "Base",
+     "User",
+     "Project",
+     "Document",
+     "Conversation",
+     "ResearchRun",
+     "AgentMessage",
+     "ReferenceImport",
+     "Paper",
+     "Reference",
+     "PossibleDuplicate",
+     "CriteriaSet",
+     "ScreeningDecision",
+     "ExtractColumn",
+     "ExtractValue",
+     "ProjectNote",
+     "LabelSample",
+     "PendingAction",
+     "make_sessions"
+    ]
+   }
+  ]
+ }
+}

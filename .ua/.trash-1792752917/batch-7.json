@@ -1,0 +1,473 @@
+{
+ "nodes": [
+  {
+   "id": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "type": "document",
+   "name": "2026-10-15-api.md",
+   "filePath": "docs/superpowers/plans/2026-10-15-api.md",
+   "summary": "Step 5 implementation plan (6 tasks) for the authenticated FastAPI + Postgres service: SQLAlchemy models, scrypt/JWT auth, projects with ownership, crash-isolated PDF ingestion in a 1-worker process pool, and verified research runs.",
+   "tags": [
+    "documentation",
+    "implementation-plan",
+    "api",
+    "authentication",
+    "background-jobs"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "type": "document",
+   "name": "2026-10-16-hybrid-retrieval.md",
+   "filePath": "docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "summary": "Implementation plan (6 tasks) adding a stdlib BM25 sparse vector next to dense embeddings, a collection migration (--migrate-to), and Qdrant RRF hybrid search behind the HYBRID_SEARCH setting.",
+   "tags": [
+    "documentation",
+    "implementation-plan",
+    "hybrid-search",
+    "retrieval",
+    "migration"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "type": "document",
+   "name": "2026-10-16-smart-chunking.md",
+   "filePath": "docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "summary": "Implementation plan (6 tasks) for chunking.py: document-type classification, type-specific chunk regrouping, title/section labels and LLM search context, plus splitting ingest.py into parse/prepare/write stages and adding --reindex-to.",
+   "tags": [
+    "documentation",
+    "implementation-plan",
+    "chunking",
+    "ingestion",
+    "contextual-retrieval"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "type": "document",
+   "name": "2026-10-19-screening-funnel.md",
+   "filePath": "docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "summary": "Implementation plan (11 tasks) for the systematic-review screening funnel: .bib/.nbib parsing, deduplication, AI title/abstract screening against drafted criteria, open-access full-text fetch, a tool-calling chat agent, screening UI, and extracted columns.",
+   "tags": [
+    "documentation",
+    "implementation-plan",
+    "screening",
+    "systematic-review",
+    "agent"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "type": "document",
+   "name": "2026-10-19-section-outline.md",
+   "filePath": "docs/superpowers/plans/2026-10-19-section-outline.md",
+   "summary": "Implementation plan (3 tasks) for sections.py: one validated LLM call per document builds a repaired heading outline and canonical section per chunk, wired into chunking.build_chunks and indexed by ingest.",
+   "tags": [
+    "documentation",
+    "implementation-plan",
+    "chunking",
+    "section-outline",
+    "llm"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "document:docs/superpowers/specs/2026-10-15-api-design.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:app.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:db.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:auth.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:jobs.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:config.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:research.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_api_auth.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_jobs.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_db.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_auth.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_api_projects.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_api_documents.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_api_research.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-15-api.md",
+   "target": "file:tests/test_api_live.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "document:docs/superpowers/specs/2026-10-16-hybrid-retrieval-design.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:ask.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:evaluate.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:config.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:research.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:jobs.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:tests/test_ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-hybrid-retrieval.md",
+   "target": "file:tests/test_ask.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "document:docs/superpowers/specs/2026-10-16-smart-chunking-design.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:chunking.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:jobs.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:db.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:config.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:app.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:tests/test_chunking.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-16-smart-chunking.md",
+   "target": "file:tests/test_ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "document:docs/superpowers/specs/2026-10-19-screening-funnel-design.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:references.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:dedup.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:screening.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:fulltext.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:agent.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:db.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:app.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:jobs.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:evaluate_screening.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:evaluate_dedup.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:funnel.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:static/screening.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:tests/test_agent.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-screening-funnel.md",
+   "target": "file:tests/test_screening.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "target": "document:docs/superpowers/specs/2026-10-19-section-outline-design.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "target": "file:sections.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "target": "file:chunking.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "target": "file:ingest.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "target": "file:evaluate.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "target": "file:tests/test_sections.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:docs/superpowers/plans/2026-10-19-section-outline.md",
+   "target": "file:tests/test_chunking.py",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

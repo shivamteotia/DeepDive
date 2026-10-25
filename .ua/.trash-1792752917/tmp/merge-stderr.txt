@@ -1,0 +1,37 @@
+Found 20 batch files (11 logical batches, 5 multi-part):
+  batch-1-part-1.json: 55 nodes, 122 edges
+  batch-1-part-2.json: 7 nodes, 19 edges
+  batch-1-part-3.json: 7 nodes, 19 edges
+  batch-2-part-1.json: 49 nodes, 211 edges
+  batch-2-part-2.json: 31 nodes, 68 edges
+  batch-2-part-3.json: 17 nodes, 32 edges
+  batch-3-part-1.json: 38 nodes, 84 edges
+  batch-3-part-2.json: 94 nodes, 199 edges
+  batch-3-part-3.json: 15 nodes, 24 edges
+  batch-4-part-1.json: 63 nodes, 147 edges
+  batch-4-part-2.json: 36 nodes, 70 edges
+  batch-4-part-3.json: 25 nodes, 30 edges
+  batch-5.json: 27 nodes, 59 edges
+  batch-6.json: 4 nodes, 24 edges
+  batch-7.json: 5 nodes, 56 edges
+  batch-8.json: 8 nodes, 38 edges
+  batch-9.json: 4 nodes, 7 edges
+  batch-10.json: 3 nodes, 10 edges
+  batch-11-part-1.json: 42 nodes, 59 edges
+  batch-11-part-2.json: 33 nodes, 46 edges
+
+Input: 563 nodes, 1324 edges
+
+Fixed (3 corrections):
+     3 × tested_by edges flipped (test \u2192 production became production \u2192 test)
+
+Tested-by linker:
+     0 × tested_by edges produced (path-convention supplement, production \u2192 test)
+    26 × production nodes tagged "tested"
+
+Output: 563 nodes, 1324 edges
+
+Imports edge recovery:
+  Recovered 0 `imports` edges from importMap (106 entries scanned)
+
+Written to C:\Users\sw\OneDrive\Desktop\DeepDive\.ua\intermediate\assembled-graph.json (501 KB)
