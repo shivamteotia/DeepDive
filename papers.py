@@ -98,7 +98,9 @@ _WORD = re.compile(r"[a-z0-9]{3,}")  # no hyphens: "deep-learning" is "deep" and
 _STEM = 6  # "transformer" matches "transformers": a refusal takes one reply, so err towards "it is on a card"
 _GENERIC = {"the", "and", "for", "with", "from", "that", "this", "study", "studies", "paper", "papers", "model",
             "models", "cohort", "cohorts", "patient", "patients", "trial", "trials", "analysis", "data", "overall",
-            "mortality", "prediction", "predictions", "authors", "results"}
+            "mortality", "prediction", "predictions", "authors", "results",
+            "care", "critical", "intensive", "icu", "unit", "clinical"}  # the setting, not the study: "care" let a
+# pneumonia paper back "the NLP critical care mortality study" (i05)
 
 
 def _on_a_card(names: list[str], paper_cards: dict[str, Card]) -> bool:

@@ -73,6 +73,14 @@ def test_the_word_check_matches_other_forms_of_a_word():
     assert not papers._on_a_card(["the acute ischemic stroke study"], cards)
 
 
+def test_care_setting_words_do_not_back_a_paper_name():
+    # i05: "the NLP critical care mortality study" beside a pneumonia paper whose card says "intensive care": only
+    # "care" matched, so the refusal was overridden and the pneumonia paper answered. The distinctive word decides.
+    cards = {"s": papers.Card("JPan2023.pdf", "Severe community-acquired pneumonia in the intensive care unit (ICU)")}
+    assert not papers._on_a_card(["the NLP critical care mortality study"], cards)
+    assert papers._on_a_card(["the ICU pneumonia model"], cards)  # a distinctive word on the card still backs it
+
+
 def test_a_backed_refusal_needs_one_reply():
     calls = []
     parse = lambda instructions, input, fmt: calls.append(1) or res(("the acute ischemic stroke study", ""))
