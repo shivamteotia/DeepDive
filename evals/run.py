@@ -40,7 +40,9 @@ REQUEST_TIMEOUT_S, RETRIES = 30, 3  # API endpoints answer in ms; 30 s means a s
 
 # ---- golden ----
 def has_fact(text: str, fact: str) -> bool:
-    """The fact as a whole token, case-insensitive: "0.86" is not in "0.862", "NER" not in "general", "48" not in "480"."""
+    """The fact as a whole token, case-insensitive: "0.86" is not in "0.862", "NER" not in "general", "48" not in "480".
+    Thousands separators are ignored: "1,192" is "1192"."""
+    text = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", text)
     return re.search(rf"(?<![\w.]){re.escape(fact)}(?![\w]|\.\d)", text, re.IGNORECASE) is not None
 
 

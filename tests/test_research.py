@@ -146,8 +146,20 @@ def test_run_can_take_sub_questions_planned_elsewhere():
                      ask.Answer: [ask.Answer(claims=[], gaps="nothing")]})
     out = r.run(oa, search_fn=lambda q: searched.append(q) or [hit("p1")], project_id="demo", model="m",
                 fast_model="f", guard_model="g", question="q", sub_questions=["s1", "s2"])
-    assert searched == ["s1", "s2"] and oa.inputs[r.Plan] == []
+    assert searched == ["q", "s1", "s2"] and oa.inputs[r.Plan] == []
     assert out["log"][0] == {"step": "plan", "sub_questions": ["s1", "s2"]}
+
+
+def test_run_searches_the_question_itself_besides_its_sub_questions():
+    # u03: sub-questions can drop what the question specifies ("in children"); the question itself is searched
+    # first, and only once when the planner returns it unchanged.
+    searched = []
+    for subs in (["SCAP nomogram performance"], ["How did it do in children?"]):
+        searched.clear()
+        oa = FakeOpenAI({r.Plan: [r.Plan(sub_questions=subs)], ask.Answer: [ask.Answer(claims=[], gaps="none")]})
+        r.run(oa, search_fn=lambda q: searched.append(q) or [hit("p1")], project_id="demo", model="m",
+              fast_model="f", guard_model="g", question="How did it do in children?")
+        assert searched == list(dict.fromkeys(["How did it do in children?", *subs]))
 
 
 def test_all_supported_first_pass_is_verified():

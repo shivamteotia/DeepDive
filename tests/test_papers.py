@@ -160,6 +160,16 @@ def test_search_named_scopes_and_splits_the_search():
     assert calls == [(6, ["a"]), (6, ["a", "b"])]
 
 
+def test_search_named_searches_each_paper_for_a_which_studies_question():
+    # x03: "which studies used TF-IDF?" names no paper; one pooled search let two papers crowd out the third.
+    calls = []
+    search = lambda q, k, sha256_in: calls.append((k, sha256_in)) or []
+    papers.search_named(search, "Which studies used TF-IDF?", None, ["a", "b", "c"], 6)
+    papers.search_named(search, "Which studies used TF-IDF?", None, ["a"], 6)  # one paper: nothing to split
+    papers.search_named(search, "Which studies used TF-IDF?", ["b"], ["a", "b", "c"], 6)  # a route still wins
+    assert calls == [(3, ["a"]), (3, ["b"]), (3, ["c"]), (6, ["a"]), (6, ["b"])]
+
+
 def test_resolver_schema_has_no_defaults():
     from openai.lib._pydantic import to_strict_json_schema
     assert '"default"' not in json.dumps(to_strict_json_schema(papers.Resolution))  # OpenAI strict mode forbids them

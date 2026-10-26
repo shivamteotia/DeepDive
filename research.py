@@ -147,7 +147,7 @@ def run(openai_client, *, search_fn, project_id: str, model: str, fast_model: st
     log.append({"step": "plan", "sub_questions": subs})
 
     evidence: list[dict] = []
-    for sq in subs:
+    for sq in dict.fromkeys([question, *subs]):  # the question too: a sub-question can drop "in children" (u03)
         add_evidence(evidence, search_fn(sq), project_id)
     log.append({"step": "research", "passages": len(evidence)})
     if not evidence:

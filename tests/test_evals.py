@@ -182,6 +182,12 @@ def test_facts_match_whole_tokens_not_parts_of_other_words_or_numbers():
     assert ev.has_fact("mortality was 13.8%.", "13.8") and ev.has_fact("Single-Center data", "single-center")
 
 
+def test_has_fact_ignores_thousands_separators():  # m04/n01: correct answers wrote "1,192" and "2,059"
+    assert ev.has_fact("the NLP-augmented model used 1,192 predictors", "1192")
+    assert ev.has_fact("The study used 2,059 pneumonia admissions.", "2059")
+    assert not ev.has_fact("1,192 predictors", "192")  # a separator never splits a number into a match
+
+
 def test_facts_all_needs_every_part_of_a_two_part_answer():
     case = {"id": "x02", "kind": "answerable", "project": "main", "question": "q", "expected": "e",
             "source": ["EA2022.pdf"], "facts_all": ["13.8", "10.4"]}

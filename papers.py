@@ -128,12 +128,15 @@ def _route(r: Resolution | None, by_id: dict[str, str]) -> Route:
 
 def search_named(search, question: str, shas: list[str] | None, ready: list[str], k: int) -> list[dict]:
     """The search for one (sub-)question under a route: None = every ready paper; one paper = only it; 2+ papers =
-    each separately with k split (a comparison needs evidence from each); [] (declined) = nothing.
-    search(question, k=..., sha256_in=...) -> hits. Shared by the API run and evaluate.py."""
+    each separately with k split (a comparison needs evidence from each); [] (declined) = nothing. A "which
+    studies ..." question with no route searches every ready paper separately: one pooled search let two papers
+    crowd out the third (x03). search(question, k=..., sha256_in=...) -> hits. Shared by the API run and evaluate.py."""
     if shas == []:
         return []
     if shas:  # never outside ready (a failed or still-ingesting paper); nothing left -> every ready paper
         shas = [s for s in shas if s in set(ready)] or None
+    if shas is None and _ASKS_WHICH.search(question):  # ponytail: one search per paper; group_by in Qdrant past ~20
+        shas = ready
     groups =[[s] for s in shas] if shas and len(shas) > 1 else [shas or ready]
     per = k if len(groups) == 1 else max(3, k // len(groups))  # ponytail: 10 named papers = 30 hits; cap if needed
     return [h for g in groups for h in search(question, k=per, sha256_in=g)]
