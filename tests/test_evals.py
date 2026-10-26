@@ -186,6 +186,8 @@ def test_has_fact_ignores_thousands_separators():  # m04/n01: correct answers wr
     assert ev.has_fact("the NLP-augmented model used 1,192 predictors", "1192")
     assert ev.has_fact("The study used 2,059 pneumonia admissions.", "2059")
     assert not ev.has_fact("1,192 predictors", "192")  # a separator never splits a number into a match
+    assert ev.has_fact("used 1192 predictors", "1,192")  # a fact may carry the separator too
+    assert not ev.has_fact("in 2019,200 patients", "2019200") and not ev.has_fact("AUC 0.862,123", "0.862123")
 
 
 def test_facts_all_needs_every_part_of_a_two_part_answer():

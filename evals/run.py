@@ -39,10 +39,13 @@ REQUEST_TIMEOUT_S, RETRIES = 30, 3  # API endpoints answer in ms; 30 s means a s
 
 
 # ---- golden ----
+_THOUSANDS = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+(?![\d,])")
+
+
 def has_fact(text: str, fact: str) -> bool:
     """The fact as a whole token, case-insensitive: "0.86" is not in "0.862", "NER" not in "general", "48" not in "480".
-    Thousands separators are ignored: "1,192" is "1192"."""
-    text = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", text)
+    Thousands separators are ignored in both: "1,192" is "1192" ("2019,200" is not a number, so it stays split)."""
+    text, fact = _THOUSANDS.sub(lambda m: m[0].replace(",", ""), text), _THOUSANDS.sub(lambda m: m[0].replace(",", ""), fact)
     return re.search(rf"(?<![\w.]){re.escape(fact)}(?![\w]|\.\d)", text, re.IGNORECASE) is not None
 
 
