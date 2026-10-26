@@ -1,6 +1,6 @@
 # MaxRIM — Research Intelligence & Management
 
-> **Status (2026-10-23):** Backend, web UI, screening funnel and LangGraph assistant implemented · paper resolver + question-aware verifier · 559 unit tests passing · golden v2 (68 cases, 6 papers): abstain 0.59 → 0.75 · see [§15 Current status](#15-current-status)
+> **Status (2026-10-26):** Backend, web UI, screening funnel and LangGraph assistant implemented · paper resolver + question-aware verifier · 559 unit tests passing · golden v2 (68 cases, 6 papers): abstain 0.59 → 0.75 (0.88 in one later run with the Jina reranker, now off) · see [§15 Current status](#15-current-status)
 
 **MaxRIM** is a proposed AI-assisted research intelligence and management platform designed for healthcare researchers and research teams. It brings project-specific literature, incremental document ingestion, evidence retrieval, and citation-verified report generation into one auditable workflow.
 
@@ -72,7 +72,7 @@ flowchart TD
 | Chunking | Docling `HybridChunker` | Structure-aware, tokenizer-aware chunks |
 | Embeddings | OpenAI `text-embedding-3-small` initially | Vector representations; provider configurable |
 | Vector search | Qdrant | Project-scoped retrieval with payload metadata |
-| Agent orchestration | LangGraph | Planner–Researcher–Synthesizer–Verifier workflow |
+| Agent orchestration | LangGraph | Screening assistant today; the Planner–Researcher–Synthesizer–Verifier loop stays plain functions until it gains branches |
 | Web search | Tavily or alternative, optional | Fresh public evidence with URL provenance |
 | Evaluation | DeepEval + custom checks | Retrieval and faithfulness evaluation |
 | Experiment tracking | MLflow | Runs, configurations, datasets, and metrics |
@@ -616,6 +616,11 @@ findings, 36 supported and 1 thinly supported by the verifier, each citing its P
 **Known limits / next:**
 - Retrieval ranking within a paper: the right passage often lands at rank 2–6. Next: native BM25 and stemming.
 - Two isolation cases (i04, i05) still rely on the verifier rather than the resolver.
+- Reranker off (`RERANKER_MODEL` empty): Jina lifted retrieval to recall 0.97 / MRR 0.73 but its rate limit (429s)
+  pushed p95 latency to 33 s.
+- Next (research loop): always search the original question, per-paper sub-questions when the resolver names 2+
+  papers, section headings in the evidence, a code check that a claim's numbers appear in its cited text. Then
+  gap-driven re-search, early abstain, cached verdicts, and LangGraph for the loop.
 - gpt-4o-mini judge noise: premise and scope have only 4–5 cases each. Groq's free tier is too slow for a full
   judge pass.
 - Cross-chat memory for the assistant.
