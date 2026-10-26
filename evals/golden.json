@@ -469,7 +469,7 @@
    "facts": [
     "0.86"
    ],
-   "question": "What AUC ROC and F1 did the best model reach in the acute ischemic stroke study?",
+   "question": "What AUC ROC and F1 did the best model reach on the validation set in the acute ischemic stroke study?",
    "expected": "XGBoost tuned for AUC ROC: AUC ROC 0.86 and F1 0.52.",
    "quote": "(AUC ROC 0.86, F1 0.52)",
    "page": 1
@@ -578,7 +578,7 @@
     "0.889",
     "88.9"
    ],
-   "question": "What F1-score did TF-IDF reach in the clinical notes study's bag-of-words comparison?",
+   "question": "What F1-score did TF-IDF reach with NER-based vectorization in the clinical notes study's bag-of-words comparison?",
    "expected": "0.889, with accuracy 0.801 and recall 0.993.",
    "quote": "F1-score of 0.801, 0.993, and 0.889, respectively",
    "page": 7

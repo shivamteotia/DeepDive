@@ -1,5 +1,19 @@
 # Eval results
 
+## 2026-10-26: golden v2 wording fixes (st02, n04), no run
+
+Two questions had more than one correct number in the paper, so a correct cited answer scored as a fact miss.
+Expected answers and facts are unchanged; only the question now says which number it asks for (checked in the PDFs).
+- **st02** (CJackA2024): 0.855 / 0.539 is 10-fold cross-validation on the training set; 0.86 / 0.52 (the gold) is
+  the held-out validation set. The question now says "on the validation set".
+- **n04** (CMugisha2022): Table 2 reports TF-IDF per dataset; dataset B gives F1 0.852, and the gold 0.889 is
+  vectorization from NER (Results text). The question now says "with NER-based vectorization".
+  Real defect behind it: Table 2 is split across chunks and the 0.889 row lost its dataset label (fix later:
+  repeat table caption/group header in each table chunk; needs re-index + retrieval eval).
+Also since the 10-24 run: fact check ignores thousands separators (m04, n01 were correct; det.fact on that run
+re-scores 0.913 -> 0.957), and reranker is now off (Jina's rate limit). Next e2e run measures both with the
+batch 1 search changes and the i05/u03 fixes.
+
 ## 2026-10-24: all fixes together + Jina reranker (`runs/fix-20261022/jina-2.json`, no judge)
 
 Models: gpt-5.4-mini main/guard, gpt-5.4-nano fast, gpt-4.1-nano context;
