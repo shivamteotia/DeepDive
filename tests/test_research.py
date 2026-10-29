@@ -69,6 +69,28 @@ def test_verify_fails_closed():
     assert [v.verdict for v in out] == ["UNSUPPORTED", "UNSUPPORTED"]
 
 
+def test_a_claim_that_the_evidence_is_silent_never_answers_the_question():
+    # u02/u05/u08: "The evidence does not report X" approved by both replies; silence belongs in gaps, so it is a
+    # decline, not an answer. A claim about the study itself ("was not validated in children") is still judged.
+    ev = [{**hit("p1"), "eid": "E1"}]
+    silent = ["The evidence does not report what it cost to implement the Criticality Index.",
+              "In children, the cited evidence does not report SCAP nomogram performance.",
+              "The passages do not state a hydrocortisone dose for the SCAP patients."]
+    study = "The SCAP nomogram was developed and validated in adult ICU cohorts, not in children."
+    ok = r.Verification(verdicts=[r.Verdict(answers_question=True, claim_index=i, verdict="SUPPORTED", rationale="ok")
+                                  for i in range(4)])
+    out = r.verify(FakeOpenAI({r.Verification: [ok, ok]}), "g", [claim(c, "E1") for c in [*silent, study]], ev, question="q?")
+    assert [v.verdict for v in out] == ["UNSUPPORTED"] * 3 + ["SUPPORTED"]
+    assert out[0].rationale.startswith("only says the evidence is silent")
+    # Only "the evidence/passages/sources do not ..." as the subject: study descriptions keep their verdict
+    for text in ("The cohort, drawn from three data sources, did not include children.",
+                 "The study's sources of data did not contain imaging.",
+                 "Patients with evidence of sepsis did not include those on dialysis.",
+                 "Evidence-based guidelines do not specify a hydrocortisone dose.",
+                 "The study did not include children."):
+        assert not r._SILENT.search(text), text
+
+
 def test_verifier_sees_each_cited_source():
     # The study-name rule needs the source: chunk text rarely names its own paper.
     oa = FakeOpenAI({r.Verification: [verdicts("SUPPORTED")]})
