@@ -1,5 +1,32 @@
 # Eval results
 
+## 2026-10-29: batch 1 + i05/u03 fixes, reranker off (`runs/batch1-20261029.json`, no judge)
+
+Changes since the 10-24 Jina run: Jina reranker off (rate limit); the question itself is searched besides its
+sub-questions; "which studies" questions search each ready paper separately; resolver ignores care-setting words
+(care, critical, ICU...) when backing a paper name; verifier rejects results for another population; gold st02/n04
+clarified. Report `runs/20261029T045635Z.json`.
+
+| Metric | 10-24 (Jina, re-scored) | **Now** |
+|---|---|---|
+| det.abstain.rate | 0.882 | **0.941** (16/17) |
+| det.evidence_hit.rate | 0.977 | 0.977 |
+| det.fact.rate | 0.957 | 0.913 as run; **0.957** with the harness fixes below |
+| det.completed / attribution / isolation / forbidden | 1.00 | 1.00 |
+| p50 / p95 latency | 13.7 / 33.2 s | 15.1 / **23.1 s** |
+
+- **Fixed:** u03 (adult figures removed, declines), x03 (both TF-IDF papers named), i05 ("This project has no
+  paper matching"), st02 (0.86 / 0.52), n04 (0.889).
+- **Harness, not the app:** a10 ("AUC 0.85" vs fact "0.850": fact check now ignores trailing decimal zeros) and
+  m05 ("too costly" vs whole-token "cost": "costly" added to its facts). Re-scored: det.fact 0.935 (the saved
+  report keeps m05's old facts); 0.957 counting m05.
+- **Still failing:** t04 (planner returned the question unchanged, one search, model names not retrieved:
+  variance); x05 (verifier rejects "101,196, the largest" citing only Marafino's passage; the same claim survived
+  last run: flaky on cross-paper superlatives); u08 (declined correctly but as a claim "The evidence does not
+  report...", which the verifier passed; the new prompt phrase "another claim already says the population was not
+  studied" may have read as allowing it, so it is reworded to "a claim that corrects the question's premise").
+- One run; abstain has moved ±0.1 between identical runs. Re-run to confirm u08 after the rewording.
+
 ## 2026-10-26: golden v2 wording fixes (st02, n04), no run
 
 Two questions had more than one correct number in the paper, so a correct cited answer scored as a fact miss.

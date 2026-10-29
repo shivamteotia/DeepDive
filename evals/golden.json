@@ -436,7 +436,8 @@
     "BJMarafino2018.pdf"
    ],
    "facts": [
-    "cost"
+    "cost",
+    "costly"
    ],
    "question": "Why could the NLP mortality study not compare its models directly with APACHE IV?",
    "expected": "Because of the cost of data collection required for a cohort of that size; a surrogate baseline model was used instead.",
