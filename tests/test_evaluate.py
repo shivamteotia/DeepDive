@@ -84,3 +84,10 @@ def test_resolved_search_searches_as_the_app_does():
     named = ev.resolved_search(search, lambda q: papers.Route(["b"], []), "the B study?", ["a", "b"], 6)
     declined = ev.resolved_search(search, lambda q: papers.Route([], ["X"]), "the X study?", ["a", "b"], 6)
     assert named == [{"source_filename": "b"}] and declined == [] and calls == [["b"]]
+
+
+def test_the_report_warns_when_searches_ran_without_the_reranker():
+    base = ev.evaluate({"retrieval": [], "claims": []}, search_fn=lambda q: [], verify_fn=None)
+    assert "without the reranker" not in ev.report(base)
+    base["config"] = {"rerank_model": "jina:m", "rerank_fallbacks": 3}
+    assert "3 searches ran without the reranker" in ev.report(base)

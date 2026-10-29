@@ -226,3 +226,90 @@ def test_hybrid_candidates_are_reranked_to_k(hq, monkeypatch):
     monkeypatch.setattr(ask, "rerank_scores", fake_scores)
     assert ids(hsearch(hq, "projA", k=1, hybrid=True, rerank_model="fake")) == ["3"]
     assert seen["n"] == 3  # all of projA's fused candidates, none of projB's
+
+
+def test_rerank_text_drops_the_paper_and_section_header():
+    # Cross-encoders read 512 tokens: the "Paper: ... / Section: ..." label every chunk carries must not use them up.
+    assert ask.rerank_text("Paper: Dynamic Mortality Risk\nSection: Results\nAUROC was 0.86.") == "AUROC was 0.86."
+    assert ask.rerank_text("plain chunk text") == "plain chunk text"
+    # chunking.label also writes "Document:" for non-research documents, and omits Section when there is no heading
+    assert ask.rerank_text("Document: A guideline\nSection: Methods > Data\nbody") == "body"
+    assert ask.rerank_text("Paper: JPan2023\nbody without headings") == "body without headings"
+
+
+def test_only_the_reranker_reads_the_stripped_text(q, monkeypatch):
+    seen = []
+    monkeypatch.setattr(ask, "rerank_scores", lambda m, query, texts, **kw: seen.extend(texts) or [1.0] * len(texts))
+    hits = ask.search(q, FakeOpenAI(), collection=COLL, embed_model="m", project_id="projA", question="?", k=1,
+                      rerank_model="fake")
+    assert all(not t.startswith(("Paper:", "Document:")) for t in seen)
+    assert hits and "text" in hits[0]  # callers still get the full chunk text
+
+
+def test_jina_rate_limit_is_retried(monkeypatch):
+    import httpx
+    calls = []
+
+    def post(url, **kw):
+        calls.append(1)
+        req = httpx.Request("POST", url)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "0"}, request=req)
+        return httpx.Response(200, json={"results": [{"index": 0, "relevance_score": 0.9}]}, request=req)
+    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(ask.time, "sleep", lambda s: None)
+    assert ask.rerank_scores("jina:m", "q", ["t"], api_key="k") == [0.9] and len(calls) == 2
+
+
+def test_a_reranker_failure_keeps_the_search_order(q, monkeypatch):
+    # Measured: Jina's rate limit failed 16 of 68 eval questions. Reranking only improves order; never fail on it.
+    import httpx
+    req = httpx.Request("POST", "https://api.jina.ai/v1/rerank")
+
+    def boom(*a, **k):
+        raise httpx.HTTPStatusError("429", request=req, response=httpx.Response(429, request=req))
+    monkeypatch.setattr(ask, "rerank_scores", boom)
+    plain = ask.search(q, FakeOpenAI(), collection=COLL, embed_model="m", project_id="projA", question="?", k=1)
+    hits = ask.search(q, FakeOpenAI(), collection=COLL, embed_model="m", project_id="projA", question="?", k=1,
+                      rerank_model="jina:m")
+    assert [h["point_id"] for h in hits] == [h["point_id"] for h in plain]
+
+
+def test_only_temporary_reranker_errors_fall_back_and_each_is_counted(q, monkeypatch):
+    import httpx
+    req = httpx.Request("POST", "https://api.jina.ai/v1/rerank")
+
+    def limited(*a, **k):
+        raise httpx.HTTPStatusError("429", request=req, response=httpx.Response(429, request=req))
+    monkeypatch.setattr(ask, "rerank_scores", limited)
+    before = ask.rerank_fallbacks()
+    ask.search(q, FakeOpenAI(), collection=COLL, embed_model="m", project_id="projA", question="?", k=1,
+               rerank_model="jina:m")
+    assert ask.rerank_fallbacks() == before + 1  # evaluate.py records this: a run that fell back is visible
+
+    def misconfigured(*a, **k):
+        raise ValueError("Jina reranker needs an API key")
+    monkeypatch.setattr(ask, "rerank_scores", misconfigured)
+    with pytest.raises(ValueError):  # a permanent error still fails loudly
+        ask.search(q, FakeOpenAI(), collection=COLL, embed_model="m", project_id="projA", question="?", k=1,
+                   rerank_model="jina:m")
+
+
+def test_jina_gives_up_after_its_attempts_and_never_retries_a_client_error(monkeypatch):
+    import httpx
+    calls, waits = [], []
+
+    def post(url, **kw):
+        calls.append(1)
+        return httpx.Response(status, headers={"Retry-After": "-5"}, request=httpx.Request("POST", url))
+    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(ask.time, "sleep", waits.append)
+    status = 429
+    with pytest.raises(httpx.HTTPStatusError):
+        ask.rerank_scores("jina:m", "q", ["t"], api_key="k")
+    assert len(calls) == ask.JINA_ATTEMPTS and all(0 <= w <= 11 for w in waits)  # odd Retry-After clamped
+    calls.clear()
+    status = 401
+    with pytest.raises(httpx.HTTPStatusError):
+        ask.rerank_scores("jina:m", "q", ["t"], api_key="k")
+    assert len(calls) == 1

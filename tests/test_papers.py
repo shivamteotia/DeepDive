@@ -73,6 +73,14 @@ def test_the_word_check_matches_other_forms_of_a_word():
     assert not papers._on_a_card(["the acute ischemic stroke study"], cards)
 
 
+def test_care_setting_words_do_not_back_a_paper_name():
+    # i05: "the NLP critical care mortality study" beside a pneumonia paper whose card says "intensive care": only
+    # "care" matched, so the refusal was overridden and the pneumonia paper answered. The distinctive word decides.
+    cards = {"s": papers.Card("JPan2023.pdf", "Severe community-acquired pneumonia in the intensive care unit (ICU)")}
+    assert not papers._on_a_card(["the NLP critical care mortality study"], cards)
+    assert papers._on_a_card(["the ICU pneumonia model"], cards)  # a distinctive word on the card still backs it
+
+
 def test_a_backed_refusal_needs_one_reply():
     calls = []
     parse = lambda instructions, input, fmt: calls.append(1) or res(("the acute ischemic stroke study", ""))
@@ -158,6 +166,16 @@ def test_search_named_scopes_and_splits_the_search():
     papers.search_named(search, "q", ["a", "not-ready"], ["a", "b"], 6)  # a paper outside ready is dropped
     papers.search_named(search, "q", ["not-ready"], ["a", "b"], 6)  # ...and if none is left, every ready paper
     assert calls == [(6, ["a"]), (6, ["a", "b"])]
+
+
+def test_search_named_searches_each_paper_for_a_which_studies_question():
+    # x03: "which studies used TF-IDF?" names no paper; one pooled search let two papers crowd out the third.
+    calls = []
+    search = lambda q, k, sha256_in: calls.append((k, sha256_in)) or []
+    papers.search_named(search, "Which studies used TF-IDF?", None, ["a", "b", "c"], 6)
+    papers.search_named(search, "Which studies used TF-IDF?", None, ["a"], 6)  # one paper: nothing to split
+    papers.search_named(search, "Which studies used TF-IDF?", ["b"], ["a", "b", "c"], 6)  # a route still wins
+    assert calls == [(3, ["a"]), (3, ["b"]), (3, ["c"]), (6, ["a"]), (6, ["b"])]
 
 
 def test_resolver_schema_has_no_defaults():

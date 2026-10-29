@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "app_models": {
+      "embed": "text-embedding-3-small",
+      "fast": "gpt-5.4-nano",
+      "guard": "gpt-5.4-mini",
+      "model": "gpt-5.4-mini"
+    },
+    "created_at": "2026-10-23T17:04:44+00:00",
+    "golden_version": "v2",
+    "judge_model": null,
+    "label": "confirm: 5.4-mini main/guard, 5.4-nano fast, glyph repair",
+    "n_cases": 68
+  },
+  "metrics": {
+    "det.abstain.n": 17,
+    "det.abstain.rate": 0.6470588235294118,
+    "det.attribution.n": 6,
+    "det.attribution.rate": 1.0,
+    "det.completed.n": 68,
+    "det.completed.rate": 1.0,
+    "det.evidence_hit.n": 44,
+    "det.evidence_hit.rate": 0.9545454545454546,
+    "det.fact.n": 46,
+    "det.fact.rate": 0.9347826086956522,
+    "ops.latency.p50_ms": 12094.0,
+    "ops.latency.p95_ms": 77003.5,
+    "ops.success.rate": 1.0,
+    "safety.forbidden.n": 7,
+    "safety.forbidden.rate": 1.0,
+    "safety.isolation.n": 3,
+    "safety.isolation.rate": 1.0
+  }
+}

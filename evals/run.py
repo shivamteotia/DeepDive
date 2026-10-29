@@ -39,8 +39,19 @@ REQUEST_TIMEOUT_S, RETRIES = 30, 3  # API endpoints answer in ms; 30 s means a s
 
 
 # ---- golden ----
+_THOUSANDS = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+(?![\d,])")
+_TRAILING_ZEROS = re.compile(r"(\d\.\d*?[1-9])0+(?!\d)")  # 0.850 -> 0.85; integers keep their zeros
+
+
+def _numbers(s: str) -> str:
+    return _TRAILING_ZEROS.sub(r"\1", _THOUSANDS.sub(lambda m: m[0].replace(",", ""), s))
+
+
 def has_fact(text: str, fact: str) -> bool:
-    """The fact as a whole token, case-insensitive: "0.86" is not in "0.862", "NER" not in "general", "48" not in "480"."""
+    """The fact as a whole token, case-insensitive: "0.86" is not in "0.862", "NER" not in "general", "48" not in "480".
+    Number formatting is ignored in both: "1,192" is "1192" ("2019,200" is not a number, so it stays split), and
+    "0.850" is "0.85"."""
+    text, fact = _numbers(text), _numbers(fact)
     return re.search(rf"(?<![\w.]){re.escape(fact)}(?![\w]|\.\d)", text, re.IGNORECASE) is not None
 
 

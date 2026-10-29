@@ -16,7 +16,7 @@ API design/plan: `docs/superpowers/specs/2026-10-15-api-design.md`, `docs/superp
 API ingestion runs in a 1-worker child process (`jobs.IngestRunner`) so a native Docling crash fails one document, not the server.
 After step 5: web UI (`static/`, served at `/`), chat memory (conversations; follow-ups rewritten to a standalone question by
 the fast model) and opt-in per-run web search (`WEB_SEARCH_ENABLED` + `FIRECRAWL_API_KEY`, preferred, or `TAVILY_API_KEY`;
-`web.searcher`). Firecrawl cost: research runs scrape pages, ~2 + 3 credits per distinct query (cached per run);
+`web.searcher`). Firecrawl cost: research runs scrape pages, ~2 + 3 credits per distinct query (cached per run; the question itself counts as one besides its sub-questions);
 the assistant's `web_search` tool is search-only, 2 credits. Spec:
 `docs/superpowers/specs/2026-10-15-frontend-chat-web-design.md`. E2E eval: `evals/` (results log `evals/baselines/RESULTS.md`).
 Eval baseline (eval/gold.json v1, DRAFT, k=6, HYBRID_SEARCH=true, smart chunking + section outline): recall@k 1.00, MRR 0.86, catch rate 1.00,

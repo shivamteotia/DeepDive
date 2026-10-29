@@ -5,9 +5,13 @@ __pycache__/
 .ruff_cache/
 data/
 .claude
-CLAUD.md.deepeval/
+.deepeval/
 docker-compose.yml
 uv.lock
 
 # brainstorming companion, SDD ledgers and review packages (local only)
 .superpowers/
+
+# Understand-Anything scratch (the knowledge graph itself stays tracked)
+.ua/.trash-*/
+.ua/intermediate/

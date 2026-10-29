@@ -1,5 +1,99 @@
 # Eval results
 
+## 2026-10-29: runs 2 and 3 (`runs/batch1-20261029-2.json`, `-3.json`, no judge)
+
+| Metric | Run 1 | Run 2 (+ "open population can be any") | **Run 3** (silence gate, sentence dropped) |
+|---|---|---|---|
+| det.abstain.rate | 0.941 | 0.765 | **0.882** |
+| det.fact.rate | 0.957* | 0.935 (0.957*) | 0.956 |
+| det.evidence_hit.rate | 0.977 | 0.977 | **1.000** |
+| det.completed.rate | 1.000 | 1.000 | 0.985 (x06: Qdrant read timeout) |
+| p50 / p95 latency | 15.1 / 23.1 s | 15.2 / 21.3 s | 15.2 / 27.3 s |
+
+\* with the a10/m05 harness fixes.
+- **Run 2:** u02, u05, u03 declined correctly but as a claim ("The evidence does not report X") that both verifier
+  replies approved; the added sentence ("a population the question leaves open can be any") is the only code
+  difference from run 1, so it was dropped.
+- **Silence gate** (`research._SILENT`): with a question, a claim whose subject is the evidence ("the [cited]
+  evidence/passages do not report...") is UNSUPPORTED in code. On the three saved runs it matches exactly u08, u02,
+  u05 and no answerable claim. Run 3: all four pass.
+- **Run 3 still failing:** u10 (passive "is not reported in the provided evidence", not matched yet); i05 (resolver
+  did not decline in 2 of 3 runs; a search-everything route logs nothing, so the cause is unknown); x06 (Qdrant
+  timeout; "which studies" now makes one search per paper); st05 (rounding); t04 (planner variance).
+- **Verdict:** mean of runs 1-3 vs the 10-24 Jina run: abstain 0.86 vs 0.88, fact and evidence hit equal or better,
+  p95 lower. No regression; merged to `main`.
+
+## 2026-10-29: batch 1 + i05/u03 fixes, reranker off (`runs/batch1-20261029.json`, no judge)
+
+Changes since the 10-24 Jina run: Jina reranker off (rate limit); the question itself is searched besides its
+sub-questions; "which studies" questions search each ready paper separately; resolver ignores care-setting words
+(care, critical, ICU...) when backing a paper name; verifier rejects results for another population; gold st02/n04
+clarified. Report `runs/20261029T045635Z.json`.
+
+| Metric | 10-24 (Jina, re-scored) | **Now** |
+|---|---|---|
+| det.abstain.rate | 0.882 | **0.941** (16/17) |
+| det.evidence_hit.rate | 0.977 | 0.977 |
+| det.fact.rate | 0.957 | 0.913 as run; **0.957** with the harness fixes below |
+| det.completed / attribution / isolation / forbidden | 1.00 | 1.00 |
+| p50 / p95 latency | 13.7 / 33.2 s | 15.1 / **23.1 s** |
+
+- **Fixed:** u03 (adult figures removed, declines), x03 (both TF-IDF papers named), i05 ("This project has no
+  paper matching"), st02 (0.86 / 0.52), n04 (0.889).
+- **Harness, not the app:** a10 ("AUC 0.85" vs fact "0.850": fact check now ignores trailing decimal zeros) and
+  m05 ("too costly" vs whole-token "cost": "costly" added to its facts). Re-scored: det.fact 0.935 (the saved
+  report keeps m05's old facts); 0.957 counting m05.
+- **Still failing:** t04 (planner returned the question unchanged, one search, model names not retrieved:
+  variance); x05 (verifier rejects "101,196, the largest" citing only Marafino's passage; the same claim survived
+  last run: flaky on cross-paper superlatives); u08 (declined correctly but as a claim "The evidence does not
+  report...", which the verifier passed; the new prompt phrase "another claim already says the population was not
+  studied" may have read as allowing it, so it is reworded to "a claim that corrects the question's premise").
+- One run; abstain has moved ±0.1 between identical runs. Re-run to confirm u08 after the rewording.
+
+## 2026-10-26: golden v2 wording fixes (st02, n04), no run
+
+Two questions had more than one correct number in the paper, so a correct cited answer scored as a fact miss.
+Expected answers and facts are unchanged; only the question now says which number it asks for (checked in the PDFs).
+- **st02** (CJackA2024): 0.855 / 0.539 is 10-fold cross-validation on the training set; 0.86 / 0.52 (the gold) is
+  the held-out validation set. The question now says "on the validation set".
+- **n04** (CMugisha2022): Table 2 reports TF-IDF per dataset; dataset B gives F1 0.852, and the gold 0.889 is
+  vectorization from NER (Results text). The question now says "with NER-based vectorization".
+  Real defect behind it: Table 2 is split across chunks and the 0.889 row lost its dataset label (fix later:
+  repeat table caption/group header in each table chunk; needs re-index + retrieval eval).
+Also since the 10-24 run: fact check ignores thousands separators (m04, n01 were correct; det.fact on that run
+re-scores 0.913 -> 0.957), and reranker is now off (Jina's rate limit). Next e2e run measures both with the
+batch 1 search changes and the i05/u03 fixes.
+
+## 2026-10-24: all fixes together + Jina reranker (`runs/fix-20261022/jina-2.json`, no judge)
+
+Models: gpt-5.4-mini main/guard, gpt-5.4-nano fast, gpt-4.1-nano context;
+`RERANKER_MODEL=jina:jina-reranker-v2-base-multilingual`. On top of the 2026-10-22/23 fixes:
+- glyph repair at ingest; CMugisha2022 and Changze2025 re-indexed
+- two-reply verifier
+- guardrails that block poem/code requests and pass project actions
+- planner and resolver run in parallel
+- Jina retry and fallback
+
+| Metric | Before (10-22) | Fixes run 1 | **Now** |
+|---|---|---|---|
+| det.abstain.rate | 0.588 | 0.750 | **0.882** (15/17) |
+| det.evidence_hit.rate | 0.932 | 0.955 | **0.977** |
+| det.fact.rate | 0.891 | 0.913 | 0.913 |
+| det.completed / attribution / isolation / forbidden | 1.00 | 0.99 / 1 / 1 / 1 | 1.00 |
+| p50 / p95 latency | 12.1 / 18.1 s | 15.1 / 24.1 s | 13.7 / 33.2 s |
+
+- **Retrieval alone** (`evaluate.py --resolve`, gold v3): no reranker 0.95 / 0.67, Jina **0.97 / 0.73**, MedCPT
+  0.80 / 0.49. bge-reranker-v2-m3 was too slow on CPU and aborted after ~40 min. Jina had lost recall on
+  2026-10-15; the difference now is the stripped Paper/Section label plus the 6-paper set.
+- **Jina's rate limit:** an earlier run (`jina-1`, before retry/fallback) failed 16 of 68 questions with 429.
+  With retry and fallback, 8 searches out of ~200 kept the fused order and no question failed.
+- **Still failing:**
+  - u03 (adult numbers for a children question)
+  - i05 (asked-about study name attached to the wrong paper)
+  - x03 (cross-paper coverage)
+  - fact misses m04, st02, n01, n04 (st02 and n04 passed in earlier runs)
+- One run; earlier runs moved ±0.1 on abstain. Confirm before calling 0.88 the baseline.
+
 ## 2026-10-22/23: golden v2 (68 cases, 6 papers); verifier sees the question; paper resolver
 
 Golden v2: 68 cases on 6 papers (`main` 6 PDFs, `isolation` JPan2023 only). All runs on the `_v3` collection, app
