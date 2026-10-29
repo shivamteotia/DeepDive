@@ -1,5 +1,28 @@
 # Eval results
 
+## 2026-10-29: runs 2 and 3 (`runs/batch1-20261029-2.json`, `-3.json`, no judge)
+
+| Metric | Run 1 | Run 2 (+ "open population can be any") | **Run 3** (silence gate, sentence dropped) |
+|---|---|---|---|
+| det.abstain.rate | 0.941 | 0.765 | **0.882** |
+| det.fact.rate | 0.957* | 0.935 (0.957*) | 0.956 |
+| det.evidence_hit.rate | 0.977 | 0.977 | **1.000** |
+| det.completed.rate | 1.000 | 1.000 | 0.985 (x06: Qdrant read timeout) |
+| p50 / p95 latency | 15.1 / 23.1 s | 15.2 / 21.3 s | 15.2 / 27.3 s |
+
+\* with the a10/m05 harness fixes.
+- **Run 2:** u02, u05, u03 declined correctly but as a claim ("The evidence does not report X") that both verifier
+  replies approved; the added sentence ("a population the question leaves open can be any") is the only code
+  difference from run 1, so it was dropped.
+- **Silence gate** (`research._SILENT`): with a question, a claim whose subject is the evidence ("the [cited]
+  evidence/passages do not report...") is UNSUPPORTED in code. On the three saved runs it matches exactly u08, u02,
+  u05 and no answerable claim. Run 3: all four pass.
+- **Run 3 still failing:** u10 (passive "is not reported in the provided evidence", not matched yet); i05 (resolver
+  did not decline in 2 of 3 runs; a search-everything route logs nothing, so the cause is unknown); x06 (Qdrant
+  timeout; "which studies" now makes one search per paper); st05 (rounding); t04 (planner variance).
+- **Verdict:** mean of runs 1-3 vs the 10-24 Jina run: abstain 0.86 vs 0.88, fact and evidence hit equal or better,
+  p95 lower. No regression; merged to `main`.
+
 ## 2026-10-29: batch 1 + i05/u03 fixes, reranker off (`runs/batch1-20261029.json`, no judge)
 
 Changes since the 10-24 Jina run: Jina reranker off (rate limit); the question itself is searched besides its
